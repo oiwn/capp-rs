@@ -1,4 +1,4 @@
-session_name: application-rs
+session_name: capp-rs
 shell_command_before: "export RUST_LOG=info; clear"
 windows:
   - window_name: code

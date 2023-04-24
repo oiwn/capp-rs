@@ -1,5 +1,5 @@
 [package]
-name = "application-rs"
+name = "capp-rs"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,3 +8,9 @@ edition = "2021"
 [dependencies]
 serde = "1.0.160"
 serde_yaml = "0.9.21"
+
+[profile.release]
+opt-level = "s" # or "z" for more aggressive size optimization
+lto = true # Enable Link Time Optimization
+codegen-units = 1 # Reduce parallel code generation units to maximize optimizations
+
