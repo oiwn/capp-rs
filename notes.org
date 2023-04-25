@@ -2,3 +2,5 @@
 
 * Tasks
 ** DONE basic configuration traits
+** TODO use dotenv
+** TODO optional feature to enable http requests

@@ -3,11 +3,24 @@ app:
   max_queue: 500
   user_agents_file: "tests/simple_uas.txt"
 
-  proxies:
-    - http://proxygate1.com:8943
-    - http://proxygate2.com:3425
+  entities:
+    - apple
+    - orange
 
 logging:
   log_to_redis: true
   log_settings:
     file_name: "errors.log"
+
+http:
+  proxy:
+    use: true
+    uri: http://bro:admin@proxygate1.com:42042
+  timeout: 30
+  connect_timeout: 10
+
+another-http:
+  proxy:
+    use: false
+  timeout: 10
+  connect_timeout: 5
