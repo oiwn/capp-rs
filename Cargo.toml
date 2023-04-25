@@ -6,8 +6,19 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+backoff = { version = "0.4.0", optional = true, features = ["tokio"] }
+log = { version = "0.4.17", optional = true }
+reqwest = { version = "0.11.16", features = ["gzip", "rustls-tls"], optional = true }
 serde = { version = "1.0.160", features = ["derive"] }
 serde_yaml = "0.9.21"
+
+[dev-dependencies]
+capp = { path = ".", features = ["http"] }
+hyper = { version = "0.14.26", features = ["server"] }
+tokio = { version = "1.27.0", features = ["full"] }
+
+[features]
+http = ["dep:backoff", "dep:reqwest", "dep:log"]
 
 [profile.release]
 opt-level = "s" # or "z" for more aggressive size optimization
