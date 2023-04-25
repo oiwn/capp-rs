@@ -78,8 +78,23 @@ pub async fn fetch_url(
 }
 
 /// Fetch content from url retrying
-pub async fn fetch_url_content() {
-    todo!()
+pub async fn fetch_url_content(
+    client: reqwest::Client,
+    url: &str,
+) -> Result<(reqwest::StatusCode, String), reqwest::Error> {
+    let backoff = ExponentialBackoffBuilder::new()
+        .with_max_interval(std::time::Duration::from_secs(10))
+        .build();
+
+    let fetch_content = || async {
+        log::info!("[{}] retrieving url...", url);
+        let response = client.get(url.clone()).send().await?;
+        let status = response.status();
+        let text = response.text().await?;
+        Ok((status, text))
+    };
+
+    backoff::future::retry(backoff, fetch_content).await
 }
 
 #[cfg(test)]

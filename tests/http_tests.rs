@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use capp::http::{build_http_client, fetch_url, HttpClientParams};
+    use capp::http::{
+        build_http_client, fetch_url, fetch_url_content, HttpClientParams,
+    };
     use hyper::service::{make_service_fn, service_fn};
     use hyper::{Body, Request, Response, Server};
     use std::net::SocketAddr;
@@ -54,18 +56,29 @@ mod tests {
 
         let rt = Runtime::new().unwrap();
         let resp = rt.block_on(async {
-            fetch_url(client, format!("http://{}", addr).as_str())
+            fetch_url(client.clone(), format!("http://{}", addr).as_str())
                 .await
                 .ok()
                 .unwrap()
-            // client
-            //     .get(format!("http://{}", addr))
-            //     .send()
-            //     .await
-            //     .expect("Failed to make request")
         });
 
-        assert_eq!(resp.status().as_u16(), 200);
+        assert_eq!(resp.status(), 200);
+
+        let rt = Runtime::new().unwrap();
+        let resp = rt.block_on(async {
+            fetch_url_content(client, format!("http://{}", addr).as_str())
+                .await
+                .ok()
+                .unwrap()
+        });
+
+        assert_eq!(
+            (
+                reqwest::StatusCode::from_u16(200).unwrap(),
+                "Hello, World!".to_string()
+            ),
+            resp
+        );
 
         // Stop the test server
         drop(server_handle);
