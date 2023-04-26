@@ -84,6 +84,7 @@ pub async fn fetch_url_content(
 ) -> Result<(reqwest::StatusCode, String), reqwest::Error> {
     let backoff = ExponentialBackoffBuilder::new()
         .with_max_interval(std::time::Duration::from_secs(10))
+        .with_max_elapsed_time(Some(std::time::Duration::from_secs(30)))
         .build();
 
     let fetch_content = || async {
