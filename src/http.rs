@@ -24,9 +24,15 @@ impl<'a> HttpClientParams<'a> {
         http_config: &serde_yaml::Value,
         user_agent: &'a str,
     ) -> Self {
-        let timeout = http_config["timeout"].as_u64().unwrap();
-        let connect_timeout = http_config["connect_timeout"].as_u64().unwrap();
-        let need_proxy: bool = http_config["proxy"]["use"].as_bool().unwrap();
+        let timeout = http_config["timeout"]
+            .as_u64()
+            .expect("No timeout field in config");
+        let connect_timeout = http_config["connect_timeout"]
+            .as_u64()
+            .expect("No connect_timout field in config");
+        let need_proxy: bool = http_config["proxy"]["use"]
+            .as_bool()
+            .expect("No use field for proxy in config");
         let proxy = if need_proxy {
             let proxy_uri = http_config["proxy"]["uri"].as_str().unwrap();
             Some(reqwest::Proxy::all(proxy_uri).expect("Error setting up proxy"))
@@ -102,12 +108,20 @@ pub async fn fetch_url_content(
 mod tests {
     use super::*;
 
-    const YAML_TEXT: &str = r#"
+    const YAML_CONF_TEXT: &str = r#"
     http:
       proxy:
         use: true
         uri: http://bro:admin@proxygate1.com:42042
       timeout: 30
+      connect_timeout: 10
+    "#;
+
+    const WRONG_YAML_CONF_TEXT: &str = r#"
+    http:
+      proxy:
+        use: true
+        uri: http://bro:admin@proxygate1.com:42042
       connect_timeout: 10
     "#;
 
@@ -125,11 +139,23 @@ mod tests {
 
     #[test]
     fn test_build_client_from_config() {
-        let config: serde_yaml::Value = serde_yaml::from_str(YAML_TEXT).unwrap();
+        let config: serde_yaml::Value =
+            serde_yaml::from_str(YAML_CONF_TEXT).unwrap();
         let client = build_http_client(HttpClientParams::from_config(
             &config.get("http").unwrap(),
             "hellobot",
         ));
         assert!(client.is_ok());
+    }
+
+    #[test]
+    #[should_panic(expected = "No timeout field in config")]
+    fn test_build_client_bad_config() {
+        let config: serde_yaml::Value =
+            serde_yaml::from_str(WRONG_YAML_CONF_TEXT).unwrap();
+        let _ = build_http_client(HttpClientParams::from_config(
+            &config.get("http").unwrap(),
+            "hellobot",
+        ));
     }
 }
