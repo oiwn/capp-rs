@@ -2,5 +2,14 @@
 
 * Tasks
 ** DONE basic configuration traits
-** TODO use dotenv
-** TODO optional feature to enable http requests
+** DONE optional feature to enable http requests
+** TODO implement default debug trait for Configurable
+** TODO healthcheck
+- [X] internet
+- [ ] proxy with httpbin
+- [ ] optional redis
+- [ ] optional mongodb
+- [ ] optional postgres
+
+* Notes
+** httpbin could be launched as container "docker run -p 80:80 kennethreitz/httpbin"
