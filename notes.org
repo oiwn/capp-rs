@@ -10,6 +10,39 @@
 - [ ] optional redis
 - [ ] optional mongodb
 - [ ] optional postgres
+** generic executor
+- [-] basic version
+- [-] tests for basic version
+- [-] make in example in `examples/` folder
+- [-] in-memory backend for Tasks storage
+- [-] split storage trait into separate module
 
 * Notes
 ** httpbin could be launched as container "docker run -p 80:80 kennethreitz/httpbin"
+** That's the plan:
+///  1. **Task Creation:**
+/// When a new task is created, it gets a unique `task_id` (this could be
+/// a UUID or some other unique value). The task is serialized and stored
+/// in a hashmap with the `task_id` as the key. The `task_id` is also
+/// pushed to a list which acts as a task queue.
+///
+/// 2. **Task Execution:**
+/// Workers pop `task_id` values from the task queue (the list data structure).
+/// They then retrieve the corresponding serialized Task from the
+/// hashmap using the `task_id`, deserialize the Task and start executing it.
+///
+/// 3. **Task Status Update:**
+/// As a Task is being processed, its status is updated (started, finished,
+/// retries, failed_with, etc.) and the updated Task is serialized and stored back
+/// in the Redis hashmap. This allows the status of the Task to be tracked
+/// in real-time.
+///
+/// 4. **Task Completion:**
+/// When a Task is completed, its final status is updated in the hashmap.
+/// If the task needs to be removed from storage after completion, it can be
+/// deleted from the hashmap.
+///
+/// 5. **Task Failure and Retry:**
+/// If a task fails, its `failed_with` field is set with the error,
+/// `retries` is incremented, and it's pushed back into the storage list
+/// for reprocessing by a worker.

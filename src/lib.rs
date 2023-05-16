@@ -1,5 +1,7 @@
 pub mod config;
 
+#[cfg(feature = "executor")]
+pub mod executor;
 #[cfg(feature = "healthcheck")]
 pub mod healthcheck;
 #[cfg(feature = "http")]
