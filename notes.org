@@ -10,12 +10,14 @@
 - [ ] optional redis
 - [ ] optional mongodb
 - [ ] optional postgres
-** generic executor
-- [-] basic version
-- [-] tests for basic version
-- [-] make in example in `examples/` folder
-- [-] in-memory backend for Tasks storage
-- [-] split storage trait into separate module
+** DONE generic executor
+- [X] basic version
+- [X] tests for basic version
+- [X] example for basic version
+- [X] make in example in `examples/` folder
+- [X] remove E from Task type, use string representation instead
+- [X] in-memory backend for Tasks storage
+- [X] split storage trait into separate module
 
 * Notes
 ** httpbin could be launched as container "docker run -p 80:80 kennethreitz/httpbin"
@@ -46,3 +48,4 @@
 /// If a task fails, its `failed_with` field is set with the error,
 /// `retries` is incremented, and it's pushed back into the storage list
 /// for reprocessing by a worker.
+
