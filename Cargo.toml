@@ -2,6 +2,23 @@
 name = "capp"
 version = "0.1.6"
 edition = "2021"
+license = "MIT"
+author = "oiwn"
+description = "Common things i use to build Rust CLI tools for web crawlers."
+homepage = "https://github.com/oiwn/capp-rs"
+repository = "https://github.com/oiwn/capp-rs"
+readme = "README.md"
+keywords = ["mini-celery", "async", "executor"]
+categories = ["asynchronous", "web-programming", "concurrency"]
+exclude = [
+    "tmp/*",
+    # "benches/*",
+    "html/*",
+    ".github/*",
+    ".gitignore",
+    ".tmuxp.yaml",
+    "notes.org"
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
