@@ -1,13 +1,20 @@
+//! This module provides a trait for interacting with task storage, and an
+//! in-memory implementation of this trait. The storage allows tasks to be
+//! pushed to and popped from a queue, and also allows tasks to be set and
+//! retrieved by their UUID.
+
 use super::task::Task;
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
-// use serde::Deserialize;
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 use std::sync::Mutex;
 use uuid::Uuid;
 
+/// A trait that describes the necessary methods for task storage. This includes
+/// methods for acknowledging a task, getting a task by its UUID, setting a task,
+/// popping a task from the queue, and pushing a task into the queue.
 #[async_trait]
 pub trait TaskStorage<D, E>
 where
@@ -21,6 +28,9 @@ where
     async fn task_push(&self, task: &Task<D>) -> Result<(), E>;
 }
 
+/// A simple in-memory implementation of the `TaskStorage` trait.
+/// The `InMemoryTaskStorage` struct includes a hashmap for storing tasks by
+/// their UUIDs, and a list for maintaining the order of the tasks.
 pub struct InMemoryTaskStorage<D, E> {
     pub hashmap: Mutex<HashMap<Uuid, String>>,
     pub list: Mutex<VecDeque<Uuid>>,
@@ -29,6 +39,7 @@ pub struct InMemoryTaskStorage<D, E> {
 }
 
 impl<D, E> InMemoryTaskStorage<D, E> {
+    /// Construct a new empty in-memory task storage
     pub fn new() -> Self {
         Self {
             hashmap: Mutex::new(HashMap::new()),

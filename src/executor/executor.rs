@@ -1,17 +1,31 @@
 use crate::executor::storage::TaskStorage;
 use crate::executor::task::{Task, TaskProcessor};
 use chrono::Utc;
+use derive_builder::Builder;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
+#[derive(Clone, Default)]
+pub struct WorkerOptions {
+    pub max_retries: usize,
+}
+
+#[derive(Builder, Default, Clone)]
+#[builder(public, setter(into))]
 pub struct ExecutorOptions {
-    // pub max_task_retries: usize,
+    #[builder(default = "WorkerOptions { max_retries: 3 }")]
+    pub worker_options: WorkerOptions,
+    #[builder(default = "None")]
     pub task_limit: Option<u32>,
+    #[builder(default = "4")]
     pub concurrency_limit: usize,
 }
 
+/// A worker function that fetches a task from the storage, processes it,
+/// and then updates the task status. If the processing fails,
+/// the task is retried up to N times.
 async fn worker<D, E, P, S>(worker_id: usize, storage: Arc<S>, processor: Arc<P>)
 where
     D: Serialize + DeserializeOwned + Send + Sync + 'static + std::fmt::Debug,
@@ -53,6 +67,8 @@ where
     }
 }
 
+/// A wrapper function for the worker function that also checks for task
+/// limits and handles shutdown signals.
 async fn worker_wrapper<D, E, P, S>(
     worker_id: usize,
     storage: Arc<S>,
@@ -89,6 +105,11 @@ async fn worker_wrapper<D, E, P, S>(
     log::info!("[worker-{}] finished", worker_id);
 }
 
+/// Runs the executor with the provided task processor, storage, and options.
+/// This function creates a number of workers based on the concurrency limit option.
+/// It then waits for either a shutdown signal (Ctrl+C) or for the task limit
+/// to be reached. In either case, it sends a shutdown signal to all workers
+/// and waits for them to finish.
 pub async fn run<D, E, P, S>(
     processor: Arc<P>,
     storage: Arc<S>,
@@ -137,4 +158,12 @@ pub async fn run<D, E, P, S>(
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    #[test]
+    fn excutor_options_builder() {
+        let executor_options = ExecutorOptionsBuilder::default().build().unwrap();
+        assert_eq!(executor_options.concurrency_limit, 4);
+    }
+}

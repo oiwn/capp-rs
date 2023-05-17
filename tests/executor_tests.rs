@@ -3,7 +3,7 @@ mod tests {
     use async_trait::async_trait;
     use capp::executor::storage::{InMemoryTaskStorage, TaskStorage};
     use capp::executor::task::{Task, TaskProcessor};
-    use capp::executor::{self, ExecutorOptions};
+    use capp::executor::{self, ExecutorOptionsBuilder};
     use serde::{Deserialize, Serialize};
     use std::sync::Arc;
     use thiserror::Error;
@@ -98,14 +98,12 @@ mod tests {
         // dbg!(&storage);
 
         let processor = Arc::new(TestTaskProcessor {});
-        rt.block_on(executor::run(
-            processor,
-            storage.clone(),
-            ExecutorOptions {
-                task_limit: Some(9),
-                concurrency_limit: 2,
-            },
-        ));
+
+        let executor_options = ExecutorOptionsBuilder::default()
+            .task_limit(Some(9))
+            .build()
+            .unwrap();
+        rt.block_on(executor::run(processor, storage.clone(), executor_options));
 
         let storage_len_after = storage.list.lock().unwrap().len();
 

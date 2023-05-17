@@ -2,12 +2,10 @@ use async_trait::async_trait;
 use capp::executor::storage::InMemoryTaskStorage;
 use capp::executor::storage::TaskStorage;
 use capp::executor::task::{Task, TaskProcessor};
-use capp::executor::{self, ExecutorOptions};
+use capp::executor::{self, ExecutorOptionsBuilder};
 use serde::{Deserialize, Serialize};
-// use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
-// use uuid::Uuid;
 
 #[derive(Error, Debug, Serialize, Deserialize)]
 pub enum TaskError {
@@ -83,13 +81,6 @@ async fn main() {
     simple_logger::SimpleLogger::new().env().init().unwrap();
     let storage = make_storage().await;
     let processor = Arc::new(TestTaskProcessor {});
-    executor::run(
-        processor,
-        storage,
-        ExecutorOptions {
-            task_limit: Some(9),
-            concurrency_limit: 2,
-        },
-    )
-    .await;
+    let executor_options = ExecutorOptionsBuilder::default().build().unwrap();
+    executor::run(processor, storage, executor_options).await;
 }
