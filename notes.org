@@ -25,6 +25,8 @@
 - [X] add workers settings
 - [X] builder pattern for executor settings
 ** TODO further adjustments
+- [ ] rename example/basic.rs into executor_basic.rs
+- [-] make_sorage return TaskStorage instead of wrapped with Arc<>
 - [-] task fail into storage, to collect totaly (max_retries) failed tasks
 - [-] optional redis storage backend using rustis
 - [-] separate tests for redis backend
