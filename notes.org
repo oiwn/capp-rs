@@ -4,12 +4,60 @@
 ** DONE basic configuration traits
 ** DONE optional feature to enable http requests
 ** TODO implement default debug trait for Configurable
+** need coverage
 ** TODO healthcheck
 - [X] internet
 - [ ] proxy with httpbin
 - [ ] optional redis
 - [ ] optional mongodb
 - [ ] optional postgres
+** DONE generic executor
+- [X] basic version
+- [X] tests for basic version
+- [X] example for basic version
+- [X] make in example in `examples/` folder
+- [X] remove E from Task type, use string representation instead
+- [X] in-memory backend for Tasks storage
+- [X] split storage trait into separate module
+- [X] docs for strage
+- [X] docs for tasks
+- [X] docs for executor
+- [X] add workers settings
+- [X] builder pattern for executor settings
+** TODO further adjustments
+- [-] task fail into storage, to collect totaly (max_retries) failed tasks
+- [-] optional redis storage backend using rustis
+- [-] separate tests for redis backend
+- [-] try to move tests init common function into separate file in tests/ folder
+- [-] use same builder pattern for Application
 
 * Notes
 ** httpbin could be launched as container "docker run -p 80:80 kennethreitz/httpbin"
+** That's the plan:
+///  1. **Task Creation:**
+/// When a new task is created, it gets a unique `task_id` (this could be
+/// a UUID or some other unique value). The task is serialized and stored
+/// in a hashmap with the `task_id` as the key. The `task_id` is also
+/// pushed to a list which acts as a task queue.
+///
+/// 2. **Task Execution:**
+/// Workers pop `task_id` values from the task queue (the list data structure).
+/// They then retrieve the corresponding serialized Task from the
+/// hashmap using the `task_id`, deserialize the Task and start executing it.
+///
+/// 3. **Task Status Update:**
+/// As a Task is being processed, its status is updated (started, finished,
+/// retries, failed_with, etc.) and the updated Task is serialized and stored back
+/// in the Redis hashmap. This allows the status of the Task to be tracked
+/// in real-time.
+///
+/// 4. **Task Completion:**
+/// When a Task is completed, its final status is updated in the hashmap.
+/// If the task needs to be removed from storage after completion, it can be
+/// deleted from the hashmap.
+///
+/// 5. **Task Failure and Retry:**
+/// If a task fails, its `failed_with` field is set with the error,
+/// `retries` is incremented, and it's pushed back into the storage list
+/// for reprocessing by a worker.
+
