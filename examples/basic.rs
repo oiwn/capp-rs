@@ -25,7 +25,7 @@ pub struct TestTaskProcessor {}
 
 #[async_trait]
 impl TaskProcessor<TaskData, TaskError> for TestTaskProcessor {
-    /// Process will fail tasks which value can be divided to 3
+    /// Processor will fail tasks which value can be divided to 3
     async fn process(
         &self,
         worker_id: usize,
@@ -55,7 +55,7 @@ async fn make_storage() -> Arc<InMemoryTaskStorage<TaskData, TaskError>> {
             value: i,
             finished: false,
         });
-        let _ = storage.list_push(&task).await;
+        let _ = storage.task_push(&task).await;
     }
 
     for i in 1..=3 {
@@ -64,7 +64,7 @@ async fn make_storage() -> Arc<InMemoryTaskStorage<TaskData, TaskError>> {
             value: i * 3,
             finished: false,
         });
-        let _ = storage.list_push(&task).await;
+        let _ = storage.task_push(&task).await;
     }
 
     for _ in 1..=3 {
@@ -73,7 +73,7 @@ async fn make_storage() -> Arc<InMemoryTaskStorage<TaskData, TaskError>> {
             value: 2,
             finished: false,
         });
-        let _ = storage.list_push(&task).await;
+        let _ = storage.task_push(&task).await;
     }
     storage
 }

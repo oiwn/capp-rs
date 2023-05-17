@@ -19,13 +19,13 @@ where
     P: TaskProcessor<D, E> + Send + Sync + 'static,
     S: TaskStorage<D, E> + Send + Sync + 'static,
 {
-    let task: Option<Task<D>> = storage.list_pop().await.unwrap();
+    let task: Option<Task<D>> = storage.task_pop().await.unwrap();
     if let Some(mut t) = task {
         match processor.process(worker_id, &mut t.data).await {
             Ok(_) => {
                 t.finished = Some(Utc::now());
-                storage.hashmap_set(&t).await.unwrap();
-                let successful_task = storage.ack(&t).await.unwrap();
+                storage.task_set(&t).await.unwrap();
+                let successful_task = storage.task_ack(&t.task_id).await.unwrap();
                 log::info!(
                     "[worker-{}] Task {} succeed: {:?}",
                     worker_id,
@@ -43,7 +43,7 @@ where
                 t.retries += 1;
                 t.error_msg = Some(err.to_string());
                 if t.retries < 3 {
-                    storage.list_push(&t).await.unwrap();
+                    storage.task_push(&t).await.unwrap();
                 }
             }
         }

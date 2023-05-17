@@ -18,6 +18,9 @@
 - [X] remove E from Task type, use string representation instead
 - [X] in-memory backend for Tasks storage
 - [X] split storage trait into separate module
+- [ ] optional redis storage backend using rustis
+- [ ] separate tests for redis backend
+- [ ] try to move tests init common function into separate file in tests/ folder
 
 * Notes
 ** httpbin could be launched as container "docker run -p 80:80 kennethreitz/httpbin"
