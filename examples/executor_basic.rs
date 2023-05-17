@@ -36,6 +36,7 @@ impl TaskProcessor<TaskData, TaskError> for TestTaskProcessor {
         };
 
         data.finished = true;
+        tokio::time::sleep(tokio::time::Duration::from_secs(rem as u64)).await;
         Ok(())
     }
 }
@@ -44,8 +45,8 @@ impl TaskProcessor<TaskData, TaskError> for TestTaskProcessor {
 /// For current set following conditions should be true:
 /// total tasks = 9
 /// number of failed tasks = 4
-async fn make_storage() -> Arc<InMemoryTaskStorage<TaskData, TaskError>> {
-    let storage = Arc::new(InMemoryTaskStorage::new());
+async fn make_storage() -> InMemoryTaskStorage<TaskData, TaskError> {
+    let storage = InMemoryTaskStorage::new();
 
     for i in 1..=3 {
         let task: Task<TaskData> = Task::new(TaskData {
@@ -79,8 +80,11 @@ async fn make_storage() -> Arc<InMemoryTaskStorage<TaskData, TaskError>> {
 #[tokio::main]
 async fn main() {
     simple_logger::SimpleLogger::new().env().init().unwrap();
-    let storage = make_storage().await;
+    let storage = Arc::new(make_storage().await);
     let processor = Arc::new(TestTaskProcessor {});
-    let executor_options = ExecutorOptionsBuilder::default().build().unwrap();
+    let executor_options = ExecutorOptionsBuilder::default()
+        .concurrency_limit(2 as usize)
+        .build()
+        .unwrap();
     executor::run(processor, storage, executor_options).await;
 }
