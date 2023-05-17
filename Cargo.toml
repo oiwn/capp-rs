@@ -2,6 +2,9 @@
 name = "capp"
 version = "0.1.6"
 edition = "2021"
+license = "MIT"
+author = "oiwn"
+description = "Common things i use to build Rust CLI tools for web crawlers."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
