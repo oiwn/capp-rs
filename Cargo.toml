@@ -3,7 +3,7 @@ name = "capp"
 version = "0.1.6"
 edition = "2021"
 license = "MIT"
-author = "oiwn"
+authors = ["oiwn"]
 description = "Common things i use to build Rust CLI tools for web crawlers."
 homepage = "https://github.com/oiwn/capp-rs"
 repository = "https://github.com/oiwn/capp-rs"
@@ -31,7 +31,7 @@ futures = { version = "0.3.28", optional = true }
 log = { version = "0.4.17", optional = true }
 reqwest = { version = "0.11.16", features = ["gzip", "rustls-tls"], optional = true }
 serde = { version = "1.0.160", features = ["derive"] }
-serde_json = "1.0.96"
+serde_json = { version = "1.0.96", optional = true }
 serde_yaml = "0.9.21"
 thiserror = { version = "1.0.40", optional = true }
 tokio = { version = "1.27.0", features = ["full"], optional = true}
@@ -42,11 +42,12 @@ capp = { path = ".", features = ["http", "healthcheck", "executor"] }
 hyper = { version = "0.14.26", features = ["server"] }
 serde_json = "1.0.96"
 simple_logger = "4.1.0"
+rustis = { version = "0.11.0", features = ["tokio-runtime"] }
 
 [features]
 http = ["dep:backoff", "dep:reqwest", "dep:log"]
 healthcheck = ["dep:reqwest", "dep:log", "dep:tokio"]
-executor = ["dep:tokio", "dep:log", "dep:thiserror", "dep:async-trait", "dep:chrono", "dep:futures", "dep:uuid"]
+executor = ["dep:tokio", "dep:log", "dep:thiserror", "dep:async-trait", "dep:chrono", "dep:futures", "dep:uuid", "dep:serde_json"]
 
 # size optimization
 [profile.release]

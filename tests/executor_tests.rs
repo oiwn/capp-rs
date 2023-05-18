@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
+    use capp::config::Configurable;
     use capp::executor::storage::{InMemoryTaskStorage, TaskStorage};
     use capp::executor::task::{Task, TaskProcessor};
     use capp::executor::{self, ExecutorOptionsBuilder};
@@ -20,15 +21,44 @@ mod tests {
         pub value: u32,
         pub finished: bool,
     }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct Context {
+        name: String,
+        config: serde_yaml::Value,
+        is_test: bool,
+    }
+
+    impl Configurable for Context {
+        fn name(&self) -> &str {
+            self.name.as_str()
+        }
+        fn config(&self) -> &serde_yaml::Value {
+            &self.config
+        }
+    }
+
+    impl Context {
+        fn from_config(config_file_path: impl AsRef<std::path::Path>) -> Self {
+            let config = Self::load_config(config_file_path);
+            Self {
+                name: "test-app".to_string(),
+                is_test: true,
+                config: config.unwrap(),
+            }
+        }
+    }
+
     #[derive(Debug)]
     pub struct TestTaskProcessor {}
 
     #[async_trait]
-    impl TaskProcessor<TaskData, TaskError> for TestTaskProcessor {
+    impl TaskProcessor<TaskData, TaskError, Context> for TestTaskProcessor {
         /// Process will fail tasks which value can be divided to 3
         async fn process(
             &self,
             worker_id: usize,
+            _ctx: Arc<Context>,
             data: &mut TaskData,
         ) -> Result<(), TaskError> {
             log::info!("[worker-{}] Processing task: {:?}", worker_id, data);
@@ -98,12 +128,19 @@ mod tests {
         // dbg!(&storage);
 
         let processor = Arc::new(TestTaskProcessor {});
-
+        let ctx = Arc::new(Context::from_config("tests/simple_config.yml"));
         let executor_options = ExecutorOptionsBuilder::default()
+            .concurrency_limit(2 as usize)
             .task_limit(Some(9))
             .build()
             .unwrap();
-        rt.block_on(executor::run(processor, storage.clone(), executor_options));
+
+        rt.block_on(executor::run(
+            ctx.clone(),
+            processor,
+            storage.clone(),
+            executor_options,
+        ));
 
         let storage_len_after = storage.list.lock().unwrap().len();
 
