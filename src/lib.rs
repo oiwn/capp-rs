@@ -10,3 +10,5 @@ pub mod http;
 // re-export
 pub use serde;
 pub use serde_yaml;
+#[cfg(feature = "executor")]
+pub use thiserror;

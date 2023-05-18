@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// A `Task` struct represents a single unit of work that will be processed
@@ -22,11 +23,16 @@ pub struct Task<D> {
 /// intended to be implemented by a worker that will process tasks
 /// of a specific type.
 #[async_trait]
-pub trait TaskProcessor<D, E> {
+pub trait TaskProcessor<D, E, C> {
     /// Processes the task. The worker_id is passed for logging or
     /// debugging purposes. The task_data is a mutable reference,
     /// allowing the processor to modify the task data as part of the processing.
-    async fn process(&self, worker_id: usize, task_data: &mut D) -> Result<(), E>;
+    async fn process(
+        &self,
+        worker_id: usize,
+        ctx: Arc<C>,
+        task_data: &mut D,
+    ) -> Result<(), E>;
 }
 
 impl<D> Task<D> {
