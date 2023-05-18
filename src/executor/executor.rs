@@ -66,7 +66,11 @@ async fn worker<D, E, P, S, C>(
                 if t.retries < worker_options.max_retries {
                     storage.task_push(&t).await.unwrap();
                 }
-                log::error!("[worker-{}] Error processing task: {}", worker_id)
+                log::error!(
+                    "[worker-{:?}] Error processing task: {:?}",
+                    worker_id,
+                    &t
+                );
             }
         }
     } else {
