@@ -1,3 +1,4 @@
+use crate::config::Configurable;
 use crate::executor::storage::TaskStorage;
 use crate::executor::task::{Task, TaskProcessor};
 use chrono::Utc;
@@ -9,7 +10,7 @@ use std::sync::Arc;
 
 #[derive(Clone, Default)]
 pub struct WorkerOptions {
-    pub max_retries: usize,
+    pub max_retries: u32,
 }
 
 #[derive(Builder, Default, Clone)]
@@ -26,16 +27,22 @@ pub struct ExecutorOptions {
 /// A worker function that fetches a task from the storage, processes it,
 /// and then updates the task status. If the processing fails,
 /// the task is retried up to N times.
-async fn worker<D, E, P, S>(worker_id: usize, storage: Arc<S>, processor: Arc<P>)
-where
+async fn worker<D, E, P, S, C>(
+    worker_id: usize,
+    ctx: Arc<C>,
+    storage: Arc<S>,
+    processor: Arc<P>,
+    worker_options: &WorkerOptions,
+) where
     D: Serialize + DeserializeOwned + Send + Sync + 'static + std::fmt::Debug,
     E: Send + Sync + 'static + std::error::Error,
-    P: TaskProcessor<D, E> + Send + Sync + 'static,
+    P: TaskProcessor<D, E, C> + Send + Sync + 'static,
     S: TaskStorage<D, E> + Send + Sync + 'static,
+    C: Configurable + Send + Sync + 'static,
 {
     let task: Option<Task<D>> = storage.task_pop().await.unwrap();
     if let Some(mut t) = task {
-        match processor.process(worker_id, &mut t.data).await {
+        match processor.process(worker_id, ctx, &mut t.data).await {
             Ok(_) => {
                 t.finished = Some(Utc::now());
                 storage.task_set(&t).await.unwrap();
@@ -56,9 +63,14 @@ where
                 );
                 t.retries += 1;
                 t.error_msg = Some(err.to_string());
-                if t.retries < 3 {
+                if t.retries < worker_options.max_retries {
                     storage.task_push(&t).await.unwrap();
                 }
+                log::error!(
+                    "[worker-{:?}] Error processing task: {:?}",
+                    worker_id,
+                    &t
+                );
             }
         }
     } else {
@@ -69,19 +81,22 @@ where
 
 /// A wrapper function for the worker function that also checks for task
 /// limits and handles shutdown signals.
-async fn worker_wrapper<D, E, P, S>(
+async fn worker_wrapper<D, E, P, S, C>(
     worker_id: usize,
+    ctx: Arc<C>,
     storage: Arc<S>,
     processor: Arc<P>,
     task_counter: Arc<AtomicU32>,
     task_limit: Option<u32>,
     limit_notify: Arc<tokio::sync::Notify>,
     mut shutdown: tokio::sync::watch::Receiver<()>,
+    worker_options: WorkerOptions,
 ) where
     D: Serialize + DeserializeOwned + Send + Sync + 'static + std::fmt::Debug,
     E: Send + Sync + 'static + std::error::Error,
-    P: TaskProcessor<D, E> + Send + Sync + 'static,
+    P: TaskProcessor<D, E, C> + Send + Sync + 'static,
     S: TaskStorage<D, E> + Send + Sync + 'static,
+    C: Configurable + Send + Sync + 'static,
 {
     'worker: loop {
         if let Some(limit) = task_limit {
@@ -98,7 +113,13 @@ async fn worker_wrapper<D, E, P, S>(
                 log::info!("[worker-{}] Worker shutting down...", worker_id);
                 break 'worker;
             }
-            _ = worker(worker_id, storage.clone(), processor.clone()) => {}
+            _ = worker(
+                worker_id,
+                ctx.clone(),
+                storage.clone(),
+                processor.clone(),
+                &worker_options
+            ) => {}
 
         };
     }
@@ -110,15 +131,17 @@ async fn worker_wrapper<D, E, P, S>(
 /// It then waits for either a shutdown signal (Ctrl+C) or for the task limit
 /// to be reached. In either case, it sends a shutdown signal to all workers
 /// and waits for them to finish.
-pub async fn run<D, E, P, S>(
+pub async fn run<D, E, P, S, C>(
+    ctx: Arc<C>,
     processor: Arc<P>,
     storage: Arc<S>,
     options: ExecutorOptions,
 ) where
     D: Serialize + DeserializeOwned + Send + Sync + 'static + std::fmt::Debug,
     E: Send + Sync + 'static + std::error::Error,
-    P: TaskProcessor<D, E> + Send + Sync + 'static,
+    P: TaskProcessor<D, E, C> + Send + Sync + 'static,
     S: TaskStorage<D, E> + Send + Sync + 'static,
+    C: Configurable + Send + Sync + 'static,
 {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
     let limit_notify = Arc::new(tokio::sync::Notify::new());
@@ -127,14 +150,16 @@ pub async fn run<D, E, P, S>(
     let mut workers = Vec::new();
 
     for i in 1..=options.concurrency_limit {
-        workers.push(tokio::spawn(worker_wrapper::<D, E, P, S>(
+        workers.push(tokio::spawn(worker_wrapper::<D, E, P, S, C>(
             i,
+            Arc::clone(&ctx),
             Arc::clone(&storage),
             Arc::clone(&processor),
             Arc::clone(&task_counter),
             options.task_limit,
             Arc::clone(&limit_notify),
             shutdown_rx.clone(),
+            options.worker_options.clone(),
         )));
     }
 

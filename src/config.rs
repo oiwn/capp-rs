@@ -1,4 +1,3 @@
-use serde_yaml::Value;
 use std::{
     fs,
     io::{self, BufRead},
@@ -7,7 +6,7 @@ use std::{
 
 pub trait Configurable {
     fn name(&self) -> &str;
-    fn config(&self) -> &Value;
+    fn config(&self) -> &serde_yaml::Value;
 
     // read configuration from yaml config
     fn load_config(
@@ -32,15 +31,15 @@ pub trait Configurable {
     }
 
     /// Extract Value from config using dot notation i.e. "app.concurrency"
-    fn get_config_value(&self, key: &str) -> Option<&Value> {
+    fn get_config_value(&self, key: &str) -> Option<&serde_yaml::Value> {
         let keys: Vec<&str> = key.split('.').collect();
         Self::get_value_recursive(self.config(), &keys)
     }
 
     fn get_value_recursive<'a>(
-        config: &'a Value,
+        config: &'a serde_yaml::Value,
         keys: &[&str],
-    ) -> Option<&'a Value> {
+    ) -> Option<&'a serde_yaml::Value> {
         if keys.is_empty() {
             return None;
         };
@@ -73,7 +72,7 @@ mod tests {
 
     pub struct Application {
         name: String,
-        config: Value,
+        config: serde_yaml::Value,
         user_agents: Option<Vec<String>>,
     }
 
@@ -81,7 +80,7 @@ mod tests {
         fn name(&self) -> &str {
             self.name.as_str()
         }
-        fn config(&self) -> &Value {
+        fn config(&self) -> &serde_yaml::Value {
             &self.config
         }
     }

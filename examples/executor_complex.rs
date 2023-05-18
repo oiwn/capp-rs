@@ -1,9 +1,11 @@
+//! With actual database
 use async_trait::async_trait;
 use capp::config::Configurable;
 use capp::executor::storage::InMemoryTaskStorage;
 use capp::executor::storage::TaskStorage;
 use capp::executor::task::{Task, TaskProcessor};
 use capp::executor::{self, ExecutorOptionsBuilder};
+use rustis::commands::HashCommands;
 use serde::{Deserialize, Serialize};
 use std::path;
 use std::sync::Arc;
@@ -23,9 +25,9 @@ pub struct TaskData {
 #[derive(Debug)]
 pub struct TestTaskProcessor {}
 
-#[derive(Debug, Serialize, Deserialize)]
 pub struct Context {
     name: String,
+    pub redis_client: Option<rustis::client::Client>,
     config: serde_yaml::Value,
     pub user_agents: Option<Vec<String>>,
 }
@@ -44,6 +46,7 @@ impl Context {
         let config = Self::load_config(config_file_path);
         Self {
             name: "test-app".to_string(),
+            redis_client: None,
             config: config.unwrap(),
             user_agents: None,
         }
@@ -51,6 +54,12 @@ impl Context {
 
     fn load_uas(&mut self, uas_file_path: impl AsRef<path::Path>) {
         self.user_agents = Self::load_text_file_lines(uas_file_path).ok();
+    }
+
+    pub async fn init_redis_client(&mut self) {
+        let uri = std::env::var("REDIS_URI").expect("Set REDIS_URI env variable");
+        self.redis_client =
+            Some(rustis::client::Client::connect(uri).await.unwrap());
     }
 }
 
@@ -60,7 +69,7 @@ impl TaskProcessor<TaskData, TaskError, Context> for TestTaskProcessor {
     async fn process(
         &self,
         worker_id: usize,
-        _ctx: Arc<Context>,
+        ctx: Arc<Context>,
         data: &mut TaskData,
     ) -> Result<(), TaskError> {
         log::info!("[worker-{}] Processing task: {:?}", worker_id, data);
@@ -68,6 +77,13 @@ impl TaskProcessor<TaskData, TaskError, Context> for TestTaskProcessor {
         if rem == 0 {
             return Err(TaskError::Unknown);
         };
+
+        let _ = ctx
+            .redis_client
+            .as_ref()
+            .unwrap()
+            .hincrby("capp-complex", "sum", data.value as i64)
+            .await;
 
         data.finished = true;
         tokio::time::sleep(tokio::time::Duration::from_secs(rem as u64)).await;
@@ -116,6 +132,7 @@ async fn main() {
     simple_logger::SimpleLogger::new().env().init().unwrap();
     // Load app
     let config_path = "tests/simple_config.yml";
+    std::env::set_var("REDIS_URI", "redis://localhost/2");
     let mut ctx = Context::from_config(config_path);
     let uas_file_path = {
         ctx.get_config_value("app.user_agents_file")
@@ -125,6 +142,7 @@ async fn main() {
             .to_owned()
     };
     ctx.load_uas(&uas_file_path);
+    ctx.init_redis_client().await;
 
     let ctx = Arc::new(ctx);
     let storage = Arc::new(make_storage().await);
@@ -133,5 +151,14 @@ async fn main() {
         .concurrency_limit(2 as usize)
         .build()
         .unwrap();
-    executor::run(ctx, processor, storage, executor_options).await;
+    executor::run(ctx.clone(), processor, storage, executor_options).await;
+
+    let sum_of_value: i64 = ctx
+        .redis_client
+        .as_ref()
+        .unwrap()
+        .hget("capp-complex", "sum")
+        .await
+        .unwrap();
+    log::info!("Sum of values: {}", sum_of_value);
 }
