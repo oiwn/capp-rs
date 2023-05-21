@@ -12,6 +12,4 @@ serde = { version = "1.0.160", features = ["derive"] }
 chrono = { version = "0.4.24", features = ["serde"] }
 serde_json = { version = "1.0.96" }
 thiserror = { version = "1.0.40" }
-
-[dev-dependencies]
-tokio = { version = "1.28.1", features = ["full"] }
+rustis = { version = "0.11.0", features = ["tokio-runtime"] }
