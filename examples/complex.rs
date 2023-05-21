@@ -15,12 +15,14 @@ pub enum TaskProcessorError {
     #[error("unknown error")]
     Unknown,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskData {
     pub domain: String,
     pub value: u32,
     pub flag: bool,
 }
+
 #[derive(Debug)]
 pub struct TestTaskProcessor {}
 
