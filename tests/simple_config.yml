@@ -1,4 +1,5 @@
 app:
+  name: "test-app"
   threads: 4
   max_queue: 500
   user_agents_file: "tests/simple_uas.txt"

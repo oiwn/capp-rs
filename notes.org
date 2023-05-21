@@ -37,6 +37,7 @@
 - [-] try to move tests init common function into separate file in tests/ folder
 - [X] use same builder pattern for Application
 - [-] pass task_id into the process
+- [ ] re-export Uuid
 
 * Notes
 ** httpbin could be launched as container "docker run -p 80:80 kennethreitz/httpbin"
@@ -67,4 +68,12 @@
 /// If a task fails, its `failed_with` field is set with the error,
 /// `retries` is incremented, and it's pushed back into the storage list
 /// for reprocessing by a worker.
+
+** Previous plan turned into shit, i need another one.
+The main issue is how to pass arbitrary context from top to the bottom.
+Bottom parts do not need huge blob of unrelated data in context.
+
+Also i need to pass connections to the databases, which could have differnet
+constrains.
+
 

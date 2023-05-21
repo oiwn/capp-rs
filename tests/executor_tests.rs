@@ -2,25 +2,31 @@
 mod tests {
     use async_trait::async_trait;
     use capp::config::Configurable;
-    use capp::executor::storage::{InMemoryTaskStorage, TaskStorage};
-    use capp::executor::task::{Task, TaskProcessor};
+    use capp::executor::processor::TaskProcessor;
     use capp::executor::{self, ExecutorOptionsBuilder};
+    use capp::task_deport::{
+        InMemoryTaskStorage, InMemoryTaskStorageError, Task, TaskStorage,
+    };
     use serde::{Deserialize, Serialize};
     use std::sync::Arc;
     use thiserror::Error;
     use tokio::runtime::Runtime;
 
-    #[derive(Error, Debug, Serialize, Deserialize)]
-    pub enum TaskError {
+    #[derive(Error, Debug)]
+    pub enum TaskProcessorError {
         #[error("unknown error")]
         Unknown,
     }
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct TaskData {
         pub domain: String,
         pub value: u32,
         pub finished: bool,
     }
+
+    #[derive(Debug)]
+    pub struct TestTaskProcessor {}
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct Context {
@@ -49,25 +55,30 @@ mod tests {
         }
     }
 
-    #[derive(Debug)]
-    pub struct TestTaskProcessor {}
-
     #[async_trait]
-    impl TaskProcessor<TaskData, TaskError, Context> for TestTaskProcessor {
+    impl
+        TaskProcessor<
+            TaskData,
+            TaskProcessorError,
+            InMemoryTaskStorage<TaskData>,
+            Context,
+        > for TestTaskProcessor
+    {
         /// Process will fail tasks which value can be divided to 3
         async fn process(
             &self,
             worker_id: usize,
             _ctx: Arc<Context>,
-            data: &mut TaskData,
-        ) -> Result<(), TaskError> {
-            log::info!("[worker-{}] Processing task: {:?}", worker_id, data);
-            let rem = data.value % 3;
+            _storage: Arc<InMemoryTaskStorage<TaskData>>,
+            task: &mut Task<TaskData>,
+        ) -> Result<(), TaskProcessorError> {
+            log::info!("[worker-{}] Processing task: {:?}", worker_id, task);
+            let rem = task.data.value % 3;
             if rem == 0 {
-                return Err(TaskError::Unknown);
+                return Err(TaskProcessorError::Unknown);
             };
 
-            data.finished = true;
+            task.data.finished = true;
             Ok(())
         }
     }
@@ -76,8 +87,8 @@ mod tests {
     /// For current set following conditions should be true:
     /// total tasks = 9
     /// number of failed tasks = 4
-    fn make_storage() -> Arc<InMemoryTaskStorage<TaskData, TaskError>> {
-        let storage = Arc::new(InMemoryTaskStorage::new());
+    fn make_storage() -> InMemoryTaskStorage<TaskData> {
+        let storage = InMemoryTaskStorage::new();
 
         let rt = Runtime::new().unwrap();
 
@@ -119,23 +130,23 @@ mod tests {
     #[test]
     fn test_executor() {
         let rt = Runtime::new().unwrap();
-        let storage = make_storage();
+
+        let ctx = Arc::new(Context::from_config("tests/simple_config.yml"));
+        let storage = Arc::new(make_storage());
 
         let storage_len_before = storage.list.lock().unwrap().len();
-
         assert_eq!(storage_len_before, 9);
 
         // dbg!(&storage);
 
         let processor = Arc::new(TestTaskProcessor {});
-        let ctx = Arc::new(Context::from_config("tests/simple_config.yml"));
         let executor_options = ExecutorOptionsBuilder::default()
             .concurrency_limit(2 as usize)
             .task_limit(Some(9))
             .build()
             .unwrap();
 
-        rt.block_on(executor::run(
+        rt.block_on(executor::run_workers(
             ctx.clone(),
             processor,
             storage.clone(),
@@ -148,6 +159,7 @@ mod tests {
         assert_eq!(storage_len_after, 4);
 
         // all successful tasks should be removed from storage
+        // 4 should left
         let keys_len = storage.hashmap.lock().unwrap().len();
         assert_eq!(keys_len, 4);
         let list_len = storage.list.lock().unwrap().len();

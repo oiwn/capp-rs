@@ -1,6 +1,6 @@
 use crate::config::Configurable;
-use crate::executor::storage::TaskStorage;
-use crate::executor::task::{Task, TaskProcessor};
+use crate::executor::processor::TaskProcessor;
+use crate::task_deport::{Task, TaskStorage};
 use chrono::Utc;
 use derive_builder::Builder;
 use serde::de::DeserializeOwned;
@@ -27,7 +27,7 @@ pub struct ExecutorOptions {
 /// A worker function that fetches a task from the storage, processes it,
 /// and then updates the task status. If the processing fails,
 /// the task is retried up to N times.
-async fn worker<D, E, P, S, C>(
+async fn worker<D, PE, SE, P, S, C>(
     worker_id: usize,
     ctx: Arc<C>,
     storage: Arc<S>,
@@ -35,14 +35,18 @@ async fn worker<D, E, P, S, C>(
     worker_options: &WorkerOptions,
 ) where
     D: Serialize + DeserializeOwned + Send + Sync + 'static + std::fmt::Debug,
-    E: Send + Sync + 'static + std::error::Error,
-    P: TaskProcessor<D, E, C> + Send + Sync + 'static,
-    S: TaskStorage<D, E> + Send + Sync + 'static,
+    PE: std::error::Error + Send + Sync + 'static,
+    SE: std::error::Error + Send + Sync + 'static,
+    P: TaskProcessor<D, PE, S, C> + Send + Sync + 'static,
+    S: TaskStorage<D, SE> + Send + Sync + 'static,
     C: Configurable + Send + Sync + 'static,
 {
     let task: Option<Task<D>> = storage.task_pop().await.unwrap();
     if let Some(mut t) = task {
-        match processor.process(worker_id, ctx, &mut t.data).await {
+        match processor
+            .process(worker_id, ctx, storage.clone(), &mut t)
+            .await
+        {
             Ok(_) => {
                 t.finished = Some(Utc::now());
                 storage.task_set(&t).await.unwrap();
@@ -81,7 +85,7 @@ async fn worker<D, E, P, S, C>(
 
 /// A wrapper function for the worker function that also checks for task
 /// limits and handles shutdown signals.
-async fn worker_wrapper<D, E, P, S, C>(
+async fn worker_wrapper<D, PE, SE, P, S, C>(
     worker_id: usize,
     ctx: Arc<C>,
     storage: Arc<S>,
@@ -93,9 +97,10 @@ async fn worker_wrapper<D, E, P, S, C>(
     worker_options: WorkerOptions,
 ) where
     D: Serialize + DeserializeOwned + Send + Sync + 'static + std::fmt::Debug,
-    E: Send + Sync + 'static + std::error::Error,
-    P: TaskProcessor<D, E, C> + Send + Sync + 'static,
-    S: TaskStorage<D, E> + Send + Sync + 'static,
+    PE: std::error::Error + Send + Sync + 'static,
+    SE: std::error::Error + Send + Sync + 'static,
+    P: TaskProcessor<D, PE, S, C> + Send + Sync + 'static,
+    S: TaskStorage<D, SE> + Send + Sync + 'static,
     C: Configurable + Send + Sync + 'static,
 {
     'worker: loop {
@@ -131,16 +136,17 @@ async fn worker_wrapper<D, E, P, S, C>(
 /// It then waits for either a shutdown signal (Ctrl+C) or for the task limit
 /// to be reached. In either case, it sends a shutdown signal to all workers
 /// and waits for them to finish.
-pub async fn run<D, E, P, S, C>(
+pub async fn run_workers<D, PE, SE, P, S, C>(
     ctx: Arc<C>,
     processor: Arc<P>,
     storage: Arc<S>,
     options: ExecutorOptions,
 ) where
     D: Serialize + DeserializeOwned + Send + Sync + 'static + std::fmt::Debug,
-    E: Send + Sync + 'static + std::error::Error,
-    P: TaskProcessor<D, E, C> + Send + Sync + 'static,
-    S: TaskStorage<D, E> + Send + Sync + 'static,
+    PE: Send + Sync + 'static + std::error::Error,
+    SE: Send + Sync + 'static + std::error::Error,
+    P: TaskProcessor<D, PE, S, C> + Send + Sync + 'static,
+    S: TaskStorage<D, SE> + Send + Sync + 'static,
     C: Configurable + Send + Sync + 'static,
 {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
@@ -150,7 +156,7 @@ pub async fn run<D, E, P, S, C>(
     let mut workers = Vec::new();
 
     for i in 1..=options.concurrency_limit {
-        workers.push(tokio::spawn(worker_wrapper::<D, E, P, S, C>(
+        workers.push(tokio::spawn(worker_wrapper::<D, PE, SE, P, S, C>(
             i,
             Arc::clone(&ctx),
             Arc::clone(&storage),
