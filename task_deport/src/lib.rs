@@ -10,6 +10,9 @@ use uuid::Uuid;
 pub mod memory;
 pub mod redis;
 
+pub use memory::{InMemoryTaskStorage, InMemoryTaskStorageError};
+pub use redis::{RedisTaskStorage, RedisTaskStorageError};
+
 /// A `Task` struct represents a single unit of work that will be processed
 /// by a worker. It contains data of type `D`, which is used by the worker
 /// during processing. The `Task` struct also includes fields for managing

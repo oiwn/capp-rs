@@ -1,16 +1,16 @@
 use async_trait::async_trait;
 use capp::config::Configurable;
-use capp::executor::storage::InMemoryTaskStorage;
-use capp::executor::storage::TaskStorage;
-use capp::executor::task::{Task, TaskProcessor};
+use capp::executor::processor::TaskProcessor;
 use capp::executor::{self, ExecutorOptionsBuilder};
+use capp::task_deport::memory::InMemoryTaskStorage;
+use capp::task_deport::{Task, TaskStorage};
 use serde::{Deserialize, Serialize};
 use std::path;
 use std::sync::Arc;
 use thiserror::Error;
 
-#[derive(Error, Debug, Serialize, Deserialize)]
-pub enum TaskError {
+#[derive(Error, Debug)]
+pub enum TaskProcessorError {
     #[error("unknown error")]
     Unknown,
 }
@@ -27,7 +27,6 @@ pub struct TestTaskProcessor {}
 pub struct Context {
     name: String,
     config: serde_yaml::Value,
-    pub user_agents: Option<Vec<String>>,
 }
 
 impl Configurable for Context {
@@ -45,31 +44,34 @@ impl Context {
         Self {
             name: "test-app".to_string(),
             config: config.unwrap(),
-            user_agents: None,
         }
-    }
-
-    fn load_uas(&mut self, uas_file_path: impl AsRef<path::Path>) {
-        self.user_agents = Self::load_text_file_lines(uas_file_path).ok();
     }
 }
 
 #[async_trait]
-impl TaskProcessor<TaskData, TaskError, Context> for TestTaskProcessor {
+impl
+    TaskProcessor<
+        TaskData,
+        TaskProcessorError,
+        InMemoryTaskStorage<TaskData>,
+        Context,
+    > for TestTaskProcessor
+{
     /// Processor will fail tasks which value can be divided to 3
     async fn process(
         &self,
         worker_id: usize,
         _ctx: Arc<Context>,
-        data: &mut TaskData,
-    ) -> Result<(), TaskError> {
-        log::info!("[worker-{}] Processing task: {:?}", worker_id, data);
-        let rem = data.value % 3;
+        _storage: Arc<InMemoryTaskStorage<TaskData>>,
+        task: &mut Task<TaskData>,
+    ) -> Result<(), TaskProcessorError> {
+        log::info!("[worker-{}] Processing task: {:?}", worker_id, task);
+        let rem = task.data.value % 3;
         if rem == 0 {
-            return Err(TaskError::Unknown);
+            return Err(TaskProcessorError::Unknown);
         };
 
-        data.finished = true;
+        task.data.finished = true;
         tokio::time::sleep(tokio::time::Duration::from_secs(rem as u64)).await;
         Ok(())
     }
@@ -79,7 +81,7 @@ impl TaskProcessor<TaskData, TaskError, Context> for TestTaskProcessor {
 /// For current set following conditions should be true:
 /// total tasks = 9
 /// number of failed tasks = 4
-async fn make_storage() -> InMemoryTaskStorage<TaskData, TaskError> {
+async fn make_storage() -> InMemoryTaskStorage<TaskData> {
     let storage = InMemoryTaskStorage::new();
 
     for i in 1..=3 {
@@ -116,22 +118,13 @@ async fn main() {
     simple_logger::SimpleLogger::new().env().init().unwrap();
     // Load app
     let config_path = "tests/simple_config.yml";
-    let mut ctx = Context::from_config(config_path);
-    let uas_file_path = {
-        ctx.get_config_value("app.user_agents_file")
-            .unwrap()
-            .as_str()
-            .unwrap()
-            .to_owned()
-    };
-    ctx.load_uas(&uas_file_path);
+    let ctx = Arc::new(Context::from_config(config_path));
 
-    let ctx = Arc::new(ctx);
     let storage = Arc::new(make_storage().await);
     let processor = Arc::new(TestTaskProcessor {});
     let executor_options = ExecutorOptionsBuilder::default()
         .concurrency_limit(2 as usize)
         .build()
         .unwrap();
-    executor::run(ctx, processor, storage, executor_options).await;
+    executor::run_workers(ctx, processor, storage, executor_options).await;
 }

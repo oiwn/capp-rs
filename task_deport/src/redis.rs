@@ -53,10 +53,7 @@ impl<D> RedisTaskStorage<D> {
 
 impl<D> std::fmt::Debug for RedisTaskStorage<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Lock the mutexes to access the data.
-        // let hashmap = self.hashmap.lock().unwrap();
-        // let list = self.list.lock().unwrap();
-
+        // TODO: implement debug output for data in redis
         // Use the debug builders to format the output.
         f.debug_struct("RedisTaskStorage")
             // .field("hashmap", &*hashmap)
@@ -126,8 +123,12 @@ where
         let list_key = self.get_list_key();
         let hashmap_key = self.get_hashmap_key();
         let uuid_as_str = task.task_id.to_string();
-        let _ = self.redis.lpush(&list_key, &uuid_as_str);
-        let _ = self.redis.hset(&hashmap_key, [(&uuid_as_str, &task_value)]);
+
+        let _ = self.redis.lpush(&list_key, &uuid_as_str).await?;
+        let _ = self
+            .redis
+            .hset(&hashmap_key, [(&uuid_as_str, &task_value)])
+            .await?;
         Ok(())
     }
 }
