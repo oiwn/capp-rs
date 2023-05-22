@@ -29,15 +29,16 @@
 - [X] pass context where db connections could be stored
 - [X] rename example/basic.rs into executor_basic.rs
 - [X] make_sorage return TaskStorage instead of wrapped with Arc<>
-- [ ] fix max_retries
+- [X] fix max_retries
 - [X] fix tests after adding context to the executor
 - [-] task fail into storage, to collect totaly (by max_retries) failed tasks
-- [-] optional redis storage backend using rustis
+- [X] optional redis storage backend using rustis
 - [-] separate tests for redis backend
 - [-] try to move tests init common function into separate file in tests/ folder
 - [X] use same builder pattern for Application
-- [-] pass task_id into the process
-- [ ] re-export Uuid
+- [X] pass task_id into the process
+- [X] re-export Uuid
+- [ ] optional dependencies for task_deport
 
 * Notes
 ** httpbin could be launched as container "docker run -p 80:80 kennethreitz/httpbin"
