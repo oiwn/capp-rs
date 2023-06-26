@@ -1,5 +1,9 @@
 use backoff::ExponentialBackoffBuilder;
+// use once_cell::sync::Lazy;
+// use regex::Regex;
 use std::time::Duration;
+
+// static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{(\d+)\.\.(\d+)\}").unwrap());
 
 #[derive(Debug)]
 pub struct HttpClientParams<'a> {
@@ -11,14 +15,16 @@ pub struct HttpClientParams<'a> {
 
 /// Helper to create typical crawling request with few useful options
 /// Assuming there is some kind of settings chunk `http_config` like:
-/// ```ignore`
+/// ```ignore
 /// http:
 ///     proxy:
 ///         use: true
 ///         uri: http://bro:admin@proxygate1.com:420420
 ///     timeout: 30
 ///     connect_timeout: 10
-/// ````
+/// ```
+/// uri could contain range of ports like:
+/// http://bro:admin@proxygate1.com:{420420..420440}
 impl<'a> HttpClientParams<'a> {
     pub fn from_config(
         http_config: &serde_yaml::Value,
@@ -47,6 +53,19 @@ impl<'a> HttpClientParams<'a> {
         }
     }
 }
+
+/* TODO:
+pub fn parse_proxy_uri(uri: &str) -> String {
+    match RE.find(uri) {
+        Some(matched) => {
+            let caps = RE.captures(matched).unwrap();
+            let start = caps.get(1).map_or("", |m| m.as_str());
+            let end = caps.get(2).map_or("", |m| m.as_str());
+        }
+        Err(_) => {}
+    }
+}
+*/
 
 /// Helper to create typical crawling request with sane defaultsx
 pub fn build_http_client(

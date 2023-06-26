@@ -144,12 +144,8 @@ async fn main() {
     let config_path = "tests/simple_config.yml";
     std::env::set_var("REDIS_URI", "redis://localhost:6379/15");
     let ctx = Arc::new(Context::from_config(config_path).await);
-    // let storage = Arc::new(make_storage(ctx.redis.clone()).await);
-    let storage = make_storage(ctx.redis.clone()).await;
-    let task = storage.task_pop().await;
-    println!("Task: {:?}", task);
+    let storage = Arc::new(make_storage(ctx.redis.clone()).await);
 
-    /*
     let processor = Arc::new(TestTaskProcessor {});
     let executor_options = ExecutorOptionsBuilder::default()
         .concurrency_limit(2 as usize)
@@ -160,5 +156,4 @@ async fn main() {
     let sum_of_value: i64 =
         ctx.clone().redis.hget("capp-complex", "sum").await.unwrap();
     log::info!("Sum of values: {}", sum_of_value);
-    */
 }

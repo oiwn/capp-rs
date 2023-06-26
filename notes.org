@@ -39,6 +39,8 @@
 - [X] pass task_id into the process
 - [X] re-export Uuid
 - [ ] optional dependencies for task_deport
+- [ ] seriously figure out dependencies and reexport crates
+** redis storage with bloom filter
 
 * Notes
 ** httpbin could be launched as container "docker run -p 80:80 kennethreitz/httpbin"

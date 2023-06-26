@@ -106,10 +106,9 @@ where
     async fn task_pop(&self) -> Result<Option<Task<D>>, RedisTaskStorageError> {
         let list_key = self.get_list_key();
         let hashmap_key = self.get_hashmap_key();
-        let task_id_result: Option<Vec<String>> =
-            self.redis.rpop(&list_key, 1).await.ok();
-        if let Some(task_ids_vec) = task_id_result {
-            let task_id = task_ids_vec.first().unwrap();
+        let task_ids: Vec<String> = self.redis.rpop(&list_key, 1).await?;
+        if task_ids.len() > 0 {
+            let task_id = task_ids.first().unwrap();
             let task_value: String = self.redis.hget(&hashmap_key, task_id).await?;
             let task: Task<D> = serde_json::from_str(&task_value)?;
             return Ok(Some(task));

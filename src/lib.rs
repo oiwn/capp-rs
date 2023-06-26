@@ -20,3 +20,5 @@ pub use serde_yaml;
 pub use thiserror;
 #[cfg(feature = "executor")]
 pub use uuid;
+#[cfg(feature = "http")]
+pub use reqwest;
