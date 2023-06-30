@@ -14,11 +14,11 @@ pub use task_deport;
 // re-export
 #[cfg(feature = "executor")]
 pub use futures;
+#[cfg(feature = "http")]
+pub use reqwest;
 pub use serde;
 pub use serde_yaml;
 #[cfg(feature = "executor")]
 pub use thiserror;
 #[cfg(feature = "executor")]
 pub use uuid;
-#[cfg(feature = "http")]
-pub use reqwest;
