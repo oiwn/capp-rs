@@ -4,9 +4,7 @@ mod tests {
     use capp::config::Configurable;
     use capp::executor::processor::TaskProcessor;
     use capp::executor::{self, ExecutorOptionsBuilder};
-    use capp::task_deport::{
-        InMemoryTaskStorage, InMemoryTaskStorageError, Task, TaskStorage,
-    };
+    use capp::task_deport::{InMemoryTaskStorage, Task, TaskStorage};
     use serde::{Deserialize, Serialize};
     use std::sync::Arc;
     use thiserror::Error;
