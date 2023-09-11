@@ -1,9 +1,5 @@
 use backoff::ExponentialBackoffBuilder;
-// use once_cell::sync::Lazy;
-// use regex::Regex;
 use std::time::Duration;
-
-// static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{(\d+)\.\.(\d+)\}").unwrap());
 
 #[derive(Debug)]
 pub struct HttpClientParams<'a> {
