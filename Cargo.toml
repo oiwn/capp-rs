@@ -28,7 +28,7 @@ members = [
 ]
 
 [dependencies]
-task_deport = { path = "./task_deport", version = "0.1.0", optional = true }
+task_deport = { path = "./task_deport", version = "0.1.0", features = ["redis"], optional = true }
 async-trait = { version = "0.1.73", optional = true }
 backoff = { version = "0.4.0", optional = true, features = ["tokio"] }
 chrono = { version = "0.4.3", optional = true, features = ["serde"] }

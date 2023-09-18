@@ -5,13 +5,17 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+pub use uuid::Uuid;
 
 pub mod memory;
+#[cfg(feature = "redis")]
 pub mod redis;
 
 pub use memory::{InMemoryTaskStorage, InMemoryTaskStorageError};
-pub use redis::{RedisTaskStorage, RedisTaskStorageError};
+#[cfg(feature = "redis")]
+pub use redis::{
+    RedisRoundRobinTaskStorage, RedisTaskStorage, RedisTaskStorageError,
+};
 
 /// A `Task` struct represents a single unit of work that will be processed
 /// by a worker. It contains data of type `D`, which is used by the worker
