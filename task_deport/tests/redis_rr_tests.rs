@@ -4,7 +4,8 @@ mod tests {
     use dotenvy::dotenv;
     use rustis::commands::{GenericCommands, HashCommands, ListCommands};
     use serde::{Deserialize, Serialize};
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
+    use task_deport::HasTagKey;
     use task_deport::RedisRoundRobinTaskStorage;
     use task_deport::Task;
     use task_deport::TaskStorage;
@@ -14,6 +15,13 @@ mod tests {
     pub struct TaskData {
         tag: String,
         value: u32,
+    }
+
+    impl HasTagKey for TaskData {
+        type TagValue = String;
+        fn get_tag_value(&self) -> Self::TagValue {
+            self.tag.clone()
+        }
     }
 
     struct RedisTestGuard<'a> {
@@ -38,7 +46,7 @@ mod tests {
     #[tokio::test]
     async fn test_flow() {
         let redis = get_redis_connection().await;
-        let tags: HashSet<String> = vec!["one", "two", "more"]
+        let tags: HashSet<String> = vec!["one", "two"]
             .into_iter()
             .map(|x| x.to_string())
             .collect();
@@ -46,6 +54,23 @@ mod tests {
             key: "td:rr:test",
             redis: &redis,
         };
+        let tag_counts: HashMap<String, u32> = vec![
+            ("one".to_string(), 5), // 5 dummy data for tag1
+            ("two".to_string(), 3), // 3 dummy data for tag2
+        ]
+        .into_iter()
+        .collect();
+
+        // generating tasks, total 8
+        let mut tasks = Vec::new();
+        for (tag, count) in tag_counts.iter() {
+            for i in 0..*count {
+                tasks.push(Task::new(TaskData {
+                    tag: tag.clone(),
+                    value: i,
+                }));
+            }
+        }
 
         let storage: RedisRoundRobinTaskStorage<TaskData> =
             RedisRoundRobinTaskStorage::new(
@@ -54,18 +79,6 @@ mod tests {
                 "tag",
                 redis.clone(),
             );
-
-        // Generating tasks
-        let tasks: Vec<_> = tags
-            .iter()
-            .enumerate()
-            .map(|(value, tag)| {
-                Task::new(TaskData {
-                    tag: tag.clone(),
-                    value: value as u32,
-                })
-            })
-            .collect();
 
         for task in &tasks {
             let _ = storage.task_push(&task).await;

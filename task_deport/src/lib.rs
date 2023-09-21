@@ -10,12 +10,14 @@ pub use uuid::Uuid;
 pub mod memory;
 #[cfg(feature = "redis")]
 pub mod redis;
+#[cfg(feature = "redis")]
+pub mod redis_rr;
 
 pub use memory::{InMemoryTaskStorage, InMemoryTaskStorageError};
 #[cfg(feature = "redis")]
-pub use redis::{
-    RedisRoundRobinTaskStorage, RedisTaskStorage, RedisTaskStorageError,
-};
+pub use redis::{RedisTaskStorage, RedisTaskStorageError};
+#[cfg(feature = "redis")]
+pub use redis_rr::RedisRoundRobinTaskStorage;
 
 /// A `Task` struct represents a single unit of work that will be processed
 /// by a worker. It contains data of type `D`, which is used by the worker
@@ -48,6 +50,11 @@ where
     async fn task_set(&self, task: &Task<D>) -> Result<(), E>;
     async fn task_pop(&self) -> Result<Option<Task<D>>, E>;
     async fn task_push(&self, task: &Task<D>) -> Result<(), E>;
+}
+
+pub trait HasTagKey {
+    type TagValue: ToString + PartialEq;
+    fn get_tag_value(&self) -> Self::TagValue;
 }
 
 impl<D> Task<D> {
