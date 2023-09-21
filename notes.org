@@ -31,7 +31,9 @@
 - [X] make_sorage return TaskStorage instead of wrapped with Arc<>
 - [X] fix max_retries
 - [X] fix tests after adding context to the executor
+- [ ] adjust async tests to [tokio::test] and drop initialization of async runtime in code
 - [-] task fail into storage, to collect totaly (by max_retries) failed tasks
+- [ ] reexport as much as possible from task_deport
 - [X] optional redis storage backend using rustis
 - [-] separate tests for redis backend
 - [-] try to move tests init common function into separate file in tests/ folder

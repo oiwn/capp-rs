@@ -18,6 +18,9 @@ pub enum RedisTaskStorageError {
     #[error("key {0} error")]
     KeyError(Uuid),
 
+    #[error("Empty value: {0}")]
+    EmptyValue(String),
+
     #[error(transparent)]
     RedisError(#[from] rustis::Error),
 
@@ -42,11 +45,11 @@ impl<D> RedisTaskStorage<D> {
         }
     }
 
-    fn get_hashmap_key(&self) -> String {
+    pub fn get_hashmap_key(&self) -> String {
         format!("{}:{}", self.key, "hm")
     }
 
-    fn get_list_key(&self) -> String {
+    pub fn get_list_key(&self) -> String {
         format!("{}:{}", self.key, "ls")
     }
 }

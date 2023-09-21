@@ -16,5 +16,6 @@ Cargo.lock
 /Cargo.lock
 
 # misc
+.env
 /tmp
 tags
