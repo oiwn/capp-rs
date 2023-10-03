@@ -34,7 +34,13 @@ async fn worker<D, PE, SE, P, S, C>(
     processor: Arc<P>,
     worker_options: &WorkerOptions,
 ) where
-    D: Serialize + DeserializeOwned + Send + Sync + 'static + std::fmt::Debug,
+    D: Clone
+        + Serialize
+        + DeserializeOwned
+        + Send
+        + Sync
+        + 'static
+        + std::fmt::Debug,
     PE: std::error::Error + Send + Sync + 'static,
     SE: std::error::Error + Send + Sync + 'static,
     P: TaskProcessor<D, PE, S, C> + Send + Sync + 'static,
@@ -55,7 +61,7 @@ async fn worker<D, PE, SE, P, S, C>(
                     "[worker-{}] Task {} succeed: {:?}",
                     worker_id,
                     &successful_task.task_id,
-                    &successful_task.data
+                    &successful_task.payload
                 );
             }
             Err(err) => {
@@ -96,7 +102,13 @@ async fn worker_wrapper<D, PE, SE, P, S, C>(
     mut shutdown: tokio::sync::watch::Receiver<()>,
     worker_options: WorkerOptions,
 ) where
-    D: Serialize + DeserializeOwned + Send + Sync + 'static + std::fmt::Debug,
+    D: Clone
+        + Serialize
+        + DeserializeOwned
+        + Send
+        + Sync
+        + 'static
+        + std::fmt::Debug,
     PE: std::error::Error + Send + Sync + 'static,
     SE: std::error::Error + Send + Sync + 'static,
     P: TaskProcessor<D, PE, S, C> + Send + Sync + 'static,
@@ -142,7 +154,13 @@ pub async fn run_workers<D, PE, SE, P, S, C>(
     storage: Arc<S>,
     options: ExecutorOptions,
 ) where
-    D: Serialize + DeserializeOwned + Send + Sync + 'static + std::fmt::Debug,
+    D: Clone
+        + Serialize
+        + DeserializeOwned
+        + Send
+        + Sync
+        + 'static
+        + std::fmt::Debug,
     PE: Send + Sync + 'static + std::error::Error,
     SE: Send + Sync + 'static + std::error::Error,
     P: TaskProcessor<D, PE, S, C> + Send + Sync + 'static,

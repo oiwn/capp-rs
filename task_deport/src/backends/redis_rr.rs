@@ -37,7 +37,8 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::{redis::RedisTaskStorageError, HasTagKey, Task, TaskStorage};
+use super::RedisTaskStorageError;
+use crate::{HasTagKey, Task, TaskStorage};
 
 pub struct RedisRoundRobinTaskStorage<D> {
     pub key: String,
@@ -51,7 +52,7 @@ pub struct RedisRoundRobinTaskStorage<D> {
 #[async_trait]
 impl<D> TaskStorage<D, RedisTaskStorageError> for RedisRoundRobinTaskStorage<D>
 where
-    D: HasTagKey + Serialize + DeserializeOwned + Send + Sync + 'static,
+    D: Clone + HasTagKey + Serialize + DeserializeOwned + Send + Sync + 'static,
 {
     async fn task_ack(
         &self,
@@ -105,7 +106,7 @@ where
     }
 
     async fn task_push(&self, task: &Task<D>) -> Result<(), RedisTaskStorageError> {
-        let queue_name = task.data.get_tag_value().to_string();
+        let queue_name = task.payload.get_tag_value().to_string();
         let task_value = serde_json::to_string(task)?;
         let list_key = self.get_list_key(&queue_name);
         let hashmap_key = self.get_hashmap_key();

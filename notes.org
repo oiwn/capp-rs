@@ -40,8 +40,21 @@
 - [X] use same builder pattern for Application
 - [X] pass task_id into the process
 - [X] re-export Uuid
-- [ ] optional dependencies for task_deport
+- [X] optional dependencies for task_deport
 - [ ] seriously figure out dependencies and reexport crates
+** Executor
+- [ ] figure out how to move constrains from direct name of TaskStorage to something like Box<dyn impl TaskStorage>
+
+** Task Deport
+- [X] move Task<D> into the separate module
+- [X] move backends into backends/
+- [X] rename Task.data into Task.payload and add function get_payload()
+- [ ] add task status which is enum
+- [ ] drop task exceed time for execution
+- [ ] thread to clean up staled tasks
+- [ ] dead latter queue
+- [ ] add more tests
+
 ** redis storage with bloom filter
 
 * Notes

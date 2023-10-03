@@ -68,7 +68,7 @@ impl<D> std::fmt::Debug for RedisTaskStorage<D> {
 #[async_trait]
 impl<D> TaskStorage<D, RedisTaskStorageError> for RedisTaskStorage<D>
 where
-    D: Serialize + DeserializeOwned + Send + Sync + 'static,
+    D: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
 {
     async fn task_ack(
         &self,

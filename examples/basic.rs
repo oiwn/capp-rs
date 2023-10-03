@@ -1,12 +1,11 @@
 use async_trait::async_trait;
-use capp::config::Configurable;
-use capp::executor::processor::TaskProcessor;
-use capp::executor::{self, ExecutorOptionsBuilder};
-use capp::task_deport::memory::InMemoryTaskStorage;
-use capp::task_deport::{Task, TaskStorage};
+use capp::{
+    config::Configurable,
+    executor::{self, processor::TaskProcessor, ExecutorOptionsBuilder},
+    task_deport::{InMemoryTaskStorage, Task, TaskStorage},
+};
 use serde::{Deserialize, Serialize};
-use std::path;
-use std::sync::Arc;
+use std::{path, sync::Arc};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -66,12 +65,12 @@ impl
         task: &mut Task<TaskData>,
     ) -> Result<(), TaskProcessorError> {
         log::info!("[worker-{}] Processing task: {:?}", worker_id, task);
-        let rem = task.data.value % 3;
+        let rem = task.payload.value % 3;
         if rem == 0 {
             return Err(TaskProcessorError::Unknown);
         };
 
-        task.data.finished = true;
+        task.payload.finished = true;
         tokio::time::sleep(tokio::time::Duration::from_secs(rem as u64)).await;
         Ok(())
     }

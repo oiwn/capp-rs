@@ -80,18 +80,18 @@ impl
         _storage: Arc<RedisTaskStorage<TaskData>>,
         task: &mut Task<TaskData>,
     ) -> Result<(), TaskProcessorError> {
-        log::info!("[worker-{}] Processing task: {:?}", worker_id, task.data);
-        let rem = task.data.value % 3;
+        log::info!("[worker-{}] Processing task: {:?}", worker_id, task.payload);
+        let rem = task.payload.value % 3;
         if rem == 0 {
             return Err(TaskProcessorError::Unknown);
         };
 
         let _ = ctx
             .redis
-            .hincrby("capp-complex", "sum", task.data.value as i64)
+            .hincrby("capp-complex", "sum", task.payload.value as i64)
             .await;
 
-        task.data.flag = true;
+        task.payload.flag = true;
 
         // let _ ctx.redis.ta
         tokio::time::sleep(tokio::time::Duration::from_secs(rem as u64)).await;

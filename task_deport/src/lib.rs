@@ -2,37 +2,18 @@
 //! The storage allows tasks to be pushed to and popped from a queue,
 //! and also allows tasks to be set and retrieved by their UUID.
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 pub use uuid::Uuid;
 
-pub mod memory;
-#[cfg(feature = "redis")]
-pub mod redis;
-#[cfg(feature = "redis")]
-pub mod redis_rr;
+pub mod backends;
+pub mod task;
 
-pub use memory::{InMemoryTaskStorage, InMemoryTaskStorageError};
+pub use backends::{InMemoryTaskStorage, InMemoryTaskStorageError};
 #[cfg(feature = "redis")]
-pub use redis::{RedisTaskStorage, RedisTaskStorageError};
-#[cfg(feature = "redis")]
-pub use redis_rr::RedisRoundRobinTaskStorage;
-
-/// A `Task` struct represents a single unit of work that will be processed
-/// by a worker. It contains data of type `D`, which is used by the worker
-/// during processing. The `Task` struct also includes fields for managing
-/// the task's lifecycle, including the task's UUID, the start and
-/// finish times, the number of retries, and any error messages.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Task<D> {
-    pub task_id: Uuid,
-    pub data: D,
-    pub started: DateTime<Utc>,
-    pub finished: Option<DateTime<Utc>>,
-    pub retries: u32,
-    pub error_msg: Option<String>,
-}
+pub use backends::{
+    RedisRoundRobinTaskStorage, RedisTaskStorage, RedisTaskStorageError,
+};
+pub use task::Task;
 
 /// A trait that describes the necessary methods for task storage. This includes
 /// methods for acknowledging a task, getting a task by its UUID, setting a task,
@@ -42,7 +23,7 @@ pub struct Task<D> {
 #[async_trait]
 pub trait TaskStorage<D, E>
 where
-    D: Serialize + DeserializeOwned + Send + Sync + 'static,
+    D: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
     E: std::error::Error + Send + Sync + 'static,
 {
     async fn task_ack(&self, task_id: &Uuid) -> Result<Task<D>, E>;
@@ -55,17 +36,4 @@ where
 pub trait HasTagKey {
     type TagValue: ToString + PartialEq;
     fn get_tag_value(&self) -> Self::TagValue;
-}
-
-impl<D> Task<D> {
-    pub fn new(task_data: D) -> Self {
-        Task {
-            task_id: Uuid::new_v4(),
-            data: task_data,
-            started: Utc::now(),
-            finished: None,
-            retries: 0,
-            error_msg: None,
-        }
-    }
 }

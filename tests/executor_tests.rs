@@ -71,12 +71,12 @@ mod tests {
             task: &mut Task<TaskData>,
         ) -> Result<(), TaskProcessorError> {
             log::info!("[worker-{}] Processing task: {:?}", worker_id, task);
-            let rem = task.data.value % 3;
+            let rem = task.payload.value % 3;
             if rem == 0 {
                 return Err(TaskProcessorError::Unknown);
             };
 
-            task.data.finished = true;
+            task.payload.finished = true;
             Ok(())
         }
     }

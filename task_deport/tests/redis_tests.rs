@@ -34,7 +34,7 @@ mod tests {
             .await
             .unwrap();
         let task_data: Task<TaskData> = serde_json::from_str(&task_value).unwrap();
-        assert_eq!(task_data.data.value, task.data.value);
+        assert_eq!(task_data.payload.value, task.payload.value);
     }
 
     #[tokio::test]
@@ -56,7 +56,7 @@ mod tests {
             .unwrap();
 
         let task_data = task_storage.task_get(&task.task_id).await.unwrap();
-        assert_eq!(task_data.data.value, task.data.value);
+        assert_eq!(task_data.payload.value, task.payload.value);
     }
 
     #[tokio::test]
@@ -83,6 +83,6 @@ mod tests {
             .unwrap();
 
         let task_data = task_storage.task_pop().await.unwrap().unwrap();
-        assert_eq!(task_data.data.value, task.data.value);
+        assert_eq!(task_data.payload.value, task.payload.value);
     }
 }

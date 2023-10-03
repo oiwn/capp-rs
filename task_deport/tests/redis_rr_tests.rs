@@ -5,10 +5,7 @@ mod tests {
     use rustis::commands::{GenericCommands, HashCommands, ListCommands};
     use serde::{Deserialize, Serialize};
     use std::collections::{HashMap, HashSet};
-    use task_deport::HasTagKey;
-    use task_deport::RedisRoundRobinTaskStorage;
-    use task_deport::Task;
-    use task_deport::TaskStorage;
+    use task_deport::{HasTagKey, RedisRoundRobinTaskStorage, Task, TaskStorage};
     use tokio;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,7 +82,7 @@ mod tests {
         }
 
         let task = storage.task_pop().await.unwrap().unwrap();
-        assert_eq!(task.data.tag, "one");
+        assert_eq!(task.payload.tag, "one");
     }
 
     /*
