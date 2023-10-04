@@ -119,6 +119,21 @@ where
             .await?;
         Ok(())
     }
+
+    async fn task_to_dlq(
+        &self,
+        task: &Task<D>,
+    ) -> Result<(), RedisTaskStorageError> {
+        let task_value = serde_json::to_string(task)?;
+        let dlq_key = self.get_dlq_key();
+        let uuid_as_str = task.task_id.to_string();
+
+        let _ = self
+            .redis
+            .hset(&dlq_key, [(&uuid_as_str, &task_value)])
+            .await?;
+        Ok(())
+    }
 }
 
 impl<D> RedisRoundRobinTaskStorage<D> {
@@ -145,6 +160,10 @@ impl<D> RedisRoundRobinTaskStorage<D> {
 
     pub fn get_list_key(&self, queue_key: &str) -> String {
         format!("{}:{}:{}", self.key, queue_key, "ls")
+    }
+
+    pub fn get_dlq_key(&self) -> String {
+        format!("{}:{}", self.key, "dlq")
     }
 
     fn get_next_queue(&self) -> Result<String, RedisTaskStorageError> {

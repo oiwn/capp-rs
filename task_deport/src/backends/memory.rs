@@ -29,6 +29,7 @@ pub enum InMemoryTaskStorageError {
 pub struct InMemoryTaskStorage<D> {
     pub hashmap: Mutex<HashMap<Uuid, String>>,
     pub list: Mutex<VecDeque<Uuid>>,
+    pub dlq: Mutex<HashMap<Uuid, String>>,
     _marker1: PhantomData<D>,
 }
 
@@ -38,6 +39,7 @@ impl<D> InMemoryTaskStorage<D> {
         Self {
             hashmap: Mutex::new(HashMap::new()),
             list: Mutex::new(VecDeque::new()),
+            dlq: Mutex::new(HashMap::new()),
             _marker1: PhantomData,
         }
     }
@@ -139,6 +141,19 @@ where
         let task_value = serde_json::to_string(task)?;
         hashmap.insert(task.task_id, task_value);
         list.push_back(task.task_id);
+        Ok(())
+    }
+
+    async fn task_to_dlq(
+        &self,
+        task: &Task<D>,
+    ) -> Result<(), InMemoryTaskStorageError> {
+        let mut dlq = self
+            .hashmap
+            .lock()
+            .map_err(|_| InMemoryTaskStorageError::LockError)?;
+        let task_value = serde_json::to_string(task)?;
+        dlq.insert(task.task_id, task_value);
         Ok(())
     }
 }

@@ -31,6 +31,7 @@ where
     async fn task_set(&self, task: &Task<D>) -> Result<(), E>;
     async fn task_pop(&self) -> Result<Option<Task<D>>, E>;
     async fn task_push(&self, task: &Task<D>) -> Result<(), E>;
+    async fn task_to_dlq(&self, task: &Task<D>) -> Result<(), E>;
 }
 
 pub trait HasTagKey {

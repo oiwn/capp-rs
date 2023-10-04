@@ -44,11 +44,14 @@
 - [ ] seriously figure out dependencies and reexport crates
 ** Executor
 - [ ] figure out how to move constrains from direct name of TaskStorage to something like Box<dyn impl TaskStorage>
+- [ ] better task handling in executor, queue, started, finished and TaskStatus enum
 
 ** Task Deport
 - [X] move Task<D> into the separate module
 - [X] move backends into backends/
 - [X] rename Task.data into Task.payload and add function get_payload()
+- [ ] add queued time, make started time optional (should be something when execution is started)
+- [ ] split TaskStorage and TaskQueue implementation where task storage is pluggable
 - [ ] add task status which is enum
 - [ ] drop task exceed time for execution
 - [ ] thread to clean up staled tasks

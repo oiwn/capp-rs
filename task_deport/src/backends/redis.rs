@@ -52,6 +52,10 @@ impl<D> RedisTaskStorage<D> {
     pub fn get_list_key(&self) -> String {
         format!("{}:{}", self.key, "ls")
     }
+
+    pub fn get_dlq_key(&self) -> String {
+        format!("{}:{}", self.key, "dlq")
+    }
 }
 
 impl<D> std::fmt::Debug for RedisTaskStorage<D> {
@@ -130,6 +134,21 @@ where
         let _ = self
             .redis
             .hset(&hashmap_key, [(&uuid_as_str, &task_value)])
+            .await?;
+        Ok(())
+    }
+
+    async fn task_to_dlq(
+        &self,
+        task: &Task<D>,
+    ) -> Result<(), RedisTaskStorageError> {
+        let task_value = serde_json::to_string(task)?;
+        let dlq_key = self.get_dlq_key();
+        let uuid_as_str = task.task_id.to_string();
+
+        let _ = self
+            .redis
+            .hset(&dlq_key, [(&uuid_as_str, &task_value)])
             .await?;
         Ok(())
     }
