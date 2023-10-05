@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-pub use uuid::Uuid;
+use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TaskStatus {
@@ -56,6 +56,13 @@ impl<D: Clone> Task<D> {
         self.status = TaskStatus::Failed;
         self.finished = Some(Utc::now());
         self.retries += 1;
+        self.error_msg = Some(err_msg.to_string());
+    }
+
+    pub fn set_dlq(&mut self, err_msg: &str) {
+        self.status = TaskStatus::DeadLetter;
+        self.finished = Some(Utc::now());
+        self.retries = 0;
         self.error_msg = Some(err_msg.to_string());
     }
 

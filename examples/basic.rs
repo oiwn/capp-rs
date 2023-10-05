@@ -122,7 +122,7 @@ async fn main() {
     let storage = Arc::new(make_storage().await);
     let processor = Arc::new(TestTaskProcessor {});
     let executor_options = ExecutorOptionsBuilder::default()
-        .concurrency_limit(2 as usize)
+        .concurrency_limit(2_usize)
         .build()
         .unwrap();
     executor::run_workers(ctx, processor, storage, executor_options).await;

@@ -4,7 +4,9 @@
 ** DONE basic configuration traits
 ** DONE optional feature to enable http requests
 ** TODO implement default debug trait for Configurable
-** need coverage
+** need workflows
+- [ ] coverage
+- [ ] tests/clippy/check/fmt
 ** TODO healthcheck
 - [X] internet
 - [ ] proxy with httpbin
@@ -51,6 +53,7 @@
 - [X] move backends into backends/
 - [X] rename Task.data into Task.payload and add function get_payload()
 - [ ] add queued time, make started time optional (should be something when execution is started)
+- [X] move executor module to new style (w/o mod.rs)
 - [ ] split TaskStorage and TaskQueue implementation where task storage is pluggable
 - [ ] add task status which is enum
 - [ ] drop task exceed time for execution
