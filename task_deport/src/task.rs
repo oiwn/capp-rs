@@ -62,7 +62,6 @@ impl<D: Clone> Task<D> {
     pub fn set_dlq(&mut self, err_msg: &str) {
         self.status = TaskStatus::DeadLetter;
         self.finished = Some(Utc::now());
-        self.retries = 0;
         self.error_msg = Some(err_msg.to_string());
     }
 

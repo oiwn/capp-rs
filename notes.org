@@ -7,6 +7,7 @@
 ** need workflows
 - [ ] coverage
 - [ ] tests/clippy/check/fmt
+- [ ] integration tests (require only redis now)
 ** TODO healthcheck
 - [X] internet
 - [ ] proxy with httpbin
