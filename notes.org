@@ -6,7 +6,7 @@
 ** TODO implement default debug trait for Configurable
 ** need workflows
 - [ ] coverage
-- [ ] tests/clippy/check/fmt
+- [X] tests/clippy/check/fmt
 - [ ] integration tests (require only redis now)
 ** TODO healthcheck
 - [X] internet
@@ -48,6 +48,7 @@
 ** Executor
 - [ ] figure out how to move constrains from direct name of TaskStorage to something like Box<dyn impl TaskStorage>
 - [ ] better task handling in executor, queue, started, finished and TaskStatus enum
+- [ ] need catch unwind to handle all possible exceptions
 
 ** Task Deport
 - [X] move Task<D> into the separate module

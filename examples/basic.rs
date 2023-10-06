@@ -7,6 +7,7 @@ use capp::{
 use serde::{Deserialize, Serialize};
 use std::{path, sync::Arc};
 use thiserror::Error;
+use tracing_subscriber;
 
 #[derive(Error, Debug)]
 pub enum TaskProcessorError {
@@ -114,7 +115,8 @@ async fn make_storage() -> InMemoryTaskStorage<TaskData> {
 
 #[tokio::main]
 async fn main() {
-    simple_logger::SimpleLogger::new().env().init().unwrap();
+    tracing_subscriber::fmt::init();
+    // simple_logger::SimpleLogger::new().env().init().unwrap();
     // Load app
     let config_path = "tests/simple_config.yml";
     let ctx = Arc::new(Context::from_config(config_path));

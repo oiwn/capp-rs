@@ -8,7 +8,6 @@ use std::sync::{
     Arc,
 };
 use tracing;
-// use tracing_subscriber;
 
 #[derive(Clone, Default)]
 pub struct WorkerOptions {
@@ -85,6 +84,8 @@ async fn worker<D, PE, SE, P, S, C>(
                         &err
                     );
                 } else {
+                    // TODO: send to dlq
+                    let x: u64 = 10;
                     tracing::error!(
                         "[worker-{}] Task {} failed, exceed retyring attempts ({}): {:?}",
                         worker_id, &t.task_id, &t.retries, &err
