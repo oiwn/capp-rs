@@ -7,7 +7,6 @@ use capp::{
 use serde::{Deserialize, Serialize};
 use std::{path, sync::Arc};
 use thiserror::Error;
-use tracing_subscriber;
 
 #[derive(Error, Debug)]
 pub enum TaskProcessorError {
@@ -65,7 +64,11 @@ impl
         _storage: Arc<InMemoryTaskStorage<TaskData>>,
         task: &mut Task<TaskData>,
     ) -> Result<(), TaskProcessorError> {
-        tracing::info!("[worker-{}] Processing task: {:?}", worker_id, task);
+        tracing::info!(
+            "[worker-{}] Task received to process: {:?}",
+            worker_id,
+            task.get_payload()
+        );
         let rem = task.payload.value % 3;
         if rem == 0 {
             return Err(TaskProcessorError::Unknown);
@@ -116,7 +119,6 @@ async fn make_storage() -> InMemoryTaskStorage<TaskData> {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-    // simple_logger::SimpleLogger::new().env().init().unwrap();
     // Load app
     let config_path = "tests/simple_config.yml";
     let ctx = Arc::new(Context::from_config(config_path));
@@ -124,6 +126,7 @@ async fn main() {
     let storage = Arc::new(make_storage().await);
     let processor = Arc::new(TestTaskProcessor {});
     let executor_options = ExecutorOptionsBuilder::default()
+        .task_limit(10)
         .concurrency_limit(2_usize)
         .build()
         .unwrap();

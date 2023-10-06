@@ -1,5 +1,7 @@
 use crate::config::Configurable;
-use crate::executor::processor::TaskProcessor;
+use crate::executor::{
+    processor::TaskProcessor, worker::Worker, worker::WorkerOptions,
+};
 use crate::task_deport::{Task, TaskStorage};
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
@@ -7,13 +9,6 @@ use std::sync::{
     atomic::{AtomicU32, Ordering},
     Arc,
 };
-use tracing;
-
-#[derive(Clone, Default)]
-pub struct WorkerOptions {
-    pub max_retries: u32,
-    pub no_task_found_delay_sec: u64,
-}
 
 #[derive(Builder, Default, Clone)]
 #[builder(public, setter(into))]
@@ -28,79 +23,6 @@ pub struct ExecutorOptions {
     pub concurrency_limit: usize,
     #[builder(default = "10")]
     pub no_task_found_delay_sec: usize,
-}
-
-/// A worker function that fetches a task from the storage, processes it,
-/// and then updates the task status. If the processing fails,
-/// the task is retried up to N times.
-async fn worker<D, PE, SE, P, S, C>(
-    worker_id: usize,
-    ctx: Arc<C>,
-    storage: Arc<S>,
-    processor: Arc<P>,
-    worker_options: &WorkerOptions,
-) where
-    D: Clone
-        + Serialize
-        + DeserializeOwned
-        + Send
-        + Sync
-        + 'static
-        + std::fmt::Debug,
-    PE: std::error::Error + Send + Sync + 'static,
-    SE: std::error::Error + Send + Sync + 'static,
-    P: TaskProcessor<D, PE, S, C> + Send + Sync + 'static,
-    S: TaskStorage<D, SE> + Send + Sync + 'static,
-    C: Configurable + Send + Sync + 'static,
-{
-    let task: Option<Task<D>> = storage.task_pop().await.unwrap();
-    if let Some(mut t) = task {
-        t.set_in_process();
-        match processor
-            .process(worker_id, ctx, storage.clone(), &mut t)
-            .await
-        {
-            Ok(_) => {
-                t.set_succeed();
-                storage.task_set(&t).await.unwrap();
-                let successful_task = storage.task_ack(&t.task_id).await.unwrap();
-                tracing::info!(
-                    "[worker-{}] Task {} succeed: {:?}",
-                    worker_id,
-                    &successful_task.task_id,
-                    &successful_task.payload
-                );
-            }
-            Err(err) => {
-                t.set_retry(&err.to_string());
-                if t.retries < worker_options.max_retries {
-                    storage.task_push(&t).await.unwrap();
-
-                    tracing::error!(
-                        "[worker-{}] Task {} failed, retrying ({}): {:?}",
-                        worker_id,
-                        &t.task_id,
-                        &t.retries,
-                        &err
-                    );
-                } else {
-                    // TODO: send to dlq
-                    t.set_dlq("Max retries");
-                    storage.task_to_dlq(&t).await.unwrap();
-                    tracing::error!(
-                        "[worker-{}] Task {} failed, exceed retyring attempts ({}): {:?}",
-                        worker_id, &t.task_id, &t.retries, &err
-                    );
-                }
-            }
-        }
-    } else {
-        tracing::warn!("[worker-{}] No tasks found, waiting...", worker_id);
-        tokio::time::sleep(tokio::time::Duration::from_secs(
-            worker_options.no_task_found_delay_sec,
-        ))
-        .await;
-    }
 }
 
 /// A wrapper function for the worker function that also checks for task
@@ -129,6 +51,13 @@ async fn worker_wrapper<D, PE, SE, P, S, C>(
     S: TaskStorage<D, SE> + Send + Sync + 'static,
     C: Configurable + Send + Sync + 'static,
 {
+    let worker = Worker::new(
+        worker_id,
+        ctx.clone(),
+        storage.clone(),
+        processor.clone(),
+        worker_options,
+    );
     'worker: loop {
         if let Some(limit) = task_limit {
             if task_counter.fetch_add(1, Ordering::SeqCst) >= limit {
@@ -141,20 +70,14 @@ async fn worker_wrapper<D, PE, SE, P, S, C>(
 
         tokio::select! {
             _ = shutdown.changed() => {
-                tracing::info!("[worker-{}] Worker shutting down...", worker_id);
+                tracing::info!("[worker-{}] shutting down...", worker_id);
                 break 'worker;
             }
-            _ = worker(
-                worker_id,
-                ctx.clone(),
-                storage.clone(),
-                processor.clone(),
-                &worker_options
-            ) => {}
+            _ = worker.run() => {}
 
         };
     }
-    tracing::info!("[worker-{}] finished.", worker_id);
+    tracing::info!("[worker-{}] completed", worker_id);
 }
 
 /// Runs the executor with the provided task processor, storage, and options.
@@ -215,7 +138,7 @@ pub async fn run_workers<D, PE, SE, P, S, C>(
     let results = futures::future::join_all(workers).await;
     for result in results {
         if let Err(e) = result {
-            eprintln!("Error in one of the worker: {:?}", e);
+            tracing::error!("Fatal error in one of the workers: {:?}", e);
         }
     }
 }

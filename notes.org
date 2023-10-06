@@ -44,7 +44,8 @@
 - [X] pass task_id into the process
 - [X] re-export Uuid
 - [X] optional dependencies for task_deport
-- [ ] seriously figure out dependencies and reexport crates
+- [X] seriously figure out dependencies and reexport crates
+** Make Worker a struct
 ** Executor
 - [ ] figure out how to move constrains from direct name of TaskStorage to something like Box<dyn impl TaskStorage>
 - [ ] better task handling in executor, queue, started, finished and TaskStatus enum
