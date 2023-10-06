@@ -1,13 +1,13 @@
 use async_trait::async_trait;
-use capp::config::Configurable;
-use capp::executor::processor::TaskProcessor;
-use capp::executor::{self, ExecutorOptionsBuilder};
-use capp::task_deport::memory::InMemoryTaskStorage;
-use capp::task_deport::{Task, TaskStorage};
+use capp::{
+    config::Configurable,
+    executor::{self, processor::TaskProcessor, ExecutorOptionsBuilder},
+    task_deport::{InMemoryTaskStorage, Task, TaskStorage},
+};
 use serde::{Deserialize, Serialize};
-use std::path;
-use std::sync::Arc;
+use std::{path, sync::Arc};
 use thiserror::Error;
+use tracing_subscriber;
 
 #[derive(Error, Debug)]
 pub enum TaskProcessorError {
@@ -65,13 +65,13 @@ impl
         _storage: Arc<InMemoryTaskStorage<TaskData>>,
         task: &mut Task<TaskData>,
     ) -> Result<(), TaskProcessorError> {
-        log::info!("[worker-{}] Processing task: {:?}", worker_id, task);
-        let rem = task.data.value % 3;
+        tracing::info!("[worker-{}] Processing task: {:?}", worker_id, task);
+        let rem = task.payload.value % 3;
         if rem == 0 {
             return Err(TaskProcessorError::Unknown);
         };
 
-        task.data.finished = true;
+        task.payload.finished = true;
         tokio::time::sleep(tokio::time::Duration::from_secs(rem as u64)).await;
         Ok(())
     }
@@ -115,7 +115,8 @@ async fn make_storage() -> InMemoryTaskStorage<TaskData> {
 
 #[tokio::main]
 async fn main() {
-    simple_logger::SimpleLogger::new().env().init().unwrap();
+    tracing_subscriber::fmt::init();
+    // simple_logger::SimpleLogger::new().env().init().unwrap();
     // Load app
     let config_path = "tests/simple_config.yml";
     let ctx = Arc::new(Context::from_config(config_path));
@@ -123,7 +124,7 @@ async fn main() {
     let storage = Arc::new(make_storage().await);
     let processor = Arc::new(TestTaskProcessor {});
     let executor_options = ExecutorOptionsBuilder::default()
-        .concurrency_limit(2 as usize)
+        .concurrency_limit(2_usize)
         .build()
         .unwrap();
     executor::run_workers(ctx, processor, storage, executor_options).await;

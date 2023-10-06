@@ -29,6 +29,7 @@ pub enum InMemoryTaskStorageError {
 pub struct InMemoryTaskStorage<D> {
     pub hashmap: Mutex<HashMap<Uuid, String>>,
     pub list: Mutex<VecDeque<Uuid>>,
+    pub dlq: Mutex<HashMap<Uuid, String>>,
     _marker1: PhantomData<D>,
 }
 
@@ -38,6 +39,7 @@ impl<D> InMemoryTaskStorage<D> {
         Self {
             hashmap: Mutex::new(HashMap::new()),
             list: Mutex::new(VecDeque::new()),
+            dlq: Mutex::new(HashMap::new()),
             _marker1: PhantomData,
         }
     }
@@ -60,7 +62,7 @@ impl<D> std::fmt::Debug for InMemoryTaskStorage<D> {
 #[async_trait]
 impl<D> TaskStorage<D, InMemoryTaskStorageError> for InMemoryTaskStorage<D>
 where
-    D: Serialize + DeserializeOwned + Send + Sync + 'static,
+    D: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
 {
     async fn task_ack(
         &self,
@@ -141,6 +143,19 @@ where
         list.push_back(task.task_id);
         Ok(())
     }
+
+    async fn task_to_dlq(
+        &self,
+        task: &Task<D>,
+    ) -> Result<(), InMemoryTaskStorageError> {
+        let mut dlq = self
+            .hashmap
+            .lock()
+            .map_err(|_| InMemoryTaskStorageError::LockError)?;
+        let task_value = serde_json::to_string(task)?;
+        dlq.insert(task.task_id, task_value);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -152,7 +167,7 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use tokio::runtime::Runtime;
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Clone, Serialize, Deserialize)]
     struct TaskData {
         value: u32,
     }
@@ -178,7 +193,7 @@ mod tests {
         let _ = rt.block_on(storage.task_push(&task));
 
         let task = rt.block_on(storage.task_pop()).unwrap().unwrap();
-        assert_eq!(task.data.value, 42);
+        assert_eq!(task.payload.value, 42);
         assert_eq!(storage.list.lock().unwrap().len(), 1);
         assert_eq!(storage.hashmap.lock().unwrap().keys().len(), 2);
     }
@@ -191,14 +206,14 @@ mod tests {
         let mut task = Task::new(TaskData { value: 42 });
         let _ = rt.block_on(storage.task_push(&task));
         let result = rt.block_on(storage.task_get(&task.task_id)).unwrap();
-        assert_eq!(result.data.value, 42);
+        assert_eq!(result.payload.value, 42);
 
-        task.data.value = 11;
+        task.payload.value = 11;
         let _ = rt.block_on(storage.task_set(&task));
 
         let task = rt.block_on(storage.task_pop()).unwrap().unwrap();
         let task_acked = rt.block_on(storage.task_ack(&task.task_id)).unwrap();
-        assert_eq!(task_acked.data.value, 11);
+        assert_eq!(task_acked.payload.value, 11);
         assert_eq!(task_acked.task_id, task.task_id);
 
         assert_eq!(storage.hashmap.lock().unwrap().keys().len(), 0);
@@ -217,7 +232,7 @@ mod tests {
 
         let task = rt.block_on(storage.task_pop()).unwrap().unwrap();
         let task = rt.block_on(storage.task_ack(&task.task_id)).unwrap();
-        assert_eq!(task.data.value, 42);
+        assert_eq!(task.payload.value, 42);
 
         assert_eq!(storage.hashmap.lock().unwrap().keys().len(), 1);
         assert_eq!(storage.list.lock().unwrap().len(), 1);

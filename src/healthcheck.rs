@@ -20,7 +20,7 @@ pub async fn internet() -> bool {
     let response = match timeout(Duration::from_secs(5), request_future).await {
         Ok(response) => response.unwrap(),
         Err(_) => {
-            log::error!(
+            tracing::error!(
                 "Internet healthcheck request timed out: {}",
                 StatusCode::REQUEST_TIMEOUT
             );
@@ -34,7 +34,7 @@ pub async fn internet() -> bool {
         return true;
     }
 
-    log::error!(
+    tracing::error!(
         "Internet healthcheck unexpected response status or content length: {:?}",
         response
     );

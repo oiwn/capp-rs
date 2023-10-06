@@ -92,7 +92,7 @@ pub async fn fetch_url(
         .with_max_interval(std::time::Duration::from_secs(10))
         .build();
     backoff::future::retry(backoff, || async {
-        log::info!("[{}] retriving url...", url);
+        tracing::info!("[{}] retriving url...", url);
         Ok(client.get(url).send().await?)
     })
     .await
@@ -109,7 +109,7 @@ pub async fn fetch_url_content(
         .build();
 
     let fetch_content = || async {
-        log::info!("[{}] retrieving url...", url);
+        tracing::info!("[{}] retrieving url...", url);
         let response = client.get(url.clone()).send().await?;
         let status = response.status();
         let text = response.text().await?;

@@ -37,7 +37,8 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::{redis::RedisTaskStorageError, HasTagKey, Task, TaskStorage};
+use super::RedisTaskStorageError;
+use crate::{HasTagKey, Task, TaskStorage};
 
 pub struct RedisRoundRobinTaskStorage<D> {
     pub key: String,
@@ -51,7 +52,7 @@ pub struct RedisRoundRobinTaskStorage<D> {
 #[async_trait]
 impl<D> TaskStorage<D, RedisTaskStorageError> for RedisRoundRobinTaskStorage<D>
 where
-    D: HasTagKey + Serialize + DeserializeOwned + Send + Sync + 'static,
+    D: Clone + HasTagKey + Serialize + DeserializeOwned + Send + Sync + 'static,
 {
     async fn task_ack(
         &self,
@@ -105,7 +106,7 @@ where
     }
 
     async fn task_push(&self, task: &Task<D>) -> Result<(), RedisTaskStorageError> {
-        let queue_name = task.data.get_tag_value().to_string();
+        let queue_name = task.payload.get_tag_value().to_string();
         let task_value = serde_json::to_string(task)?;
         let list_key = self.get_list_key(&queue_name);
         let hashmap_key = self.get_hashmap_key();
@@ -115,6 +116,21 @@ where
         let _ = self
             .redis
             .hset(&hashmap_key, [(&uuid_as_str, &task_value)])
+            .await?;
+        Ok(())
+    }
+
+    async fn task_to_dlq(
+        &self,
+        task: &Task<D>,
+    ) -> Result<(), RedisTaskStorageError> {
+        let task_value = serde_json::to_string(task)?;
+        let dlq_key = self.get_dlq_key();
+        let uuid_as_str = task.task_id.to_string();
+
+        let _ = self
+            .redis
+            .hset(&dlq_key, [(&uuid_as_str, &task_value)])
             .await?;
         Ok(())
     }
@@ -144,6 +160,10 @@ impl<D> RedisRoundRobinTaskStorage<D> {
 
     pub fn get_list_key(&self, queue_key: &str) -> String {
         format!("{}:{}:{}", self.key, queue_key, "ls")
+    }
+
+    pub fn get_dlq_key(&self) -> String {
+        format!("{}:{}", self.key, "dlq")
     }
 
     fn get_next_queue(&self) -> Result<String, RedisTaskStorageError> {
