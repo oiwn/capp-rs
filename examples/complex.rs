@@ -80,7 +80,11 @@ impl
         _storage: Arc<RedisTaskStorage<TaskData>>,
         task: &mut Task<TaskData>,
     ) -> Result<(), TaskProcessorError> {
-        log::info!("[worker-{}] Processing task: {:?}", worker_id, task.payload);
+        tracing::info!(
+            "[worker-{}] Processing task: {:?}",
+            worker_id,
+            task.payload
+        );
         let rem = task.payload.value % 3;
         if rem == 0 {
             return Err(TaskProcessorError::Unknown);
@@ -139,7 +143,7 @@ async fn make_storage(
 
 #[tokio::main]
 async fn main() {
-    simple_logger::SimpleLogger::new().env().init().unwrap();
+    tracing_subscriber::fmt::init();
     // Load app
     let config_path = "tests/simple_config.yml";
     std::env::set_var("REDIS_URI", "redis://localhost:6379/15");
@@ -155,5 +159,5 @@ async fn main() {
 
     let sum_of_value: i64 =
         ctx.clone().redis.hget("capp-complex", "sum").await.unwrap();
-    log::info!("Sum of values: {}", sum_of_value);
+    tracing::info!("Sum of values: {}", sum_of_value);
 }

@@ -85,7 +85,8 @@ async fn worker<D, PE, SE, P, S, C>(
                     );
                 } else {
                     // TODO: send to dlq
-                    let x: u64 = 10;
+                    t.set_dlq("Max retries");
+                    storage.task_to_dlq(&t).await.unwrap();
                     tracing::error!(
                         "[worker-{}] Task {} failed, exceed retyring attempts ({}): {:?}",
                         worker_id, &t.task_id, &t.retries, &err
@@ -202,11 +203,11 @@ pub async fn run_workers<D, PE, SE, P, S, C>(
 
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {
-            log::warn!("Ctrl+C received, shutting down...");
+            tracing::warn!("Ctrl+C received, shutting down...");
             shutdown_tx.send(()).unwrap();
         }
         _ = limit_notify.notified() => {
-            log::warn!("Task limit reached, shutting down...");
+            tracing::warn!("Task limit reached, shutting down...");
             shutdown_tx.send(()).unwrap();
         }
     }

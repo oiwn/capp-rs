@@ -70,7 +70,7 @@ mod tests {
             _storage: Arc<InMemoryTaskStorage<TaskData>>,
             task: &mut Task<TaskData>,
         ) -> Result<(), TaskProcessorError> {
-            log::info!("[worker-{}] Processing task: {:?}", worker_id, task);
+            tracing::info!("[worker-{}] Processing task: {:?}", worker_id, task);
             let rem = task.payload.value % 3;
             if rem == 0 {
                 return Err(TaskProcessorError::Unknown);
