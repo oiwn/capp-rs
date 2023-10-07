@@ -1,8 +1,12 @@
 #[cfg(test)]
 mod tests {
     use capp::healthcheck::internet;
-    use hyper::service::{make_service_fn, service_fn};
-    use hyper::{Body, Request, Response, Server};
+
+    use hyper::{
+        body::Body,
+        service::{make_service_fn, service_fn},
+        Request, Response, Server,
+    };
     use std::net::SocketAddr;
     use std::time::Duration;
     use tokio::runtime::Runtime;

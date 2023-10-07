@@ -1,14 +1,19 @@
 use crate::config::Configurable;
+use crate::executor::worker::WorkerId;
 use crate::executor::{
-    processor::TaskProcessor, worker::Worker, worker::WorkerOptions,
+    processor::TaskProcessor, worker::worker_wrapper, SharedStats, Worker,
+    WorkerOptions, WorkerStats,
 };
-use crate::task_deport::{Task, TaskStorage};
+use crate::task_deport::TaskStorage;
 use derive_builder::Builder;
+
+use std::sync::{atomic::AtomicU32, Arc};
+// use hyper::{
+//     self,
+//     service::{make_service_fn, service_fn},
+//     Body, Request, Response, Server,
+// };
 use serde::{de::DeserializeOwned, Serialize};
-use std::sync::{
-    atomic::{AtomicU32, Ordering},
-    Arc,
-};
 
 #[derive(Builder, Default, Clone)]
 #[builder(public, setter(into))]
@@ -25,67 +30,41 @@ pub struct ExecutorOptions {
     pub no_task_found_delay_sec: usize,
 }
 
-/// A wrapper function for the worker function that also checks for task
-/// limits and handles shutdown signals.
-async fn worker_wrapper<D, PE, SE, P, S, C>(
-    worker_id: usize,
-    ctx: Arc<C>,
-    storage: Arc<S>,
-    processor: Arc<P>,
-    task_counter: Arc<AtomicU32>,
-    task_limit: Option<u32>,
-    limit_notify: Arc<tokio::sync::Notify>,
-    mut shutdown: tokio::sync::watch::Receiver<()>,
-    worker_options: WorkerOptions,
-) where
-    D: Clone
-        + Serialize
-        + DeserializeOwned
-        + Send
-        + Sync
-        + 'static
-        + std::fmt::Debug,
-    PE: std::error::Error + Send + Sync + 'static,
-    SE: std::error::Error + Send + Sync + 'static,
-    P: TaskProcessor<D, PE, S, C> + Send + Sync + 'static,
-    S: TaskStorage<D, SE> + Send + Sync + 'static,
-    C: Configurable + Send + Sync + 'static,
-{
-    let worker = Worker::new(
-        worker_id,
-        ctx.clone(),
-        storage.clone(),
-        processor.clone(),
-        worker_options,
-    );
-    'worker: loop {
-        if let Some(limit) = task_limit {
-            if task_counter.fetch_add(1, Ordering::SeqCst) >= limit {
-                tracing::info!("Max tasks reached: {}", limit);
-                limit_notify.notify_one();
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                break 'worker;
-            }
-        };
+/*
+async fn run_server(shared_stats: &SharedStats) {
+    let make_svc = make_service_fn(|_conn| {
+        // let shared_stats = Arc::clone(&shared_stats);
+        async move {
+            Ok::<_, hyper::Error>(service_fn(move |_req: Request<Body>| {
+                handle_request(_req, shared_stats)
+            }))
+        }
+    });
 
-        tokio::select! {
-            _ = shutdown.changed() => {
-                tracing::info!("[worker-{}] shutting down...", worker_id);
-                break 'worker;
-            }
-            _ = worker.run() => {}
+    let addr = ([127, 0, 0, 1], 3000).into();
+    let server = Server::bind(&addr).serve(make_svc);
 
-        };
+    if let Err(e) = server.await {
+        eprintln!("server error: {}", e);
     }
-    tracing::info!("[worker-{}] completed", worker_id);
 }
+
+async fn handle_request(
+    _req: Request<Body>,
+    shared_stats: &SharedStats,
+) -> Result<Response<Body>, hyper::Error> {
+    let stats = shared_stats.lock().unwrap(); // Handle this unwrap more gracefully in production
+    let json = serde_json::json!(*stats).to_string();
+    Ok(Response::new(Body::from(json)))
+}
+*/
 
 /// Runs the executor with the provided task processor, storage, and options.
 /// This function creates a number of workers based on the concurrency limit option.
 /// It then waits for either a shutdown signal (Ctrl+C) or for the task limit
 /// to be reached. In either case, it sends a shutdown signal to all workers
 /// and waits for them to finish.
-pub async fn run_workers<D, PE, SE, P, S, C>(
+pub async fn run_workers<D, SE, P, S, C>(
     ctx: Arc<C>,
     processor: Arc<P>,
     storage: Arc<S>,
@@ -98,9 +77,8 @@ pub async fn run_workers<D, PE, SE, P, S, C>(
         + Sync
         + 'static
         + std::fmt::Debug,
-    PE: Send + Sync + 'static + std::error::Error,
     SE: Send + Sync + 'static + std::error::Error,
-    P: TaskProcessor<D, PE, S, C> + Send + Sync + 'static,
+    P: TaskProcessor<D, S, C> + Send + Sync + 'static,
     S: TaskStorage<D, SE> + Send + Sync + 'static,
     C: Configurable + Send + Sync + 'static,
 {
@@ -108,11 +86,11 @@ pub async fn run_workers<D, PE, SE, P, S, C>(
     let limit_notify = Arc::new(tokio::sync::Notify::new());
     let task_counter = Arc::new(AtomicU32::new(0));
 
-    let mut workers = Vec::new();
+    let mut worker_handlers = Vec::new();
 
     for i in 1..=options.concurrency_limit {
-        workers.push(tokio::spawn(worker_wrapper::<D, PE, SE, P, S, C>(
-            i,
+        worker_handlers.push(tokio::spawn(worker_wrapper::<D, SE, P, S, C>(
+            WorkerId::new(i),
             Arc::clone(&ctx),
             Arc::clone(&storage),
             Arc::clone(&processor),
@@ -135,12 +113,13 @@ pub async fn run_workers<D, PE, SE, P, S, C>(
         }
     }
 
-    let results = futures::future::join_all(workers).await;
+    let results = futures::future::join_all(worker_handlers).await;
     for result in results {
         if let Err(e) = result {
             tracing::error!("Fatal error in one of the workers: {:?}", e);
         }
     }
+    // tracing::info!("Shared stats: {:?}", shared_stats);
 }
 
 #[cfg(test)]
