@@ -27,9 +27,6 @@ pub struct Context {
 }
 
 impl Configurable for Context {
-    fn name(&self) -> &str {
-        self.name.as_str()
-    }
     fn config(&self) -> &serde_yaml::Value {
         &self.config
     }

@@ -11,6 +11,9 @@ pub enum TaskStatus {
     DeadLetter,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TaskId(Uuid);
+
 /// A `Task` struct represents a single unit of work that will be processed
 /// by a worker. It contains payload of type `D`, which is used by the worker
 /// during processing. The `Task` struct also includes fields for managing
@@ -18,7 +21,7 @@ pub enum TaskStatus {
 /// finish times, the number of retries, and any error messages.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Task<D: Clone> {
-    pub task_id: Uuid,
+    pub task_id: TaskId,
     pub payload: D,
     pub status: TaskStatus,
     pub queued: DateTime<Utc>,
@@ -31,7 +34,7 @@ pub struct Task<D: Clone> {
 impl<D: Clone> Task<D> {
     pub fn new(payload: D) -> Self {
         Task {
-            task_id: Uuid::new_v4(),
+            task_id: TaskId::new(),
             payload,
             status: TaskStatus::Queued,
             queued: Utc::now(),
@@ -71,5 +74,44 @@ impl<D: Clone> Task<D> {
 
     pub fn get_payload(&self) -> &D {
         &self.payload
+    }
+}
+
+impl TaskId {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+
+    pub fn get(&self) -> Uuid {
+        self.0
+    }
+}
+
+// Custom serialization for TaskId.
+impl serde::Serialize for TaskId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Directly serialize the inner Uuid.
+        self.0.serialize(serializer)
+    }
+}
+
+// Custom deserialization for TaskId.
+impl<'de> serde::Deserialize<'de> for TaskId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // Deserialize a Uuid and then wrap it in a TaskId.
+        let uuid = Uuid::deserialize(deserializer)?;
+        Ok(TaskId(uuid))
+    }
+}
+
+impl std::fmt::Display for TaskId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }

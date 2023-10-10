@@ -1,35 +1,21 @@
 //! In-memory implementation of TaskStorage trait. The storage allows tasks to be
 //! pushed to and popped from a queue, and also allows tasks to be set and
 //! retrieved by their UUID.
-use crate::{Task, TaskStorage};
+use crate::{Task, TaskId, TaskStorage, TaskStorageError};
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 use std::sync::Mutex;
-use thiserror::Error;
-use uuid::Uuid;
-
-#[derive(Error, Debug)]
-pub enum InMemoryTaskStorageError {
-    #[error("lock error")]
-    LockError,
-
-    #[error("key {0} error")]
-    KeyError(Uuid),
-
-    #[error(transparent)]
-    SerializationError(#[from] serde_json::Error),
-}
 
 /// A simple in-memory implementation of the `TaskStorage` trait.
 /// The `InMemoryTaskStorage` struct includes a hashmap for storing tasks by
 /// their UUIDs, and a list for maintaining the order of the tasks.
 pub struct InMemoryTaskStorage<D> {
-    pub hashmap: Mutex<HashMap<Uuid, String>>,
-    pub list: Mutex<VecDeque<Uuid>>,
-    pub dlq: Mutex<HashMap<Uuid, String>>,
+    pub hashmap: Mutex<HashMap<TaskId, String>>,
+    pub list: Mutex<VecDeque<TaskId>>,
+    pub dlq: Mutex<HashMap<TaskId, String>>,
     _marker1: PhantomData<D>,
 }
 
@@ -60,99 +46,93 @@ impl<D> std::fmt::Debug for InMemoryTaskStorage<D> {
 }
 
 #[async_trait]
-impl<D> TaskStorage<D, InMemoryTaskStorageError> for InMemoryTaskStorage<D>
+impl<D> TaskStorage<D> for InMemoryTaskStorage<D>
 where
     D: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
 {
     async fn task_ack(
         &self,
-        task_id: &Uuid,
-    ) -> Result<Task<D>, InMemoryTaskStorageError> {
-        let mut hashmap = self
-            .hashmap
-            .lock()
-            .map_err(|_| InMemoryTaskStorageError::LockError)?;
-        let task_value = hashmap
-            .remove(task_id)
-            .ok_or(InMemoryTaskStorageError::KeyError(*task_id))?;
-        let task = serde_json::from_str(&task_value)?;
+        task_id: &TaskId,
+    ) -> Result<Task<D>, TaskStorageError> {
+        let mut hashmap = self.hashmap.lock().map_err(|_| {
+            TaskStorageError::StorageError(format!("Mutex lock error: {}", task_id))
+        })?;
+        let task_value =
+            hashmap
+                .remove(task_id)
+                .ok_or(TaskStorageError::StorageError(format!(
+                    "Error removing task from HashMap: {}",
+                    task_id
+                )))?;
+        let task = serde_json::from_str(&task_value)
+            .map_err(|err| TaskStorageError::SerializationError(err.to_string()))?;
         Ok(task)
     }
 
     async fn task_get(
         &self,
-        task_id: &Uuid,
-    ) -> Result<Task<D>, InMemoryTaskStorageError> {
-        let hashmap = self
-            .hashmap
-            .lock()
-            .map_err(|_| InMemoryTaskStorageError::LockError)?;
-        let task_value = hashmap
-            .get(&task_id)
-            .ok_or(InMemoryTaskStorageError::KeyError(*task_id))?;
-        let task: Task<D> = serde_json::from_str(task_value)?;
+        task_id: &TaskId,
+    ) -> Result<Task<D>, TaskStorageError> {
+        let hashmap = self.hashmap.lock().map_err(|_| {
+            TaskStorageError::StorageError(format!("Mutex lock error: {}", task_id))
+        })?;
+        let task_value =
+            hashmap.get(&task_id).ok_or(TaskStorageError::StorageError(
+                format!("Error getting task from HashMap: {}", task_id),
+            ))?;
+        let task: Task<D> = serde_json::from_str(task_value)
+            .map_err(|err| TaskStorageError::SerializationError(err.to_string()))?;
         Ok(task)
     }
 
-    async fn task_set(
-        &self,
-        task: &Task<D>,
-    ) -> Result<(), InMemoryTaskStorageError> {
-        let mut hashmap = self
-            .hashmap
-            .lock()
-            .map_err(|_| InMemoryTaskStorageError::LockError)?;
-        let task_value = serde_json::to_string(task)?;
+    async fn task_set(&self, task: &Task<D>) -> Result<(), TaskStorageError> {
+        let mut hashmap = self.hashmap.lock().map_err(|_| {
+            TaskStorageError::StorageError("Lock error on task hashmap".to_string())
+        })?;
+        let task_value = serde_json::to_string(task)
+            .map_err(|err| TaskStorageError::SerializationError(err.to_string()))?;
         hashmap.insert(task.task_id, task_value);
         Ok(())
     }
 
-    async fn task_pop(&self) -> Result<Option<Task<D>>, InMemoryTaskStorageError> {
-        let mut list = self
-            .list
-            .lock()
-            .map_err(|_| InMemoryTaskStorageError::LockError)?;
-        let hashmap = self
-            .hashmap
-            .lock()
-            .map_err(|_| InMemoryTaskStorageError::LockError)?;
+    async fn task_pop(&self) -> Result<Task<D>, TaskStorageError> {
+        let mut list = self.list.lock().map_err(|_| {
+            TaskStorageError::StorageError("Lock error".to_string())
+        })?;
+        let hashmap = self.hashmap.lock().map_err(|_| {
+            TaskStorageError::StorageError("Lock error on task hashmap".to_string())
+        })?;
 
         if let Some(task_id) = list.pop_front() {
             let task_value = hashmap.get(&task_id).unwrap();
-            let task: Task<D> = serde_json::from_str(task_value)?;
-            return Ok(Some(task));
+            let task: Task<D> = serde_json::from_str(task_value)
+                .map_err(|err| TaskStorageError::StorageError(err.to_string()))?;
+            return Ok(task);
         }
-        Ok(None)
+        Err(TaskStorageError::StorageIsEmptyError)
     }
 
-    async fn task_push(
-        &self,
-        task: &Task<D>,
-    ) -> Result<(), InMemoryTaskStorageError> {
-        let mut list = self
-            .list
-            .lock()
-            .map_err(|_| InMemoryTaskStorageError::LockError)?;
-        let mut hashmap = self
-            .hashmap
-            .lock()
-            .map_err(|_| InMemoryTaskStorageError::LockError)?;
+    async fn task_push(&self, task: &Task<D>) -> Result<(), TaskStorageError> {
+        let mut list = self.list.lock().map_err(|_| {
+            TaskStorageError::StorageError("Lock error on task list".to_string())
+        })?;
+        let mut hashmap = self.hashmap.lock().map_err(|_| {
+            TaskStorageError::StorageError("Lock error on task hashmap".to_string())
+        })?;
 
-        let task_value = serde_json::to_string(task)?;
+        let task_value = serde_json::to_string(task)
+            .map_err(|err| TaskStorageError::SerializationError(err.to_string()))?;
         hashmap.insert(task.task_id, task_value);
         list.push_back(task.task_id);
         Ok(())
     }
 
-    async fn task_to_dlq(
-        &self,
-        task: &Task<D>,
-    ) -> Result<(), InMemoryTaskStorageError> {
-        let mut dlq = self
-            .hashmap
-            .lock()
-            .map_err(|_| InMemoryTaskStorageError::LockError)?;
-        let task_value = serde_json::to_string(task)?;
+    async fn task_to_dlq(&self, task: &Task<D>) -> Result<(), TaskStorageError> {
+        let mut dlq = self.hashmap.lock().map_err(|_| {
+            TaskStorageError::StorageError("Lock error on task hashmap".to_string())
+        })?;
+        let task_value = serde_json::to_string(task)
+            .map_err(|err| TaskStorageError::StorageError(err.to_string()))?;
         dlq.insert(task.task_id, task_value);
         Ok(())
     }

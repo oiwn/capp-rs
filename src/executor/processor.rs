@@ -9,18 +9,16 @@ use super::worker::WorkerId;
 pub enum TaskProcessorError {
     #[error("I/O error: {0}")]
     IOError(#[from] std::io::Error),
-
     #[error("Database error: {0}")]
     DBError(String),
-
     #[error("Task storage error: {0}")]
     StorageError(String),
-
     #[error("Task error: {0}")]
     TaskError(String),
-
     #[error("Processor error: {0}")]
     ProcessorError(String),
+    #[error("Max retries: {0}")]
+    MaxRetriesError(String),
 }
 
 /// A trait defining the interface for processing a task. This trait is

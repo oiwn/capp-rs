@@ -4,7 +4,7 @@ use crate::executor::stats::WorkerStats;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::{
     atomic::{AtomicU32, Ordering},
-    Arc, Mutex,
+    Arc,
 };
 use task_deport::{Task, TaskStorage};
 
@@ -113,7 +113,6 @@ where
                     t.set_retry(&err.to_string());
                     if t.retries < self.options.max_retries {
                         self.storage.task_push(&t).await.unwrap();
-
                         tracing::error!(
                             "[worker-{}] Task {} failed, retrying ({}): {:?}",
                             self.worker_id,
@@ -122,7 +121,6 @@ where
                             &err
                         );
                     } else {
-                        // TODO: send to dlq
                         t.set_dlq("Max retries");
                         self.storage.task_to_dlq(&t).await.unwrap();
                         tracing::error!(

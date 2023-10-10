@@ -5,7 +5,6 @@ use std::{
 };
 
 pub trait Configurable {
-    fn name(&self) -> &str;
     fn config(&self) -> &serde_yaml::Value;
 
     // read configuration from yaml config
@@ -28,6 +27,12 @@ pub trait Configurable {
             .collect();
 
         Ok(lines)
+    }
+
+    fn load_text_file_content(
+        file_path: impl AsRef<path::Path>,
+    ) -> Result<String, io::Error> {
+        fs::read_to_string(file_path)
     }
 
     /// Extract Value from config using dot notation i.e. "app.concurrency"
@@ -71,15 +76,11 @@ mod tests {
     use super::*;
 
     pub struct Application {
-        name: String,
         config: serde_yaml::Value,
         user_agents: Option<Vec<String>>,
     }
 
     impl Configurable for Application {
-        fn name(&self) -> &str {
-            self.name.as_str()
-        }
         fn config(&self) -> &serde_yaml::Value {
             &self.config
         }
@@ -89,7 +90,6 @@ mod tests {
         fn from_config(config_file_path: impl AsRef<path::Path>) -> Self {
             let config = Self::load_config(config_file_path);
             Self {
-                name: "test-app".to_string(),
                 config: config.unwrap(),
                 user_agents: None,
             }
