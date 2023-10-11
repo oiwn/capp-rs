@@ -11,7 +11,7 @@ use std::sync::Mutex;
 
 /// A simple in-memory implementation of the `TaskStorage` trait.
 /// The `InMemoryTaskStorage` struct includes a hashmap for storing tasks by
-/// their UUIDs, and a list for maintaining the order of the tasks.
+/// their TaskId's, and a list for maintaining the order of the tasks.
 pub struct InMemoryTaskStorage<D> {
     pub hashmap: Mutex<HashMap<TaskId, String>>,
     pub list: Mutex<VecDeque<TaskId>>,

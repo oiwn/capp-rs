@@ -24,7 +24,7 @@ pub struct WorkerContext<C, P, S> {
     pub storage: S,
 }
 
-pub struct Worker<D, SE, P, S, C> {
+pub struct Worker<D, P, S, C> {
     worker_id: WorkerId,
     ctx: Arc<C>,
     storage: Arc<S>,
@@ -33,13 +33,12 @@ pub struct Worker<D, SE, P, S, C> {
     options: WorkerOptions,
     // phantom
     _payload_type: std::marker::PhantomData<D>,
-    _storage_error_type: std::marker::PhantomData<SE>,
 }
 
 /// A worker implementation that fetches a task from the storage, processes it,
 /// and then updates the task status. If the processing fails,
 /// the task is retried up to N times.
-impl<D, SE, P, S, C> Worker<D, SE, P, S, C>
+impl<D, P, S, C> Worker<D, P, S, C>
 where
     D: std::fmt::Debug
         + Clone
@@ -48,9 +47,8 @@ where
         + Send
         + Sync
         + 'static,
-    SE: std::error::Error + Send + Sync + 'static,
     P: TaskProcessor<D, S, C> + Send + Sync + 'static,
-    S: TaskStorage<D, SE> + Send + Sync + 'static,
+    S: TaskStorage<D> + Send + Sync + 'static,
     C: Configurable + Send + Sync + 'static,
 {
     pub fn new(
@@ -69,7 +67,6 @@ where
             stats: WorkerStats::new(),
             // phantom
             _payload_type: std::marker::PhantomData,
-            _storage_error_type: std::marker::PhantomData,
         }
     }
 
@@ -79,70 +76,135 @@ where
 
     pub async fn run(&mut self) {
         let start_time = std::time::Instant::now();
-        let task: Option<Task<D>> = self.storage.task_pop().await.unwrap();
-
-        if let Some(mut t) = task {
-            t.set_in_process();
-            match self
-                .processor
-                .process(
-                    self.worker_id,
-                    self.ctx.clone(),
-                    self.storage.clone(),
-                    &mut t,
-                )
-                .await
-            {
-                Ok(_) => {
-                    t.set_succeed();
-                    self.storage.task_set(&t).await.unwrap();
-                    let successful_task =
-                        self.storage.task_ack(&t.task_id).await.unwrap();
-                    tracing::info!(
-                        "[worker-{}] Task {} succeed: {:?}",
+        match self.storage.task_pop().await {
+            Ok(mut task) => {
+                task.set_in_process();
+                let result = self
+                    .processor
+                    .process(
                         self.worker_id,
-                        &successful_task.task_id,
-                        &successful_task.payload
-                    );
-
-                    // record stats on success
-                    self.stats.record_execution_time(start_time.elapsed());
-                    self.stats.record_success();
-                }
-                Err(err) => {
-                    t.set_retry(&err.to_string());
-                    if t.retries < self.options.max_retries {
-                        self.storage.task_push(&t).await.unwrap();
-                        tracing::error!(
-                            "[worker-{}] Task {} failed, retrying ({}): {:?}",
+                        self.ctx.clone(),
+                        self.storage.clone(),
+                        &mut task,
+                    )
+                    .await;
+                match result {
+                    Ok(_) => {
+                        task.set_succeed();
+                        self.storage.task_set(&task).await.unwrap();
+                        let successful_task =
+                            self.storage.task_ack(&task.task_id).await.unwrap();
+                        tracing::info!(
+                            "[worker-{}] Task {} succeed: {:?}",
                             self.worker_id,
-                            &t.task_id,
-                            &t.retries,
-                            &err
+                            &successful_task.task_id,
+                            &successful_task.payload
                         );
-                    } else {
-                        t.set_dlq("Max retries");
-                        self.storage.task_to_dlq(&t).await.unwrap();
-                        tracing::error!(
-                        "[worker-{}] Task {} failed, max retyring attempts ({}): {:?}",
-                        self.worker_id, &t.task_id, &t.retries, &err);
-                    }
 
-                    self.stats.record_execution_time(start_time.elapsed());
-                    self.stats.record_failure();
+                        // record stats on success
+                        self.stats.record_execution_time(start_time.elapsed());
+                        self.stats.record_success();
+                    }
+                    Err(err) => {
+                        task.set_retry(&err.to_string());
+                        if task.retries < self.options.max_retries {
+                            self.storage.task_push(&task).await.unwrap();
+                            tracing::error!(
+                                "[worker-{}] Task {} failed, retrying ({}): {:?}",
+                                self.worker_id,
+                                &task.task_id,
+                                &task.retries,
+                                &err
+                            );
+                        } else {
+                            task.set_dlq("Max retries");
+                            self.storage.task_to_dlq(&task).await.unwrap();
+                            tracing::error!(
+                                "[worker-{}] Task {} failed, max reties ({}): {:?}",
+                                self.worker_id,
+                                &task.task_id,
+                                &task.retries,
+                                &err
+                            );
+                        }
+
+                        self.stats.record_execution_time(start_time.elapsed());
+                        self.stats.record_failure();
+                    }
                 }
             }
-        } else {
-            tracing::warn!(
-                "[worker-{}] No tasks found, waiting...",
-                self.worker_id
-            );
-            tokio::time::sleep(tokio::time::Duration::from_secs(
-                self.options.no_task_found_delay_sec,
-            ))
-            .await;
+            Err(task_deport::TaskStorageError::StorageIsEmptyError) => {
+                tracing::warn!(
+                    "[worker-{}] No tasks found, waiting...",
+                    self.worker_id
+                );
+                // wait for a while till try to fetch task
+                tokio::time::sleep(tokio::time::Duration::from_secs(
+                    self.options.no_task_found_delay_sec,
+                ))
+                .await;
+            }
+            Err(err) => {}
         }
     }
+
+    /*
+    pub async fn run_old(&mut self) {
+        let start_time = std::time::Instant::now();
+        let task: Task<D> = self.storage.task_pop().await;
+
+        t.set_in_process();
+        match self
+            .processor
+            .process(
+                self.worker_id,
+                self.ctx.clone(),
+                self.storage.clone(),
+                &mut t,
+            )
+            .await
+        {
+            Ok(_) => {
+                t.set_succeed();
+                self.storage.task_set(&t).await.unwrap();
+                let successful_task =
+                    self.storage.task_ack(&t.task_id).await.unwrap();
+                tracing::info!(
+                    "[worker-{}] Task {} succeed: {:?}",
+                    self.worker_id,
+                    &successful_task.task_id,
+                    &successful_task.payload
+                );
+
+                // record stats on success
+                self.stats.record_execution_time(start_time.elapsed());
+                self.stats.record_success();
+            }
+            Err(err) => {
+                t.set_retry(&err.to_string());
+                if t.retries < self.options.max_retries {
+                    self.storage.task_push(&t).await.unwrap();
+                    tracing::error!(
+                        "[worker-{}] Task {} failed, retrying ({}): {:?}",
+                        self.worker_id,
+                        &t.task_id,
+                        &t.retries,
+                        &err
+                    );
+                } else {
+                    t.set_dlq("Max retries");
+                    self.storage.task_to_dlq(&t).await.unwrap();
+                    tracing::error!(
+                        "[worker-{}] Task {} failed, max retyring attempts ({}): {:?}",
+                        self.worker_id, &t.task_id, &t.retries, &err);
+                }
+
+                self.stats.record_execution_time(start_time.elapsed());
+                self.stats.record_failure();
+            }
+        }
+    }
+    */
 }
 
 impl WorkerId {
@@ -163,7 +225,7 @@ impl std::fmt::Display for WorkerId {
 
 /// A wrapper for the worker function that also checks for task
 /// limits and handles shutdown signals.
-pub async fn worker_wrapper<D, SE, P, S, C>(
+pub async fn worker_wrapper<D, P, S, C>(
     worker_id: WorkerId,
     ctx: Arc<C>,
     storage: Arc<S>,
@@ -181,9 +243,8 @@ pub async fn worker_wrapper<D, SE, P, S, C>(
         + Sync
         + 'static
         + std::fmt::Debug,
-    SE: std::error::Error + Send + Sync + 'static,
     P: TaskProcessor<D, S, C> + Send + Sync + 'static,
-    S: TaskStorage<D, SE> + Send + Sync + 'static,
+    S: TaskStorage<D> + Send + Sync + 'static,
     C: Configurable + Send + Sync + 'static,
 {
     let mut worker = Worker::new(

@@ -64,7 +64,7 @@ async fn handle_request(
 /// It then waits for either a shutdown signal (Ctrl+C) or for the task limit
 /// to be reached. In either case, it sends a shutdown signal to all workers
 /// and waits for them to finish.
-pub async fn run_workers<D, SE, P, S, C>(
+pub async fn run_workers<D, P, S, C>(
     ctx: Arc<C>,
     processor: Arc<P>,
     storage: Arc<S>,
@@ -77,9 +77,8 @@ pub async fn run_workers<D, SE, P, S, C>(
         + Sync
         + 'static
         + std::fmt::Debug,
-    SE: Send + Sync + 'static + std::error::Error,
     P: TaskProcessor<D, S, C> + Send + Sync + 'static,
-    S: TaskStorage<D, SE> + Send + Sync + 'static,
+    S: TaskStorage<D> + Send + Sync + 'static,
     C: Configurable + Send + Sync + 'static,
 {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
@@ -89,7 +88,7 @@ pub async fn run_workers<D, SE, P, S, C>(
     let mut worker_handlers = Vec::new();
 
     for i in 1..=options.concurrency_limit {
-        worker_handlers.push(tokio::spawn(worker_wrapper::<D, SE, P, S, C>(
+        worker_handlers.push(tokio::spawn(worker_wrapper::<D, P, S, C>(
             WorkerId::new(i),
             Arc::clone(&ctx),
             Arc::clone(&storage),
@@ -119,7 +118,6 @@ pub async fn run_workers<D, SE, P, S, C>(
             tracing::error!("Fatal error in one of the workers: {:?}", e);
         }
     }
-    // tracing::info!("Shared stats: {:?}", shared_stats);
 }
 
 #[cfg(test)]

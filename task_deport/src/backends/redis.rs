@@ -63,7 +63,9 @@ where
         let task_value: String =
             self.redis.hget(&hashmap_key, &uuid_as_str).await?;
         let _ = self.redis.hdel(hashmap_key, &uuid_as_str).await;
-        let task = serde_json::from_str(&task_value)?;
+        let task = serde_json::from_str(&task_value).map_err(|err| {
+            TaskStorageError::DeserializationError(err.to_string())
+        })?;
         Ok(task)
     }
 
@@ -75,13 +77,17 @@ where
         let uuid_as_str = task_id.to_string();
         let task_value: String =
             self.redis.hget(&hashmap_key, &uuid_as_str).await?;
-        let task_data: Task<D> = serde_json::from_str(&task_value)?;
+        let task_data: Task<D> =
+            serde_json::from_str(&task_value).map_err(|err| {
+                TaskStorageError::DeserializationError(err.to_string())
+            })?;
         Ok(task_data)
     }
 
     async fn task_set(&self, task: &Task<D>) -> Result<(), TaskStorageError> {
         let hashmap_key = self.get_hashmap_key();
-        let task_value: String = serde_json::to_string(task)?;
+        let task_value: String = serde_json::to_string(task)
+            .map_err(|err| TaskStorageError::SerializationError(err.to_string()))?;
         let uuid_as_str = task.task_id.to_string();
         let _ = self
             .redis
@@ -90,22 +96,26 @@ where
         Ok(())
     }
 
-    async fn task_pop(&self) -> Result<Option<Task<D>>, TaskStorageError> {
+    async fn task_pop(&self) -> Result<Task<D>, TaskStorageError> {
         let list_key = self.get_list_key();
         let hashmap_key = self.get_hashmap_key();
         let task_ids: Vec<String> = self.redis.rpop(&list_key, 1).await?;
         if task_ids.len() > 0 {
             let task_id = task_ids.first().unwrap();
             let task_value: String = self.redis.hget(&hashmap_key, task_id).await?;
-            let task: Task<D> = serde_json::from_str(&task_value)?;
-            return Ok(Some(task));
+            let task: Task<D> =
+                serde_json::from_str(&task_value).map_err(|err| {
+                    TaskStorageError::DeserializationError(err.to_string())
+                })?;
+            return Ok(task);
         }
 
-        Ok(None)
+        Err(TaskStorageError::StorageIsEmptyError)
     }
 
     async fn task_push(&self, task: &Task<D>) -> Result<(), TaskStorageError> {
-        let task_value = serde_json::to_string(task)?;
+        let task_value = serde_json::to_string(task)
+            .map_err(|err| TaskStorageError::SerializationError(err.to_string()))?;
         let list_key = self.get_list_key();
         let hashmap_key = self.get_hashmap_key();
         let uuid_as_str = task.task_id.to_string();
@@ -119,7 +129,8 @@ where
     }
 
     async fn task_to_dlq(&self, task: &Task<D>) -> Result<(), TaskStorageError> {
-        let task_value = serde_json::to_string(task)?;
+        let task_value = serde_json::to_string(task)
+            .map_err(|err| TaskStorageError::SerializationError(err.to_string()))?;
         let dlq_key = self.get_dlq_key();
         let uuid_as_str = task.task_id.to_string();
 
