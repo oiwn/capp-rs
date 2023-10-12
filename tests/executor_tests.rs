@@ -2,19 +2,13 @@
 mod tests {
     use async_trait::async_trait;
     use capp::config::Configurable;
-    use capp::executor::processor::TaskProcessor;
+    use capp::executor::processor::{TaskProcessor, TaskProcessorError};
+    use capp::executor::WorkerId;
     use capp::executor::{self, ExecutorOptionsBuilder};
     use capp::task_deport::{InMemoryTaskStorage, Task, TaskStorage};
     use serde::{Deserialize, Serialize};
     use std::sync::Arc;
-    use thiserror::Error;
     use tokio::runtime::Runtime;
-
-    #[derive(Error, Debug)]
-    pub enum TaskProcessorError {
-        #[error("unknown error")]
-        Unknown,
-    }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct TaskData {
@@ -34,9 +28,6 @@ mod tests {
     }
 
     impl Configurable for Context {
-        fn name(&self) -> &str {
-            self.name.as_str()
-        }
         fn config(&self) -> &serde_yaml::Value {
             &self.config
         }
@@ -54,18 +45,13 @@ mod tests {
     }
 
     #[async_trait]
-    impl
-        TaskProcessor<
-            TaskData,
-            TaskProcessorError,
-            InMemoryTaskStorage<TaskData>,
-            Context,
-        > for TestTaskProcessor
+    impl TaskProcessor<TaskData, InMemoryTaskStorage<TaskData>, Context>
+        for TestTaskProcessor
     {
         /// Process will fail tasks which value can be divided to 3
         async fn process(
             &self,
-            worker_id: usize,
+            worker_id: WorkerId,
             _ctx: Arc<Context>,
             _storage: Arc<InMemoryTaskStorage<TaskData>>,
             task: &mut Task<TaskData>,
@@ -73,7 +59,10 @@ mod tests {
             tracing::info!("[worker-{}] Processing task: {:?}", worker_id, task);
             let rem = task.payload.value % 3;
             if rem == 0 {
-                return Err(TaskProcessorError::Unknown);
+                return Err(TaskProcessorError::ProcessorError(format!(
+                    "Can't divide {} to 3",
+                    &task.payload.value
+                )));
             };
 
             task.payload.finished = true;

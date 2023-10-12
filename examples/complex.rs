@@ -1,20 +1,14 @@
-//! With actual database
 use async_trait::async_trait;
 use capp::config::Configurable;
-use capp::executor::processor::TaskProcessor;
-use capp::executor::{self, ExecutorOptionsBuilder};
+use capp::executor::{
+    self,
+    processor::{TaskProcessor, TaskProcessorError},
+    ExecutorOptionsBuilder, WorkerId,
+};
 use capp::task_deport::{RedisTaskStorage, Task, TaskStorage};
 use rustis::commands::HashCommands;
 use serde::{Deserialize, Serialize};
-use std::path;
-use std::sync::Arc;
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum TaskProcessorError {
-    #[error("unknown error")]
-    Unknown,
-}
+use std::{path, sync::Arc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskData {
@@ -27,16 +21,12 @@ pub struct TaskData {
 pub struct TestTaskProcessor {}
 
 pub struct Context {
-    name: String,
     pub redis: rustis::client::Client,
     config: serde_yaml::Value,
     pub user_agents: Vec<String>,
 }
 
 impl Configurable for Context {
-    fn name(&self) -> &str {
-        self.name.as_str()
-    }
     fn config(&self) -> &serde_yaml::Value {
         &self.config
     }
@@ -46,7 +36,6 @@ impl Context {
     async fn from_config(config_file_path: impl AsRef<path::Path>) -> Self {
         let config = Self::load_config(config_file_path)
             .expect("Unable to read config file");
-        let name = config["app"]["name"].as_str().unwrap().to_string();
         let uas_file_path = config["app"]["user_agents_file"].as_str().unwrap();
         let user_agents = Self::load_text_file_lines(uas_file_path)
             .expect("Unable to read user agents file");
@@ -57,7 +46,6 @@ impl Context {
             .expect("Unable to make redis connection");
 
         Self {
-            name,
             redis,
             config,
             user_agents,
@@ -66,8 +54,7 @@ impl Context {
 }
 
 #[async_trait]
-impl
-    TaskProcessor<TaskData, TaskProcessorError, RedisTaskStorage<TaskData>, Context>
+impl TaskProcessor<TaskData, RedisTaskStorage<TaskData>, Context>
     for TestTaskProcessor
 {
     /// Processor will fail tasks which value can be divided to 3
@@ -75,7 +62,7 @@ impl
     ///     to be able to push more tasks into queue or modify existing
     async fn process(
         &self,
-        worker_id: usize,
+        worker_id: WorkerId,
         ctx: Arc<Context>,
         _storage: Arc<RedisTaskStorage<TaskData>>,
         task: &mut Task<TaskData>,
@@ -87,7 +74,10 @@ impl
         );
         let rem = task.payload.value % 3;
         if rem == 0 {
-            return Err(TaskProcessorError::Unknown);
+            return Err(TaskProcessorError::ProcessorError(format!(
+                "Can't divide {} by 3",
+                &task.payload.value
+            )));
         };
 
         let _ = ctx

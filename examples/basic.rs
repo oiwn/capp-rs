@@ -1,19 +1,16 @@
 use async_trait::async_trait;
 use capp::{
     config::Configurable,
-    executor::{self, processor::TaskProcessor, ExecutorOptionsBuilder},
+    executor::{
+        self,
+        processor::{TaskProcessor, TaskProcessorError},
+        ExecutorOptionsBuilder, WorkerId,
+    },
     task_deport::{InMemoryTaskStorage, Task, TaskStorage},
 };
 use serde::{Deserialize, Serialize};
 use std::{path, sync::Arc};
-use thiserror::Error;
-use tracing_subscriber;
 
-#[derive(Error, Debug)]
-pub enum TaskProcessorError {
-    #[error("unknown error")]
-    Unknown,
-}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskData {
     pub domain: String,
@@ -30,9 +27,6 @@ pub struct Context {
 }
 
 impl Configurable for Context {
-    fn name(&self) -> &str {
-        self.name.as_str()
-    }
     fn config(&self) -> &serde_yaml::Value {
         &self.config
     }
@@ -49,26 +43,27 @@ impl Context {
 }
 
 #[async_trait]
-impl
-    TaskProcessor<
-        TaskData,
-        TaskProcessorError,
-        InMemoryTaskStorage<TaskData>,
-        Context,
-    > for TestTaskProcessor
+impl TaskProcessor<TaskData, InMemoryTaskStorage<TaskData>, Context>
+    for TestTaskProcessor
 {
     /// Processor will fail tasks which value can be divided to 3
     async fn process(
         &self,
-        worker_id: usize,
+        worker_id: WorkerId,
         _ctx: Arc<Context>,
         _storage: Arc<InMemoryTaskStorage<TaskData>>,
         task: &mut Task<TaskData>,
     ) -> Result<(), TaskProcessorError> {
-        tracing::info!("[worker-{}] Processing task: {:?}", worker_id, task);
+        tracing::info!(
+            "[worker-{}] Task received to process: {:?}",
+            worker_id,
+            task.get_payload()
+        );
         let rem = task.payload.value % 3;
         if rem == 0 {
-            return Err(TaskProcessorError::Unknown);
+            return Err(TaskProcessorError::TaskError(
+                "Can't divide by 3".to_owned(),
+            ));
         };
 
         task.payload.finished = true;
@@ -116,7 +111,6 @@ async fn make_storage() -> InMemoryTaskStorage<TaskData> {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-    // simple_logger::SimpleLogger::new().env().init().unwrap();
     // Load app
     let config_path = "tests/simple_config.yml";
     let ctx = Arc::new(Context::from_config(config_path));
@@ -124,6 +118,7 @@ async fn main() {
     let storage = Arc::new(make_storage().await);
     let processor = Arc::new(TestTaskProcessor {});
     let executor_options = ExecutorOptionsBuilder::default()
+        .task_limit(30)
         .concurrency_limit(2_usize)
         .build()
         .unwrap();
