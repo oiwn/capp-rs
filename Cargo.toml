@@ -28,7 +28,7 @@ members = [
 ]
 
 [dependencies]
-task_deport = { path = "./task_deport", features = [], optional = true }
+task_deport = { path = "./task_deport", optional = true }
 async-trait = { version = "0.1.73", optional = true }
 backoff = { version = "0.4.0", optional = true, features = ["tokio"] }
 chrono = { version = "0.4.3", optional = true, features = ["serde"] }
@@ -59,7 +59,7 @@ scraper = "0.17.1"
 [features]
 http = ["dep:backoff", "dep:reqwest"]
 healthcheck = ["dep:reqwest", "dep:tokio"]
-redis = ["dep:rustis"]
+redis = ["dep:rustis", "task_deport/redis"]
 executor = ["dep:tokio", "dep:thiserror", "dep:async-trait", "dep:chrono", "dep:futures", "dep:uuid", "dep:serde_json", "dep:task_deport"]
 
 # size optimization
