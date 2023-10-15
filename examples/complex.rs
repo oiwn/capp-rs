@@ -1,24 +1,26 @@
-use async_trait::async_trait;
-use capp::config::Configurable;
-use capp::executor::{
-    self,
-    processor::{TaskProcessor, TaskProcessorError},
-    ExecutorOptionsBuilder, WorkerId,
+use capp::{
+    async_trait::async_trait,
+    config::Configurable,
+    executor::{
+        self,
+        processor::{TaskProcessor, TaskProcessorError},
+        ExecutorOptionsBuilder, WorkerId,
+    },
+    task_deport::{RedisTaskStorage, Task, TaskStorage},
 };
-use capp::task_deport::{RedisTaskStorage, Task, TaskStorage};
 use rustis::commands::HashCommands;
 use serde::{Deserialize, Serialize};
 use std::{path, sync::Arc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TaskData {
+pub struct Data {
     pub domain: String,
     pub value: u32,
     pub flag: bool,
 }
 
 #[derive(Debug)]
-pub struct TestTaskProcessor {}
+pub struct TestTaskProcessor;
 
 pub struct Context {
     pub redis: rustis::client::Client,
@@ -54,18 +56,16 @@ impl Context {
 }
 
 #[async_trait]
-impl TaskProcessor<TaskData, RedisTaskStorage<TaskData>, Context>
-    for TestTaskProcessor
-{
+impl TaskProcessor<Data, RedisTaskStorage<Data>, Context> for TestTaskProcessor {
     /// Processor will fail tasks which value can be divided to 3
     /// NOTE: Here i realized i need storage passed to process function as well
-    ///     to be able to push more tasks into queue or modify existing
+    /// to be able to push more tasks into queue or modify existing
     async fn process(
         &self,
         worker_id: WorkerId,
         ctx: Arc<Context>,
-        _storage: Arc<RedisTaskStorage<TaskData>>,
-        task: &mut Task<TaskData>,
+        _storage: Arc<RedisTaskStorage<Data>>,
+        task: &mut Task<Data>,
     ) -> Result<(), TaskProcessorError> {
         tracing::info!(
             "[worker-{}] Processing task: {:?}",
@@ -97,13 +97,11 @@ impl TaskProcessor<TaskData, RedisTaskStorage<TaskData>, Context>
 /// For current set following conditions should be true:
 /// total tasks = 9
 /// number of failed tasks = 4
-async fn make_storage(
-    client: rustis::client::Client,
-) -> RedisTaskStorage<TaskData> {
+async fn make_storage(client: rustis::client::Client) -> RedisTaskStorage<Data> {
     let storage = RedisTaskStorage::new("capp-complex", client);
 
     for i in 1..=3 {
-        let task: Task<TaskData> = Task::new(TaskData {
+        let task: Task<Data> = Task::new(Data {
             domain: "one".to_string(),
             value: i,
             flag: false,
@@ -112,7 +110,7 @@ async fn make_storage(
     }
 
     for i in 1..=3 {
-        let task: Task<TaskData> = Task::new(TaskData {
+        let task: Task<Data> = Task::new(Data {
             domain: "two".to_string(),
             value: i * 3,
             flag: false,
@@ -121,7 +119,7 @@ async fn make_storage(
     }
 
     for _ in 1..=3 {
-        let task: Task<TaskData> = Task::new(TaskData {
+        let task: Task<Data> = Task::new(Data {
             domain: "three".to_string(),
             value: 2,
             flag: false,

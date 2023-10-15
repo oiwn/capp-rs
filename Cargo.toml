@@ -28,7 +28,7 @@ members = [
 ]
 
 [dependencies]
-task_deport = { path = "./task_deport", features = ["redis"], optional = true }
+task_deport = { path = "./task_deport", features = [], optional = true }
 async-trait = { version = "0.1.73", optional = true }
 backoff = { version = "0.4.0", optional = true, features = ["tokio"] }
 chrono = { version = "0.4.3", optional = true, features = ["serde"] }
@@ -48,6 +48,7 @@ tracing-subscriber = "0.3.17"
 
 [dev-dependencies]
 capp = { path = ".", features = ["http", "healthcheck", "executor"] }
+task_deport = { path = "./task_deport", features = ["redis"] }
 # hyper = { version = "0.14.27", features = ["server"] }
 # hyper = { version = "1.0.0-rc.4", features = ["server"] }
 serde_json = "1.0.106"

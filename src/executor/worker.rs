@@ -144,7 +144,7 @@ where
                 ))
                 .await;
             }
-            Err(err) => {}
+            Err(_err) => {}
         }
     }
 
