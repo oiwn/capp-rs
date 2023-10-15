@@ -42,23 +42,24 @@ thiserror = { version = "1.0.48", optional = true }
 tokio = { version = "1.32.0", features = ["full"], optional = true}
 uuid = { version = "1.4.1", features = ["v4", "serde"], optional = true }
 hyper = { version = "0.14", features = ["server"] }
+rustis = { version = "0.12.0", features = ["tokio-runtime"], optional = true }
 once_cell = "1.18.0"
 tracing = "0.1.37"
 tracing-subscriber = "0.3.17"
 
 [dev-dependencies]
-capp = { path = ".", features = ["http", "healthcheck", "executor"] }
+capp = { path = ".", features = ["http", "healthcheck", "executor", "redis"] }
 task_deport = { path = "./task_deport", features = ["redis"] }
 # hyper = { version = "0.14.27", features = ["server"] }
 # hyper = { version = "1.0.0-rc.4", features = ["server"] }
 serde_json = "1.0.106"
-rustis = { version = "0.12.0", features = ["tokio-runtime"] }
 mongodb = { version = "2.6.1", features = ["tokio-runtime"] }
 scraper = "0.17.1"
 
 [features]
 http = ["dep:backoff", "dep:reqwest"]
 healthcheck = ["dep:reqwest", "dep:tokio"]
+redis = ["dep:rustis"]
 executor = ["dep:tokio", "dep:thiserror", "dep:async-trait", "dep:chrono", "dep:futures", "dep:uuid", "dep:serde_json", "dep:task_deport"]
 
 # size optimization

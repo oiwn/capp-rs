@@ -1,8 +1,7 @@
 use crate::config::Configurable;
 use crate::executor::worker::WorkerId;
 use crate::executor::{
-    processor::TaskProcessor, worker::worker_wrapper, SharedStats, Worker,
-    WorkerOptions, WorkerStats,
+    processor::TaskProcessor, worker::worker_wrapper, WorkerOptions,
 };
 use crate::task_deport::TaskStorage;
 use derive_builder::Builder;
