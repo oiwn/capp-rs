@@ -136,6 +136,23 @@ where
         dlq.insert(task.task_id, task_value);
         Ok(())
     }
+
+    // general storage operations
+    async fn purge(&self) -> Result<(), TaskStorageError> {
+        let mut list = self.list.lock().map_err(|_| {
+            TaskStorageError::StorageError("Lock error on task list".to_string())
+        })?;
+        let mut hashmap = self.hashmap.lock().map_err(|_| {
+            TaskStorageError::StorageError("Lock error on task hashmap".to_string())
+        })?;
+        let mut dlq = self.hashmap.lock().map_err(|_| {
+            TaskStorageError::StorageError("Lock error on task hashmap".to_string())
+        })?;
+        list.clear();
+        hashmap.clear();
+        dlq.clear();
+        Ok(())
+    }
 }
 
 #[cfg(test)]

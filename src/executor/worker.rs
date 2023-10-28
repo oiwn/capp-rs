@@ -6,7 +6,7 @@ use std::sync::{
     atomic::{AtomicU32, Ordering},
     Arc,
 };
-use task_deport::{Task, TaskStorage};
+use task_deport::TaskStorage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkerId(usize);

@@ -42,6 +42,7 @@ pub trait TaskStorage<D>
 where
     D: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
 {
+    // task operations
     async fn task_ack(&self, task_id: &TaskId)
         -> Result<Task<D>, TaskStorageError>;
     async fn task_get(&self, task_id: &TaskId)
@@ -50,6 +51,9 @@ where
     async fn task_pop(&self) -> Result<Task<D>, TaskStorageError>;
     async fn task_push(&self, task: &Task<D>) -> Result<(), TaskStorageError>;
     async fn task_to_dlq(&self, task: &Task<D>) -> Result<(), TaskStorageError>;
+
+    // general storage operations
+    async fn purge(&self) -> Result<(), TaskStorageError>;
 }
 
 pub trait HasTagKey {

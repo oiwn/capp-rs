@@ -70,8 +70,9 @@
 - [ ] separate thread to clean up staled tasks (or find the way how to not make them stalled)
 - [ ] add more tests
 ** Important!!!!
-- [ ] Use tokio per core executor to make tasks Sync maybe?
-- [ ] implement purge for TaskStorage trait
+- [X] thiserror should not be optional
+- [ ] Use tokio per core executor to make tasks Sync maybe? if possible
+- [X] implement purge for TaskStorage trait
 
 ** redis storage backend with bloom filter
 ** redis storage backend with priorities

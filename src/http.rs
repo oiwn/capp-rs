@@ -110,7 +110,7 @@ pub async fn fetch_url_content(
 
     let fetch_content = || async {
         tracing::info!("[{}] retrieving url...", url);
-        let response = client.get(url.clone()).send().await?;
+        let response = client.get(url).send().await?;
         let status = response.status();
         let text = response.text().await?;
         Ok((status, text))

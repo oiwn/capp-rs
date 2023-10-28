@@ -26,7 +26,7 @@
 //! field, and can be configured during the storage initialization.
 
 use async_trait::async_trait;
-use rustis::commands::{HashCommands, ListCommands};
+use rustis::commands::{GenericCommands, HashCommands, ListCommands};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     marker::PhantomData,
@@ -138,6 +138,18 @@ where
             .redis
             .hset(&dlq_key, [(&uuid_as_str, &task_value)])
             .await?;
+        Ok(())
+    }
+
+    async fn purge(&self) -> Result<(), TaskStorageError> {
+        let _ = self.redis.del(self.get_hashmap_key()).await?;
+        // TODO: can do better
+        let tags: Vec<String> =
+            self.tags.lock().unwrap().iter().map(|t| t.into()).collect();
+        for tag in tags {
+            let _ = self.redis.del(self.get_list_key(&tag)).await?;
+        }
+        let _ = self.redis.del(self.get_dlq_key()).await?;
         Ok(())
     }
 }
