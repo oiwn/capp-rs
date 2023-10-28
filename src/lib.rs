@@ -27,7 +27,6 @@ pub use serde;
 #[cfg(feature = "executor")]
 pub use serde_json;
 pub use serde_yaml;
-#[cfg(feature = "executor")]
 pub use thiserror;
 pub use tracing;
 pub use tracing_subscriber;
