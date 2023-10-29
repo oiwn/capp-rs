@@ -24,12 +24,14 @@ exclude = [
 
 [workspace]
 members = [
-    "task_deport"
+    "task_deport",
+    "task_executor",
 ]
 
 [dependencies]
+async-trait = { version = "0.1.74" }
 task_deport = { path = "./task_deport", optional = true }
-async-trait = { version = "0.1.73", optional = true }
+task_executor = { path = "./task_executor", optional = true }
 backoff = { version = "0.4.0", optional = true, features = ["tokio"] }
 chrono = { version = "0.4.3", optional = true, features = ["serde"] }
 derive_builder = { version = "0.12.0" }
@@ -60,7 +62,8 @@ scraper = "0.17.1"
 http = ["dep:backoff", "dep:reqwest"]
 healthcheck = ["dep:reqwest", "dep:tokio"]
 redis = ["dep:rustis", "task_deport/redis"]
-executor = ["dep:tokio", "dep:async-trait", "dep:chrono", "dep:futures", "dep:uuid", "dep:serde_json", "dep:task_deport"]
+executor = [ "dep:task_deport", "dep:task_executor"]
+# executor = ["dep:tokio", "dep:async-trait", "dep:chrono", "dep:futures", "dep:uuid", "dep:serde_json", "dep:task_deport"]
 
 # size optimization
 [profile.release]

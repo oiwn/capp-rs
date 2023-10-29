@@ -6,34 +6,34 @@ use thiserror::Error;
 use super::worker::WorkerId;
 
 #[derive(Error, Debug)]
-pub enum TaskProcessorError {
+pub enum TaskRunnerError {
     #[error("I/O error: {0}")]
-    IOError(#[from] std::io::Error),
+    Io(#[from] std::io::Error),
     #[error("Database error: {0}")]
-    DBError(String),
+    Db(String),
     #[error("Task storage error: {0}")]
-    StorageError(String),
+    Storage(String),
     #[error("Task error: {0}")]
-    TaskError(String),
-    #[error("Processor error: {0}")]
-    ProcessorError(String),
+    Task(String),
+    #[error("TaskRunner execution error: {0}")]
+    Function(String),
     #[error("Max retries: {0}")]
-    MaxRetriesError(String),
+    MaxRetries(String),
 }
 
 /// A trait defining the interface for processing a task. This trait is
 /// intended to be implemented by a worker that will process tasks
 /// of a specific type.
 #[async_trait]
-pub trait TaskProcessor<D: Clone, S, C> {
+pub trait TaskRunner<Data: Clone, Store, Ctx> {
     /// Processes the task. The worker_id is passed for logging or
     /// debugging purposes. The task is a mutable reference,
     /// allowing the processor to modify the task data as part of the processing.
-    async fn process(
+    async fn run(
         &self,
         worker_id: WorkerId,
-        ctx: Arc<C>,
-        storage: Arc<S>,
-        task: &mut Task<D>,
-    ) -> Result<(), TaskProcessorError>;
+        ctx: Arc<Ctx>,
+        storage: Arc<Store>,
+        task: &mut Task<Data>,
+    ) -> Result<(), TaskRunnerError>;
 }

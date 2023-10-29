@@ -1,11 +1,11 @@
 pub mod config;
 
-#[cfg(feature = "executor")]
-pub mod executor;
 #[cfg(feature = "healthcheck")]
 pub mod healthcheck;
 #[cfg(feature = "http")]
 pub mod http;
+#[cfg(feature = "executor")]
+pub mod task_executor;
 
 // Crates
 #[cfg(feature = "executor")]

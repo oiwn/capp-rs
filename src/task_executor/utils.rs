@@ -1,18 +1,13 @@
 use crate::config::Configurable;
 use crate::executor::worker::WorkerId;
 use crate::executor::{
-    processor::TaskProcessor, worker::worker_wrapper, WorkerOptions,
+    processor::TaskRunner, worker::worker_wrapper, WorkerOptions,
 };
 use crate::task_deport::TaskStorage;
 use derive_builder::Builder;
 
-use std::sync::{atomic::AtomicU32, Arc};
-// use hyper::{
-//     self,
-//     service::{make_service_fn, service_fn},
-//     Body, Request, Response, Server,
-// };
 use serde::{de::DeserializeOwned, Serialize};
+use std::sync::{atomic::AtomicU32, Arc};
 
 #[derive(Builder, Default, Clone)]
 #[builder(public, setter(into))]
@@ -28,35 +23,6 @@ pub struct ExecutorOptions {
     #[builder(default = "10")]
     pub no_task_found_delay_sec: usize,
 }
-
-/*
-async fn run_server(shared_stats: &SharedStats) {
-    let make_svc = make_service_fn(|_conn| {
-        // let shared_stats = Arc::clone(&shared_stats);
-        async move {
-            Ok::<_, hyper::Error>(service_fn(move |_req: Request<Body>| {
-                handle_request(_req, shared_stats)
-            }))
-        }
-    });
-
-    let addr = ([127, 0, 0, 1], 3000).into();
-    let server = Server::bind(&addr).serve(make_svc);
-
-    if let Err(e) = server.await {
-        eprintln!("server error: {}", e);
-    }
-}
-
-async fn handle_request(
-    _req: Request<Body>,
-    shared_stats: &SharedStats,
-) -> Result<Response<Body>, hyper::Error> {
-    let stats = shared_stats.lock().unwrap(); // Handle this unwrap more gracefully in production
-    let json = serde_json::json!(*stats).to_string();
-    Ok(Response::new(Body::from(json)))
-}
-*/
 
 /// Runs the executor with the provided task processor, storage, and options.
 /// This function creates a number of workers based on the concurrency limit option.
@@ -76,7 +42,7 @@ pub async fn run_workers<D, P, S, C>(
         + Sync
         + 'static
         + std::fmt::Debug,
-    P: TaskProcessor<D, S, C> + Send + Sync + 'static,
+    P: TaskRunner<D, S, C> + Send + Sync + 'static,
     S: TaskStorage<D> + Send + Sync + 'static,
     C: Configurable + Send + Sync + 'static,
 {

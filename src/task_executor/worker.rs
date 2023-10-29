@@ -1,4 +1,4 @@
-use super::processor::TaskProcessor;
+use super::processor::TaskRunner;
 use crate::config::Configurable;
 use crate::executor::stats::WorkerStats;
 use serde::{de::DeserializeOwned, Serialize};
@@ -79,6 +79,7 @@ where
         match self.storage.task_pop().await {
             Ok(mut task) => {
                 task.set_in_process();
+
                 let result = self
                     .processor
                     .process(
