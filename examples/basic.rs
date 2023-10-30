@@ -17,6 +17,7 @@ pub struct TaskData {
     pub value: u32,
     pub finished: bool,
 }
+
 #[derive(Debug)]
 pub struct TestTaskProcessor {}
 
