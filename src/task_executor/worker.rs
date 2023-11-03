@@ -1,12 +1,13 @@
-use super::processor::TaskRunner;
-use crate::config::Configurable;
-use crate::executor::stats::WorkerStats;
+use super::{runner::TaskRunner, stats::WorkerStats};
+use crate::{
+    config::Configurable,
+    task_deport::{TaskStorage, TaskStorageError},
+};
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::{
     atomic::{AtomicU32, Ordering},
     Arc,
 };
-use task_deport::TaskStorage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkerId(usize);
@@ -28,7 +29,7 @@ pub struct Worker<D, P, S, C> {
     worker_id: WorkerId,
     ctx: Arc<C>,
     storage: Arc<S>,
-    processor: Arc<P>,
+    runner: Arc<P>,
     stats: WorkerStats,
     options: WorkerOptions,
     // phantom
@@ -47,7 +48,7 @@ where
         + Send
         + Sync
         + 'static,
-    P: TaskProcessor<D, S, C> + Send + Sync + 'static,
+    P: TaskRunner<D, S, C> + Send + Sync + 'static,
     S: TaskStorage<D> + Send + Sync + 'static,
     C: Configurable + Send + Sync + 'static,
 {
@@ -55,14 +56,14 @@ where
         worker_id: WorkerId,
         ctx: Arc<C>,
         storage: Arc<S>,
-        processor: Arc<P>,
+        runner: Arc<P>,
         options: WorkerOptions,
     ) -> Self {
         Self {
             worker_id,
             ctx,
             storage,
-            processor,
+            runner,
             options,
             stats: WorkerStats::new(),
             // phantom
@@ -81,8 +82,8 @@ where
                 task.set_in_process();
 
                 let result = self
-                    .processor
-                    .process(
+                    .runner
+                    .run(
                         self.worker_id,
                         self.ctx.clone(),
                         self.storage.clone(),
@@ -134,7 +135,7 @@ where
                     }
                 }
             }
-            Err(task_deport::TaskStorageError::StorageIsEmptyError) => {
+            Err(TaskStorageError::StorageIsEmptyError) => {
                 tracing::warn!(
                     "[worker-{}] No tasks found, waiting...",
                     self.worker_id
@@ -244,7 +245,7 @@ pub async fn worker_wrapper<D, P, S, C>(
         + Sync
         + 'static
         + std::fmt::Debug,
-    P: TaskProcessor<D, S, C> + Send + Sync + 'static,
+    P: TaskRunner<D, S, C> + Send + Sync + 'static,
     S: TaskStorage<D> + Send + Sync + 'static,
     C: Configurable + Send + Sync + 'static,
 {

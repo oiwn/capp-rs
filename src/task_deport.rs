@@ -56,6 +56,7 @@ where
     async fn purge(&self) -> Result<(), TaskStorageError>;
 }
 
+// Used for round robin queue
 pub trait HasTagKey {
     type TagValue: ToString + PartialEq;
     fn get_tag_value(&self) -> Self::TagValue;

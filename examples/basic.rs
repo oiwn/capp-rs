@@ -1,12 +1,9 @@
 use async_trait::async_trait;
 use capp::{
     config::Configurable,
-    executor::{
-        self,
-        processor::{TaskProcessor, TaskProcessorError},
-        ExecutorOptionsBuilder, WorkerId,
-    },
+    runner::{TaskRunner, TaskRunnerError},
     task_deport::{InMemoryTaskStorage, Task, TaskStorage},
+    ExecutorOptionsBuilder, WorkerId,
 };
 use serde::{Deserialize, Serialize};
 use std::{path, sync::Arc};
@@ -44,17 +41,17 @@ impl Context {
 }
 
 #[async_trait]
-impl TaskProcessor<TaskData, InMemoryTaskStorage<TaskData>, Context>
+impl TaskRunner<TaskData, InMemoryTaskStorage<TaskData>, Context>
     for TestTaskProcessor
 {
-    /// Processor will fail tasks which value can be divided to 3
-    async fn process(
+    /// TaskRunner will fail tasks which value can be divided by 3
+    async fn run(
         &self,
         worker_id: WorkerId,
         _ctx: Arc<Context>,
         _storage: Arc<InMemoryTaskStorage<TaskData>>,
         task: &mut Task<TaskData>,
-    ) -> Result<(), TaskProcessorError> {
+    ) -> Result<(), TaskRunnerError> {
         tracing::info!(
             "[worker-{}] Task received to process: {:?}",
             worker_id,
@@ -62,9 +59,7 @@ impl TaskProcessor<TaskData, InMemoryTaskStorage<TaskData>, Context>
         );
         let rem = task.payload.value % 3;
         if rem == 0 {
-            return Err(TaskProcessorError::TaskError(
-                "Can't divide by 3".to_owned(),
-            ));
+            return Err(TaskRunnerError::Function("Can't divide by 3".to_owned()));
         };
 
         task.payload.finished = true;
@@ -123,5 +118,5 @@ async fn main() {
         .concurrency_limit(2_usize)
         .build()
         .unwrap();
-    executor::run_workers(ctx, processor, storage, executor_options).await;
+    capp::run_workers(ctx, processor, storage, executor_options).await;
 }

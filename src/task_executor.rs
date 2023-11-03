@@ -1,4 +1,4 @@
-pub mod processor;
+pub mod runner;
 pub mod stats;
 mod utils;
 pub mod worker;
