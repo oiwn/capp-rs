@@ -1,9 +1,7 @@
 use super::WorkerId;
 use crate::config::Configurable;
 use crate::task_deport::TaskStorage;
-use crate::task_executor::{
-    runner::TaskRunner, worker::worker_wrapper, WorkerOptions,
-};
+use crate::task_executor::{worker::worker_wrapper, Computation, WorkerOptions};
 use derive_builder::Builder;
 
 use serde::{de::DeserializeOwned, Serialize};
@@ -42,7 +40,7 @@ pub async fn run_workers<D, P, S, C>(
         + Sync
         + 'static
         + std::fmt::Debug,
-    P: TaskRunner<D, S, C> + Send + Sync + 'static,
+    P: Computation<D, S, C> + Send + Sync + 'static,
     S: TaskStorage<D> + Send + Sync + 'static,
     C: Configurable + Send + Sync + 'static,
 {

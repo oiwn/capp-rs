@@ -8,16 +8,14 @@ use tokio::time::{timeout, Duration};
 ///     - Google's primary domain: https://www.google.com
 ///     - Cloudflare's DNS resolver: https://1.1.1.1
 ///     - Quad9's DNS resolver: https://9.9.9.9
-pub async fn internet() -> bool {
-    #[allow(unused_variables)]
-    let host_url = "https://9.9.9.9";
+pub async fn internet(http_url: &str) -> bool {
     #[cfg(test)]
-    let host_url = "https://127.0.0.1:8080";
+    let http_url = "https://127.0.0.1:8080";
 
     let client = Client::new();
-    let request_future = client.get(host_url).send();
+    let request_future = client.get(http_url).send();
 
-    let response = match timeout(Duration::from_secs(5), request_future).await {
+    let response = match timeout(Duration::from_secs(1), request_future).await {
         Ok(response) => response.unwrap(),
         Err(_) => {
             tracing::error!(

@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use capp::{
+    computation::{Computation, ComputationError},
     config::Configurable,
-    runner::{TaskRunner, TaskRunnerError},
     task_deport::{InMemoryTaskStorage, Task, TaskStorage},
     ExecutorOptionsBuilder, WorkerId,
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{path, sync::Arc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,7 +16,7 @@ pub struct TaskData {
 }
 
 #[derive(Debug)]
-pub struct TestTaskProcessor {}
+pub struct DivisionComputation;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Context {
@@ -41,17 +41,17 @@ impl Context {
 }
 
 #[async_trait]
-impl TaskRunner<TaskData, InMemoryTaskStorage<TaskData>, Context>
-    for TestTaskProcessor
+impl<TaskData, Store, Ctx> Computation<TaskData, Store, Ctx>
+    for DivisionComputation
 {
     /// TaskRunner will fail tasks which value can be divided by 3
     async fn run(
         &self,
         worker_id: WorkerId,
-        _ctx: Arc<Context>,
-        _storage: Arc<InMemoryTaskStorage<TaskData>>,
+        _ctx: Arc<Ctx>,
+        _storage: Arc<Store>,
         task: &mut Task<TaskData>,
-    ) -> Result<(), TaskRunnerError> {
+    ) -> Result<(), ComputationError> {
         tracing::info!(
             "[worker-{}] Task received to process: {:?}",
             worker_id,
@@ -59,7 +59,7 @@ impl TaskRunner<TaskData, InMemoryTaskStorage<TaskData>, Context>
         );
         let rem = task.payload.value % 3;
         if rem == 0 {
-            return Err(TaskRunnerError::Function("Can't divide by 3".to_owned()));
+            return Err(ComputationError::Function("Can't divide by 3".to_owned()));
         };
 
         task.payload.finished = true;
@@ -107,16 +107,14 @@ async fn make_storage() -> InMemoryTaskStorage<TaskData> {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-    // Load app
     let config_path = "tests/simple_config.yml";
     let ctx = Arc::new(Context::from_config(config_path));
-
-    let storage = Arc::new(make_storage().await);
-    let processor = Arc::new(TestTaskProcessor {});
+    let storage = Arc::new(make_storage().await) as Arc<dyn TaskStorage<TaskData>>;
+    let computation = Arc::new(DivisionComputation {});
     let executor_options = ExecutorOptionsBuilder::default()
         .task_limit(30)
         .concurrency_limit(2_usize)
         .build()
         .unwrap();
-    capp::run_workers(ctx, processor, storage, executor_options).await;
+    capp::run_workers(ctx, computation, storage, executor_options).await;
 }

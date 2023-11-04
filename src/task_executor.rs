@@ -1,8 +1,9 @@
-pub mod runner;
+pub mod computation;
 pub mod stats;
 mod utils;
 pub mod worker;
 
+pub use computation::Computation;
 pub use stats::{SharedStats, WorkerStats};
 pub use utils::run_workers;
 pub use utils::ExecutorOptions;

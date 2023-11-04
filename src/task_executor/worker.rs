@@ -1,4 +1,4 @@
-use super::{runner::TaskRunner, stats::WorkerStats};
+use super::{Computation, WorkerStats};
 use crate::{
     config::Configurable,
     task_deport::{TaskStorage, TaskStorageError},
@@ -48,7 +48,7 @@ where
         + Send
         + Sync
         + 'static,
-    P: TaskRunner<D, S, C> + Send + Sync + 'static,
+    P: Computation<D, S, C> + Send + Sync + 'static,
     S: TaskStorage<D> + Send + Sync + 'static,
     C: Configurable + Send + Sync + 'static,
 {
@@ -245,7 +245,7 @@ pub async fn worker_wrapper<D, P, S, C>(
         + Sync
         + 'static
         + std::fmt::Debug,
-    P: TaskRunner<D, S, C> + Send + Sync + 'static,
+    P: Computation<D, S, C> + Send + Sync + 'static,
     S: TaskStorage<D> + Send + Sync + 'static,
     C: Configurable + Send + Sync + 'static,
 {
