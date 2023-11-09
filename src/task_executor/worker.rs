@@ -4,10 +4,8 @@ use crate::{
     task_deport::{TaskStorage, TaskStorageError},
 };
 use serde::{de::DeserializeOwned, Serialize};
-use std::sync::{
-    atomic::{AtomicU32, Ordering},
-    Arc,
-};
+use std::sync::Arc;
+use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkerId(usize);
@@ -18,7 +16,7 @@ pub struct WorkerOptions {
     pub no_task_found_delay_sec: u64,
 }
 
-enum WorkerCommand {
+pub enum WorkerCommand {
     Stop,      // stop after current task processed
     Terminate, // terminate immediately
 }
@@ -174,10 +172,7 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
     ctx: Arc<Ctx>,
     storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
     computation: Arc<Comp>,
-    task_counter: Arc<AtomicU32>,
-    task_limit: Option<u32>,
-    limit_notify: Arc<tokio::sync::Notify>,
-    mut shutdown: tokio::sync::watch::Receiver<()>,
+    mut commands: mpsc::Receiver<WorkerCommand>,
     worker_options: WorkerOptions,
 ) where
     Data: Clone
@@ -197,26 +192,42 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
         computation.clone(),
         worker_options,
     );
+
     'worker: loop {
-        if let Some(limit) = task_limit {
-            if task_counter.fetch_add(1, Ordering::SeqCst) >= limit {
-                tracing::info!("Max tasks reached: {}", limit);
-                limit_notify.notify_one();
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                break 'worker;
-            }
-        };
-
         tokio::select! {
-            _ = shutdown.changed() => {
-                tracing::info!("[worker-{}] shutting down...", worker_id);
-                break 'worker;
-            }
+            command = commands.recv() => {
+                let should_break = handle_command(command, worker_id).await;
+                if should_break {
+                    break 'worker;
+                } else {
+                    // Terminate immediately
+                    return;
+                }
+            },
             _ = worker.run() => {
-                tracing::info!("[worker-{}] stats: {:?}", worker_id, worker.get_stats())
+                // Nothing else needed here
             }
-
         };
     }
     tracing::info!("[worker-{}] completed", worker_id);
+}
+
+async fn handle_command(
+    command: Option<WorkerCommand>,
+    worker_id: WorkerId,
+) -> bool {
+    match command {
+        Some(WorkerCommand::Stop) => {
+            tracing::info!("[worker-{}] received stop command", worker_id);
+            true
+        }
+        Some(WorkerCommand::Terminate) => {
+            tracing::info!("[worker-{}] received terminate command", worker_id);
+            false
+        }
+        None => {
+            // All senders have been dropped, we can stop the worker
+            true
+        }
+    }
 }
