@@ -26,10 +26,9 @@ pub enum ComputationError {
 /// intended to be implemented by a worker that will process tasks
 /// of a specific type.
 #[async_trait]
-pub trait Computation<Data, Store, Ctx>
+pub trait Computation<Data, Ctx>
 where
     Data: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
-    Store: TaskStorage<Data> + Send + Sync + 'static,
     Ctx: Send + Sync + 'static,
 {
     /// Processes the task. The worker_id is passed for logging or
@@ -39,7 +38,7 @@ where
         &self,
         worker_id: WorkerId,
         ctx: Arc<Ctx>,
-        storage: Arc<Store>,
+        storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
         task: &mut Task<Data>,
     ) -> Result<(), ComputationError>;
 }

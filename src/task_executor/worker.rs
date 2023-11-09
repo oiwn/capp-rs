@@ -18,52 +18,44 @@ pub struct WorkerOptions {
     pub no_task_found_delay_sec: u64,
 }
 
-#[derive(Clone, Default)]
-pub struct WorkerContext<C, P, S> {
-    pub context: C,
-    pub processor: P,
-    pub storage: S,
-}
-
-pub struct Worker<D, P, S, C> {
+pub struct Worker<Data, Comp, Ctx> {
     worker_id: WorkerId,
-    ctx: Arc<C>,
-    storage: Arc<S>,
-    runner: Arc<P>,
+    ctx: Arc<Ctx>,
+    storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+    computation: Arc<Comp>,
     stats: WorkerStats,
     options: WorkerOptions,
     // phantom
-    _payload_type: std::marker::PhantomData<D>,
+    _payload_type: std::marker::PhantomData<Data>,
 }
 
 /// A worker implementation that fetches a task from the storage, processes it,
 /// and then updates the task status. If the processing fails,
 /// the task is retried up to N times.
-impl<D, P, S, C> Worker<D, P, S, C>
+impl<Data, Comp, Ctx> Worker<Data, Comp, Ctx>
 where
-    D: std::fmt::Debug
+    Data: std::fmt::Debug
         + Clone
         + Serialize
         + DeserializeOwned
         + Send
         + Sync
         + 'static,
-    P: Computation<D, S, C> + Send + Sync + 'static,
-    S: TaskStorage<D> + Send + Sync + 'static,
-    C: Configurable + Send + Sync + 'static,
+    Comp: Computation<Data, Ctx> + Send + Sync + 'static,
+    Ctx: Configurable + Send + Sync + 'static,
 {
     pub fn new(
         worker_id: WorkerId,
-        ctx: Arc<C>,
-        storage: Arc<S>,
-        runner: Arc<P>,
+        ctx: Arc<Ctx>,
+        storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+        computation: Arc<Comp>,
         options: WorkerOptions,
     ) -> Self {
         Self {
             worker_id,
             ctx,
             storage,
-            runner,
+            computation,
             options,
             stats: WorkerStats::new(),
             // phantom
@@ -80,9 +72,8 @@ where
         match self.storage.task_pop().await {
             Ok(mut task) => {
                 task.set_in_process();
-
                 let result = self
-                    .runner
+                    .computation
                     .run(
                         self.worker_id,
                         self.ctx.clone(),
@@ -149,64 +140,6 @@ where
             Err(_err) => {}
         }
     }
-
-    /*
-    pub async fn run_old(&mut self) {
-        let start_time = std::time::Instant::now();
-        let task: Task<D> = self.storage.task_pop().await;
-
-        t.set_in_process();
-        match self
-            .processor
-            .process(
-                self.worker_id,
-                self.ctx.clone(),
-                self.storage.clone(),
-                &mut t,
-            )
-            .await
-        {
-            Ok(_) => {
-                t.set_succeed();
-                self.storage.task_set(&t).await.unwrap();
-                let successful_task =
-                    self.storage.task_ack(&t.task_id).await.unwrap();
-                tracing::info!(
-                    "[worker-{}] Task {} succeed: {:?}",
-                    self.worker_id,
-                    &successful_task.task_id,
-                    &successful_task.payload
-                );
-
-                // record stats on success
-                self.stats.record_execution_time(start_time.elapsed());
-                self.stats.record_success();
-            }
-            Err(err) => {
-                t.set_retry(&err.to_string());
-                if t.retries < self.options.max_retries {
-                    self.storage.task_push(&t).await.unwrap();
-                    tracing::error!(
-                        "[worker-{}] Task {} failed, retrying ({}): {:?}",
-                        self.worker_id,
-                        &t.task_id,
-                        &t.retries,
-                        &err
-                    );
-                } else {
-                    t.set_dlq("Max retries");
-                    self.storage.task_to_dlq(&t).await.unwrap();
-                    tracing::error!(
-                        "[worker-{}] Task {} failed, max retyring attempts ({}): {:?}",
-                        self.worker_id, &t.task_id, &t.retries, &err);
-                }
-
-                self.stats.record_execution_time(start_time.elapsed());
-                self.stats.record_failure();
-            }
-        }
-    }
-    */
 }
 
 impl WorkerId {
@@ -227,33 +160,32 @@ impl std::fmt::Display for WorkerId {
 
 /// A wrapper for the worker function that also checks for task
 /// limits and handles shutdown signals.
-pub async fn worker_wrapper<D, P, S, C>(
+pub async fn worker_wrapper<Data, Comp, Ctx>(
     worker_id: WorkerId,
-    ctx: Arc<C>,
-    storage: Arc<S>,
-    processor: Arc<P>,
+    ctx: Arc<Ctx>,
+    storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+    computation: Arc<Comp>,
     task_counter: Arc<AtomicU32>,
     task_limit: Option<u32>,
     limit_notify: Arc<tokio::sync::Notify>,
     mut shutdown: tokio::sync::watch::Receiver<()>,
     worker_options: WorkerOptions,
 ) where
-    D: Clone
+    Data: Clone
         + Serialize
         + DeserializeOwned
         + Send
         + Sync
         + 'static
         + std::fmt::Debug,
-    P: Computation<D, S, C> + Send + Sync + 'static,
-    S: TaskStorage<D> + Send + Sync + 'static,
-    C: Configurable + Send + Sync + 'static,
+    Comp: Computation<Data, Ctx> + Send + Sync + 'static,
+    Ctx: Configurable + Send + Sync + 'static,
 {
     let mut worker = Worker::new(
         worker_id,
         ctx.clone(),
         storage.clone(),
-        processor.clone(),
+        computation.clone(),
         worker_options,
     );
     'worker: loop {

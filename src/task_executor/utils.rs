@@ -27,22 +27,22 @@ pub struct ExecutorOptions {
 /// It then waits for either a shutdown signal (Ctrl+C) or for the task limit
 /// to be reached. In either case, it sends a shutdown signal to all workers
 /// and waits for them to finish.
-pub async fn run_workers<D, P, S, C>(
-    ctx: Arc<C>,
-    processor: Arc<P>,
-    storage: Arc<S>,
+pub async fn run_workers<Data, Comp, Ctx>(
+    ctx: Arc<Ctx>,
+    computation: Arc<Comp>,
+    storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
     options: ExecutorOptions,
 ) where
-    D: Clone
+    Data: Clone
         + Serialize
         + DeserializeOwned
         + Send
         + Sync
         + 'static
         + std::fmt::Debug,
-    P: Computation<D, S, C> + Send + Sync + 'static,
-    S: TaskStorage<D> + Send + Sync + 'static,
-    C: Configurable + Send + Sync + 'static,
+    Comp: Computation<Data, Ctx> + Send + Sync + 'static,
+    // S: TaskStorage<D> + Send + Sync + 'static,
+    Ctx: Configurable + Send + Sync + 'static,
 {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
     let limit_notify = Arc::new(tokio::sync::Notify::new());
@@ -51,11 +51,11 @@ pub async fn run_workers<D, P, S, C>(
     let mut worker_handlers = Vec::new();
 
     for i in 1..=options.concurrency_limit {
-        worker_handlers.push(tokio::spawn(worker_wrapper::<D, P, S, C>(
+        worker_handlers.push(tokio::spawn(worker_wrapper::<Data, Comp, Ctx>(
             WorkerId::new(i),
             Arc::clone(&ctx),
             Arc::clone(&storage),
-            Arc::clone(&processor),
+            Arc::clone(&computation),
             Arc::clone(&task_counter),
             options.task_limit,
             Arc::clone(&limit_notify),

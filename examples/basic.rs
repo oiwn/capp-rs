@@ -5,7 +5,7 @@ use capp::{
     task_deport::{InMemoryTaskStorage, Task, TaskStorage},
     ExecutorOptionsBuilder, WorkerId,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::{path, sync::Arc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,15 +41,13 @@ impl Context {
 }
 
 #[async_trait]
-impl<TaskData, Store, Ctx> Computation<TaskData, Store, Ctx>
-    for DivisionComputation
-{
+impl Computation<TaskData, Context> for DivisionComputation {
     /// TaskRunner will fail tasks which value can be divided by 3
     async fn run(
         &self,
         worker_id: WorkerId,
-        _ctx: Arc<Ctx>,
-        _storage: Arc<Store>,
+        _ctx: Arc<Context>,
+        _storage: Arc<dyn TaskStorage<TaskData> + Send + Sync>,
         task: &mut Task<TaskData>,
     ) -> Result<(), ComputationError> {
         tracing::info!(
@@ -72,8 +70,8 @@ impl<TaskData, Store, Ctx> Computation<TaskData, Store, Ctx>
 /// For current set following conditions should be true:
 /// total tasks = 9
 /// number of failed tasks = 4
-async fn make_storage() -> InMemoryTaskStorage<TaskData> {
-    let storage = InMemoryTaskStorage::new();
+async fn make_storage() -> Arc<dyn TaskStorage<TaskData> + Send + Sync> {
+    let storage = Arc::new(InMemoryTaskStorage::new());
 
     for i in 1..=3 {
         let task: Task<TaskData> = Task::new(TaskData {
@@ -109,7 +107,8 @@ async fn main() {
     tracing_subscriber::fmt::init();
     let config_path = "tests/simple_config.yml";
     let ctx = Arc::new(Context::from_config(config_path));
-    let storage = Arc::new(make_storage().await) as Arc<dyn TaskStorage<TaskData>>;
+    let storage = make_storage().await;
+
     let computation = Arc::new(DivisionComputation {});
     let executor_options = ExecutorOptionsBuilder::default()
         .task_limit(30)

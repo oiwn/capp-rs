@@ -1,0 +1,9 @@
+(
+    session_name: "capp-rs",
+    tabs: [
+        (name: "code", focus: true, commands: ["helix"]),
+        (name: "cmd"),
+        (name: "srv"),
+        (name: "notes", commands: ["emacs -nw notes.org"]),
+    ],
+)
