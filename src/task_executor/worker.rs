@@ -18,6 +18,11 @@ pub struct WorkerOptions {
     pub no_task_found_delay_sec: u64,
 }
 
+enum WorkerCommand {
+    Stop,      // stop after current task processed
+    Terminate, // terminate immediately
+}
+
 pub struct Worker<Data, Comp, Ctx> {
     worker_id: WorkerId,
     ctx: Arc<Ctx>,
@@ -67,6 +72,10 @@ where
         &self.stats
     }
 
+    /// Worker run lify-cycle
+    /// 1) pop task from queue (or wait a bit)
+    /// 2) run computation over task
+    /// 3) update task according to computation result
     pub async fn run(&mut self) {
         let start_time = std::time::Instant::now();
         match self.storage.task_pop().await {
