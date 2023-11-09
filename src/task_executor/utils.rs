@@ -5,12 +5,15 @@ use crate::task_executor::{
     worker_wrapper, Computation, WorkerCommand, WorkerOptions,
 };
 use derive_builder::Builder;
-use tokio::sync::mpsc;
+use tokio::{signal, sync::mpsc};
 
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    },
 };
 
 type WorkerCommandSenders =
@@ -76,15 +79,58 @@ pub async fn run_workers<Data, Comp, Ctx>(
         )));
     }
 
-    tokio::select! {
-        _ = tokio::signal::ctrl_c() => {
-            tracing::warn!("Ctrl+C received, shutting down...");
-            let senders = command_senders.lock().unwrap();
-            for sender in senders.values() {
-                let _ = sender.send(crate::WorkerCommand::Stop).await;
+    let ctrl_c_counter = Arc::new(AtomicUsize::new(0));
+
+    // Setup signal handling
+    let signal_counter = ctrl_c_counter.clone();
+    let command_senders = command_senders.clone();
+
+    tokio::spawn(async move {
+        loop {
+            signal::ctrl_c().await.expect("Failed to listen for event");
+            let count = signal_counter.fetch_add(1, Ordering::SeqCst);
+
+            match count {
+                0 => {
+                    // First Ctrl+C: Attempt to gracefully stop all workers.
+                    tracing::warn!(
+                        "Ctrl+C received, sending stop command to all workers..."
+                    );
+                    let senders: Vec<_> = {
+                        let lock = command_senders.lock().unwrap();
+                        lock.values().cloned().collect()
+                    };
+                    for sender in senders {
+                        let _ = sender.send(WorkerCommand::Stop).await;
+                    }
+                }
+                _ => {
+                    // Second Ctrl+C: Force terminate all workers.
+                    tracing::warn!(
+                        "Ctrl+C received again, terminating all workers..."
+                    );
+                    let senders: Vec<_> = {
+                        let lock = command_senders.lock().unwrap();
+                        lock.values().cloned().collect()
+                    };
+                    for sender in senders {
+                        let _ = sender.send(WorkerCommand::Terminate).await;
+                    }
+                    break;
+                }
             }
         }
-    }
+    });
+
+    // tokio::select! {
+    //     _ = tokio::signal::ctrl_c() => {
+    //         tracing::warn!("Ctrl+C received, shutting down...");
+    //         let senders = command_senders.lock().unwrap();
+    //         for sender in senders.values() {
+    //             let _ = sender.send(crate::WorkerCommand::Stop).await;
+    //         }
+    //     }
+    // }
 
     let results = futures::future::join_all(worker_handlers).await;
     for result in results {

@@ -192,19 +192,33 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
         computation.clone(),
         worker_options,
     );
+    let mut should_stop = false;
 
     'worker: loop {
+        if should_stop {
+            // If a stop command was received, finish any ongoing work and then exit.
+            worker.run().await;
+            break;
+        }
         tokio::select! {
+            biased;
+
             command = commands.recv() => {
-                let should_break = handle_command(command, worker_id).await;
-                if should_break {
-                    break 'worker;
-                } else {
-                    // Terminate immediately
-                    return;
+                match  handle_command(command, worker_id).await {
+                    Some(WorkerCommand::Terminate) => {
+                        // Terminate immediately
+                        return;
+                    }
+                    Some(WorkerCommand::Stop) => {
+                        // Stop after current work is done
+                        should_stop = true;
+                    }
+                    None => {
+                        break 'worker;
+                    }
                 }
             },
-            _ = worker.run() => {
+            _ = worker.run(), if !should_stop => {
                 // Nothing else needed here
             }
         };
@@ -215,19 +229,20 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
 async fn handle_command(
     command: Option<WorkerCommand>,
     worker_id: WorkerId,
-) -> bool {
+) -> Option<WorkerCommand> {
     match command {
         Some(WorkerCommand::Stop) => {
             tracing::info!("[worker-{}] received stop command", worker_id);
-            true
+            Some(WorkerCommand::Stop)
         }
         Some(WorkerCommand::Terminate) => {
             tracing::info!("[worker-{}] received terminate command", worker_id);
-            false
+            Some(WorkerCommand::Terminate)
         }
         None => {
-            // All senders have been dropped, we can stop the worker
-            true
+            // channel is closed all senders have been dropped,
+            // we can stop the worker
+            None
         }
     }
 }
