@@ -195,54 +195,44 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
     let mut should_stop = false;
 
     'worker: loop {
-        if should_stop {
-            // If a stop command was received, finish any ongoing work and then exit.
-            worker.run().await;
-            break;
-        }
         tokio::select! {
             biased;
 
             command = commands.recv() => {
-                match  handle_command(command, worker_id).await {
+                match command {
                     Some(WorkerCommand::Terminate) => {
                         // Terminate immediately
+                        tracing::info!("[worker-{}] terminating immediately.", worker_id);
                         return;
                     }
                     Some(WorkerCommand::Stop) => {
-                        // Stop after current work is done
-                        should_stop = true;
+                        // Stop after current work is done, only if not already stopping
+                        if !should_stop {
+                            tracing::info!("[worker-{}] stopping after current work.", worker_id);
+                            should_stop = true;
+                        }
                     }
                     None => {
+                        // The command channel has closed, we should stop the worker
                         break 'worker;
                     }
                 }
             },
             _ = worker.run(), if !should_stop => {
-                // Nothing else needed here
+                // Normal work execution
             }
         };
-    }
-    tracing::info!("[worker-{}] completed", worker_id);
-}
 
-async fn handle_command(
-    command: Option<WorkerCommand>,
-    worker_id: WorkerId,
-) -> Option<WorkerCommand> {
-    match command {
-        Some(WorkerCommand::Stop) => {
-            tracing::info!("[worker-{}] received stop command", worker_id);
-            Some(WorkerCommand::Stop)
-        }
-        Some(WorkerCommand::Terminate) => {
-            tracing::info!("[worker-{}] received terminate command", worker_id);
-            Some(WorkerCommand::Terminate)
-        }
-        None => {
-            // channel is closed all senders have been dropped,
-            // we can stop the worker
-            None
+        // If a stop command was received, finish any ongoing work and then exit.
+        if should_stop {
+            tracing::info!(
+                "[worker-{}] completing current task before stopping.",
+                worker_id
+            );
+            worker.run().await;
+            break;
         }
     }
+
+    tracing::info!("[worker-{}] completed", worker_id);
 }
