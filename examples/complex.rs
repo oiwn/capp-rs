@@ -1,26 +1,23 @@
 use capp::{
     async_trait::async_trait,
+    computation::{Computation, ComputationError},
     config::Configurable,
-    executor::{
-        self,
-        processor::{TaskProcessor, TaskProcessorError},
-        ExecutorOptionsBuilder, WorkerId,
-    },
-    task_deport::{RedisTaskStorage, Task, TaskStorage},
+    run_workers,
+    task_deport::{RedisTaskStorage, Task, TaskStorage, TaskStorageError},
+    ExecutorOptionsBuilder, WorkerId,
 };
 use rustis::commands::HashCommands;
 use serde::{Deserialize, Serialize};
 use std::{path, sync::Arc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Data {
+pub struct TaskData {
     pub domain: String,
     pub value: u32,
     pub flag: bool,
 }
 
-#[derive(Debug)]
-pub struct TestTaskProcessor;
+pub struct DivisionComputation;
 
 pub struct Context {
     pub redis: rustis::client::Client,
@@ -56,25 +53,23 @@ impl Context {
 }
 
 #[async_trait]
-impl TaskProcessor<Data, RedisTaskStorage<Data>, Context> for TestTaskProcessor {
+impl Computation<TaskData, Context> for DivisionComputation {
     /// Processor will fail tasks which value can be divided to 3
-    /// NOTE: Here i realized i need storage passed to process function as well
-    /// to be able to push more tasks into queue or modify existing
-    async fn process(
+    async fn run(
         &self,
         worker_id: WorkerId,
         ctx: Arc<Context>,
-        _storage: Arc<RedisTaskStorage<Data>>,
-        task: &mut Task<Data>,
-    ) -> Result<(), TaskProcessorError> {
+        _storage: Arc<dyn TaskStorage<TaskData> + Send + Sync>,
+        task: &mut Task<TaskData>,
+    ) -> Result<(), ComputationError> {
         tracing::info!(
             "[worker-{}] Processing task: {:?}",
             worker_id,
             task.payload
         );
         let rem = task.payload.value % 3;
-        if rem == 0 {
-            return Err(TaskProcessorError::ProcessorError(format!(
+        if rem != 0 {
+            return Err(ComputationError::Function(format!(
                 "Can't divide {} by 3",
                 &task.payload.value
             )));
@@ -87,7 +82,6 @@ impl TaskProcessor<Data, RedisTaskStorage<Data>, Context> for TestTaskProcessor 
 
         task.payload.flag = true;
 
-        // let _ ctx.redis.ta
         tokio::time::sleep(tokio::time::Duration::from_secs(rem as u64)).await;
         Ok(())
     }
@@ -97,11 +91,13 @@ impl TaskProcessor<Data, RedisTaskStorage<Data>, Context> for TestTaskProcessor 
 /// For current set following conditions should be true:
 /// total tasks = 9
 /// number of failed tasks = 4
-async fn make_storage(client: rustis::client::Client) -> RedisTaskStorage<Data> {
+async fn make_storage(
+    client: rustis::client::Client,
+) -> Arc<dyn TaskStorage<TaskData> + Send + Sync> {
     let storage = RedisTaskStorage::new("capp-complex", client);
 
-    for i in 1..=3 {
-        let task: Task<Data> = Task::new(Data {
+    for i in 1..=5 {
+        let task = Task::new(TaskData {
             domain: "one".to_string(),
             value: i,
             flag: false,
@@ -109,8 +105,8 @@ async fn make_storage(client: rustis::client::Client) -> RedisTaskStorage<Data> 
         let _ = storage.task_push(&task).await;
     }
 
-    for i in 1..=3 {
-        let task: Task<Data> = Task::new(Data {
+    for i in 1..=5 {
+        let task = Task::new(TaskData {
             domain: "two".to_string(),
             value: i * 3,
             flag: false,
@@ -118,15 +114,15 @@ async fn make_storage(client: rustis::client::Client) -> RedisTaskStorage<Data> 
         let _ = storage.task_push(&task).await;
     }
 
-    for _ in 1..=3 {
-        let task: Task<Data> = Task::new(Data {
+    for _ in 1..=5 {
+        let task = Task::new(TaskData {
             domain: "three".to_string(),
             value: 2,
             flag: false,
         });
         let _ = storage.task_push(&task).await;
     }
-    storage
+    Arc::new(storage)
 }
 
 #[tokio::main]
@@ -136,14 +132,14 @@ async fn main() {
     let config_path = "tests/simple_config.yml";
     std::env::set_var("REDIS_URI", "redis://localhost:6379/15");
     let ctx = Arc::new(Context::from_config(config_path).await);
-    let storage = Arc::new(make_storage(ctx.redis.clone()).await);
+    let storage = make_storage(ctx.redis.clone()).await;
 
-    let processor = Arc::new(TestTaskProcessor {});
+    let computation = Arc::new(DivisionComputation {});
     let executor_options = ExecutorOptionsBuilder::default()
-        .concurrency_limit(2 as usize)
+        .concurrency_limit(4_usize)
         .build()
         .unwrap();
-    executor::run_workers(ctx.clone(), processor, storage, executor_options).await;
+    run_workers(ctx.clone(), computation, storage, executor_options).await;
 
     let sum_of_value: i64 =
         ctx.clone().redis.hget("capp-complex", "sum").await.unwrap();
