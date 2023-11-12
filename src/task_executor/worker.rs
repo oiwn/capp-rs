@@ -28,8 +28,6 @@ pub struct Worker<Data, Comp, Ctx> {
     computation: Arc<Comp>,
     stats: WorkerStats,
     options: WorkerOptions,
-    // phantom
-    _payload_type: std::marker::PhantomData<Data>,
 }
 
 /// A worker implementation that fetches a task from the storage, processes it,
@@ -61,8 +59,6 @@ where
             computation,
             options,
             stats: WorkerStats::new(),
-            // phantom
-            _payload_type: std::marker::PhantomData,
         }
     }
 
