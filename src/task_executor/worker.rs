@@ -4,10 +4,8 @@ use crate::{
     task_deport::{TaskStorage, TaskStorageError},
 };
 use serde::{de::DeserializeOwned, Serialize};
-use std::sync::{
-    atomic::{AtomicU32, Ordering},
-    Arc,
-};
+use std::sync::Arc;
+use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkerId(usize);
@@ -18,6 +16,11 @@ pub struct WorkerOptions {
     pub no_task_found_delay_sec: u64,
 }
 
+pub enum WorkerCommand {
+    Stop,      // stop after current task processed
+    Terminate, // terminate immediately
+}
+
 pub struct Worker<Data, Comp, Ctx> {
     worker_id: WorkerId,
     ctx: Arc<Ctx>,
@@ -25,8 +28,6 @@ pub struct Worker<Data, Comp, Ctx> {
     computation: Arc<Comp>,
     stats: WorkerStats,
     options: WorkerOptions,
-    // phantom
-    _payload_type: std::marker::PhantomData<Data>,
 }
 
 /// A worker implementation that fetches a task from the storage, processes it,
@@ -58,8 +59,6 @@ where
             computation,
             options,
             stats: WorkerStats::new(),
-            // phantom
-            _payload_type: std::marker::PhantomData,
         }
     }
 
@@ -67,6 +66,10 @@ where
         &self.stats
     }
 
+    /// Worker run lify-cycle
+    /// 1) pop task from queue (or wait a bit)
+    /// 2) run computation over task
+    /// 3) update task according to computation result
     pub async fn run(&mut self) {
         let start_time = std::time::Instant::now();
         match self.storage.task_pop().await {
@@ -165,10 +168,7 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
     ctx: Arc<Ctx>,
     storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
     computation: Arc<Comp>,
-    task_counter: Arc<AtomicU32>,
-    task_limit: Option<u32>,
-    limit_notify: Arc<tokio::sync::Notify>,
-    mut shutdown: tokio::sync::watch::Receiver<()>,
+    mut commands: mpsc::Receiver<WorkerCommand>,
     worker_options: WorkerOptions,
 ) where
     Data: Clone
@@ -188,26 +188,47 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
         computation.clone(),
         worker_options,
     );
+    let mut should_stop = false;
+
     'worker: loop {
-        if let Some(limit) = task_limit {
-            if task_counter.fetch_add(1, Ordering::SeqCst) >= limit {
-                tracing::info!("Max tasks reached: {}", limit);
-                limit_notify.notify_one();
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                break 'worker;
-            }
-        };
-
         tokio::select! {
-            _ = shutdown.changed() => {
-                tracing::info!("[worker-{}] shutting down...", worker_id);
-                break 'worker;
-            }
-            _ = worker.run() => {
-                tracing::info!("[worker-{}] stats: {:?}", worker_id, worker.get_stats())
-            }
+            biased;
 
+            command = commands.recv() => {
+                match command {
+                    Some(WorkerCommand::Terminate) => {
+                        // Terminate immediately
+                        tracing::info!("[worker-{}] terminating immediately.", worker_id);
+                        return;
+                    }
+                    Some(WorkerCommand::Stop) => {
+                        // Stop after current work is done, only if not already stopping
+                        if !should_stop {
+                            tracing::info!("[worker-{}] stopping after current work.", worker_id);
+                            should_stop = true;
+                        }
+                    }
+                    None => {
+                        // The command channel has closed, we should stop the worker
+                        break 'worker;
+                    }
+                }
+            },
+            _ = worker.run(), if !should_stop => {
+                // Normal work execution
+            }
         };
+
+        // If a stop command was received, finish any ongoing work and then exit.
+        if should_stop {
+            tracing::info!(
+                "[worker-{}] completing current task before stopping.",
+                worker_id
+            );
+            worker.run().await;
+            break;
+        }
     }
+
     tracing::info!("[worker-{}] completed", worker_id);
 }

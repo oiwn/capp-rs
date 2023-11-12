@@ -73,7 +73,7 @@ impl Computation<TaskData, Context> for DivisionComputation {
 async fn make_storage() -> Arc<dyn TaskStorage<TaskData> + Send + Sync> {
     let storage = Arc::new(InMemoryTaskStorage::new());
 
-    for i in 1..=3 {
+    for i in 1..=5 {
         let task: Task<TaskData> = Task::new(TaskData {
             domain: "one".to_string(),
             value: i,
@@ -82,7 +82,7 @@ async fn make_storage() -> Arc<dyn TaskStorage<TaskData> + Send + Sync> {
         let _ = storage.task_push(&task).await;
     }
 
-    for i in 1..=3 {
+    for i in 1..=5 {
         let task: Task<TaskData> = Task::new(TaskData {
             domain: "two".to_string(),
             value: i * 3,
@@ -91,7 +91,7 @@ async fn make_storage() -> Arc<dyn TaskStorage<TaskData> + Send + Sync> {
         let _ = storage.task_push(&task).await;
     }
 
-    for _ in 1..=3 {
+    for _ in 1..=5 {
         let task: Task<TaskData> = Task::new(TaskData {
             domain: "three".to_string(),
             value: 2,
@@ -112,7 +112,7 @@ async fn main() {
     let computation = Arc::new(DivisionComputation {});
     let executor_options = ExecutorOptionsBuilder::default()
         .task_limit(30)
-        .concurrency_limit(2_usize)
+        .concurrency_limit(4_usize)
         .build()
         .unwrap();
     capp::run_workers(ctx, computation, storage, executor_options).await;
