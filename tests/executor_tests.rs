@@ -2,23 +2,23 @@
 mod tests {
     use async_trait::async_trait;
     use capp::config::Configurable;
-    use capp::executor::processor::{TaskProcessor, TaskProcessorError};
-    use capp::executor::WorkerId;
-    use capp::executor::{self, ExecutorOptionsBuilder};
     use capp::task_deport::{InMemoryTaskStorage, Task, TaskStorage};
+    use capp::{
+        Computation, ExecutorOptionsBuilder, TaskId, TaskStorageError, WorkerId,
+    };
     use serde::{Deserialize, Serialize};
     use std::sync::Arc;
     use tokio::runtime::Runtime;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct TaskData {
+    pub struct TestData {
         pub domain: String,
         pub value: u32,
         pub finished: bool,
     }
 
     #[derive(Debug)]
-    pub struct TestTaskProcessor {}
+    pub struct TestComputation {}
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct Context {
@@ -45,11 +45,9 @@ mod tests {
     }
 
     #[async_trait]
-    impl TaskProcessor<TaskData, InMemoryTaskStorage<TaskData>, Context>
-        for TestTaskProcessor
-    {
+    impl Computation<TaskData, Context> for TestComputation {
         /// Process will fail tasks which value can be divided to 3
-        async fn process(
+        async fn run(
             &self,
             worker_id: WorkerId,
             _ctx: Arc<Context>,

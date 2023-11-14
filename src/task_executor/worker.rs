@@ -2,6 +2,7 @@ use super::{Computation, WorkerStats};
 use crate::{
     config::Configurable,
     task_deport::{TaskStorage, TaskStorageError},
+    AbstractTaskStorage,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
@@ -24,7 +25,8 @@ pub enum WorkerCommand {
 pub struct Worker<Data, Comp, Ctx> {
     worker_id: WorkerId,
     ctx: Arc<Ctx>,
-    storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+    // storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+    storage: AbstractTaskStorage<Data>,
     computation: Arc<Comp>,
     stats: WorkerStats,
     options: WorkerOptions,

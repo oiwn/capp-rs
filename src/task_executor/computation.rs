@@ -1,4 +1,4 @@
-use crate::{task_deport::Task, TaskStorage};
+use crate::{task_deport::Task, AbstractTaskStorage, TaskStorage};
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
@@ -38,7 +38,8 @@ where
         &self,
         worker_id: WorkerId,
         ctx: Arc<Ctx>,
-        storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+        // storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+        storage: AbstractTaskStorage<Data>,
         task: &mut Task<Data>,
     ) -> Result<(), ComputationError>;
 }
