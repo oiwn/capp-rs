@@ -13,7 +13,7 @@ pub use backends::InMemoryTaskStorage;
 pub use backends::{RedisRoundRobinTaskStorage, RedisTaskStorage};
 pub use task::{Task, TaskId};
 
-pub type AbstractTaskStorage<D> = std::sync::Arc<dyn TaskStorage<D> + Send + Sync> where D: Clone;
+pub type AbstractTaskStorage<D> = std::sync::Arc<dyn TaskStorage<D> + Send + Sync>;
 
 #[derive(Error, Debug)]
 pub enum TaskStorageError {

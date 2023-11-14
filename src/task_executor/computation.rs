@@ -1,4 +1,4 @@
-use crate::{task_deport::Task, AbstractTaskStorage, TaskStorage};
+use crate::{task_deport::Task, AbstractTaskStorage};
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
@@ -31,13 +31,15 @@ where
     Data: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
     Ctx: Send + Sync + 'static,
 {
-    /// Processes the task. The worker_id is passed for logging or
+    /// Do computation The worker_id is passed for logging or
     /// debugging purposes. The task is a mutable reference,
     /// allowing the processor to modify the task data as part of the processing.
     async fn run(
         &self,
         worker_id: WorkerId,
         ctx: Arc<Ctx>,
+        // NOTE: i used type alias instead of this
+        // is something put this line back and remove next one!
         // storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
         storage: AbstractTaskStorage<Data>,
         task: &mut Task<Data>,
