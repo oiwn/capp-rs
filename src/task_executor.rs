@@ -9,4 +9,7 @@ pub use utils::run_workers;
 pub use utils::ExecutorOptions;
 pub use utils::ExecutorOptionsBuilder;
 pub use utils::ExecutorOptionsBuilderError;
-pub use worker::{worker_wrapper, Worker, WorkerCommand, WorkerId, WorkerOptions};
+pub use worker::{
+    worker_wrapper, Worker, WorkerCommand, WorkerId, WorkerOptions,
+    WorkerOptionsBuilder,
+};

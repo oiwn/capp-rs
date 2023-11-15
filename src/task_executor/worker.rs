@@ -1,9 +1,9 @@
-use super::{Computation, WorkerStats};
 use crate::{
     config::Configurable,
     task_deport::{TaskStorage, TaskStorageError},
-    AbstractTaskStorage,
+    AbstractTaskStorage, Computation, WorkerStats,
 };
+use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -11,10 +11,15 @@ use tokio::sync::mpsc;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkerId(usize);
 
-#[derive(Clone, Default)]
+#[derive(Builder, Default, Clone, Debug)]
+#[builder(public, setter(into))]
 pub struct WorkerOptions {
+    #[builder(default = "3")]
     pub max_retries: u32,
-    pub no_task_found_delay_sec: u64,
+    #[builder(default = "None")]
+    pub task_limit: Option<usize>,
+    #[builder(default = "5000")]
+    pub no_task_found_delay_ms: u64,
 }
 
 pub enum WorkerCommand {
@@ -25,7 +30,6 @@ pub enum WorkerCommand {
 pub struct Worker<Data, Comp, Ctx> {
     worker_id: WorkerId,
     ctx: Arc<Ctx>,
-    // storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
     storage: AbstractTaskStorage<Data>,
     computation: Arc<Comp>,
     stats: WorkerStats,
@@ -72,7 +76,20 @@ where
     /// 1) pop task from queue (or wait a bit)
     /// 2) run computation over task
     /// 3) update task according to computation result
-    pub async fn run(&mut self) {
+    /// Return true if should continue or false otherwise
+    pub async fn run(&mut self) -> bool {
+        // Implement limiting amount of tasks per worker
+        if let Some(limit) = self.options.task_limit {
+            if self.stats.tasks_processed >= limit {
+                tracing::info!(
+                    "[{}] task_limit reached: {}",
+                    self.worker_id,
+                    limit
+                );
+                return false;
+            }
+        };
+
         let start_time = std::time::Instant::now();
         match self.storage.task_pop().await {
             Ok(mut task) => {
@@ -137,13 +154,14 @@ where
                     self.worker_id
                 );
                 // wait for a while till try to fetch task
-                tokio::time::sleep(tokio::time::Duration::from_secs(
-                    self.options.no_task_found_delay_sec,
+                tokio::time::sleep(tokio::time::Duration::from_millis(
+                    self.options.no_task_found_delay_ms,
                 ))
                 .await;
             }
             Err(_err) => {}
-        }
+        };
+        true
     }
 }
 
@@ -173,13 +191,13 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
     mut commands: mpsc::Receiver<WorkerCommand>,
     worker_options: WorkerOptions,
 ) where
-    Data: Clone
+    Data: std::fmt::Debug
+        + Clone
         + Serialize
         + DeserializeOwned
         + Send
         + Sync
-        + 'static
-        + std::fmt::Debug,
+        + 'static,
     Comp: Computation<Data, Ctx> + Send + Sync + 'static,
     Ctx: Configurable + Send + Sync + 'static,
 {
@@ -216,7 +234,10 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
                     }
                 }
             },
-            _ = worker.run(), if !should_stop => {
+            should_continue = worker.run(), if !should_stop => {
+                if !should_continue {
+                    break 'worker;
+                }
                 // Normal work execution
             }
         };
@@ -233,4 +254,20 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
     }
 
     tracing::info!("[worker-{}] completed", worker_id);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn worker_options() {
+        let options = WorkerOptionsBuilder::default().build().unwrap();
+        println!("Options: {:?}", options);
+        assert_eq!(options.max_retries, 3);
+        assert_eq!(options.task_limit, None);
+        assert_eq!(options.no_task_found_delay_ms, 5000);
+    }
 }

@@ -42,7 +42,7 @@ impl Context {
 
 #[async_trait]
 impl Computation<TaskData, Context> for DivisionComputation {
-    /// TaskRunner will fail tasks which value can be divided by 3
+    /// TaskRunner will fail tasks which value can't be divided by 3
     async fn run(
         &self,
         worker_id: WorkerId,
@@ -56,8 +56,9 @@ impl Computation<TaskData, Context> for DivisionComputation {
             task.get_payload()
         );
         let rem = task.payload.value % 3;
-        if rem == 0 {
-            return Err(ComputationError::Function("Can't divide by 3".to_owned()));
+        if rem != 0 {
+            let err_msg = format!("Can't divide {} by 3", task.payload.value);
+            return Err(ComputationError::Function(err_msg));
         };
 
         task.payload.finished = true;

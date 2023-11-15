@@ -2,7 +2,7 @@ use super::WorkerId;
 use crate::config::Configurable;
 use crate::task_deport::TaskStorage;
 use crate::task_executor::{
-    worker_wrapper, Computation, WorkerCommand, WorkerOptions,
+    worker_wrapper, Computation, WorkerCommand, WorkerOptions, WorkerOptionsBuilder,
 };
 use derive_builder::Builder;
 use tokio::{signal, sync::mpsc};
@@ -19,12 +19,10 @@ use std::{
 type WorkerCommandSenders =
     Arc<Mutex<HashMap<WorkerId, mpsc::Sender<WorkerCommand>>>>;
 
-#[derive(Builder, Default, Clone)]
+#[derive(Builder, Default, Clone, Debug)]
 #[builder(public, setter(into))]
 pub struct ExecutorOptions {
-    #[builder(
-        default = "WorkerOptions { max_retries: 3, no_task_found_delay_sec: 10 }"
-    )]
+    #[builder(default = "WorkerOptionsBuilder::default().build().unwrap()")]
     pub worker_options: WorkerOptions,
     #[builder(default = "None")]
     pub task_limit: Option<u32>,
@@ -121,16 +119,6 @@ pub async fn run_workers<Data, Comp, Ctx>(
             }
         }
     });
-
-    // tokio::select! {
-    //     _ = tokio::signal::ctrl_c() => {
-    //         tracing::warn!("Ctrl+C received, shutting down...");
-    //         let senders = command_senders.lock().unwrap();
-    //         for sender in senders.values() {
-    //             let _ = sender.send(crate::WorkerCommand::Stop).await;
-    //         }
-    //     }
-    // }
 
     let results = futures::future::join_all(worker_handlers).await;
     for result in results {

@@ -228,7 +228,7 @@ mod tests {
         let task = Task::new(TaskData { value: 33 });
         let _ = rt.block_on(storage.task_push(&task));
 
-        let task = rt.block_on(storage.task_pop()).unwrap().unwrap();
+        let task = rt.block_on(storage.task_pop()).unwrap();
         let task = rt.block_on(storage.task_ack(&task.task_id)).unwrap();
         assert_eq!(task.payload.value, 42);
 

@@ -1,11 +1,9 @@
 #[cfg(test)]
 mod tests {
+    use capp::{RedisTaskStorage, Task, TaskStorage};
     use dotenvy::dotenv;
     use rustis::commands::{HashCommands, ListCommands};
     use serde::{Deserialize, Serialize};
-    use task_deport::RedisTaskStorage;
-    use task_deport::Task;
-    use task_deport::TaskStorage;
     use tokio;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,7 +80,7 @@ mod tests {
             .await
             .unwrap();
 
-        let task_data = task_storage.task_pop().await.unwrap().unwrap();
+        let task_data = task_storage.task_pop().await.unwrap();
         assert_eq!(task_data.payload.value, task.payload.value);
     }
 }

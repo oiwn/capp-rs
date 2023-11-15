@@ -1,6 +1,6 @@
 [package]
 name = "capp"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
 authors = ["oiwn"]
@@ -46,6 +46,7 @@ capp = { path = ".", features = ["http", "healthcheck", "redis"] }
 serde_json = "1.0.106"
 mongodb = { version = "2.6.1", features = ["tokio-runtime"] }
 scraper = "0.17.1"
+dotenvy = "0.15.7"
 
 [features]
 http = ["dep:backoff", "dep:reqwest"]
