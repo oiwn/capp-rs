@@ -13,6 +13,12 @@ pub struct WorkerStats {
     pub tasks_failed: usize,
 }
 
+impl Default for WorkerStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WorkerStats {
     pub fn new() -> Self {
         Self {

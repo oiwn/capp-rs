@@ -120,10 +120,14 @@ pub async fn run_workers<Data, Comp, Ctx>(
         }
     });
 
-    let results = futures::future::join_all(worker_handlers).await;
-    for result in results {
-        if let Err(e) = result {
-            tracing::error!("Fatal error in one of the workers: {:?}", e);
+    for handler in worker_handlers {
+        match handler.await {
+            Ok(worker) => {
+                tracing::info!("Worker finished: {:?}", worker);
+            }
+            Err(err) => {
+                tracing::error!("Fatal error in one of the workers: {:?}", err);
+            }
         }
     }
 }

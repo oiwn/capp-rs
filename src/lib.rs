@@ -17,7 +17,6 @@ pub use async_trait;
 pub use backoff;
 pub use chrono;
 pub use derive_builder;
-pub use futures;
 #[cfg(feature = "http")]
 pub use reqwest;
 #[cfg(feature = "redis")]

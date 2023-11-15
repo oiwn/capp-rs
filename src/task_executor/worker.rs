@@ -265,7 +265,6 @@ mod tests {
     #[test]
     fn worker_options() {
         let options = WorkerOptionsBuilder::default().build().unwrap();
-        println!("Options: {:?}", options);
         assert_eq!(options.max_retries, 3);
         assert_eq!(options.task_limit, None);
         assert_eq!(options.no_task_found_delay_ms, 5000);
