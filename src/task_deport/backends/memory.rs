@@ -31,6 +31,12 @@ impl<Data> InMemoryTaskStorage<Data> {
     }
 }
 
+impl<Data> Default for InMemoryTaskStorage<Data> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<Data> std::fmt::Debug for InMemoryTaskStorage<Data> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Lock the mutexes to access the data.
@@ -77,9 +83,12 @@ where
             TaskStorageError::StorageError(format!("Mutex lock error: {}", task_id))
         })?;
         let task_value =
-            hashmap.get(&task_id).ok_or(TaskStorageError::StorageError(
-                format!("Error getting task from HashMap: {}", task_id),
-            ))?;
+            hashmap
+                .get(task_id)
+                .ok_or(TaskStorageError::StorageError(format!(
+                    "Error getting task from HashMap: {}",
+                    task_id
+                )))?;
         let task: Task<Data> = serde_json::from_str(task_value)
             .map_err(|err| TaskStorageError::SerializationError(err.to_string()))?;
         Ok(task)

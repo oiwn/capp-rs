@@ -88,6 +88,12 @@ impl TaskId {
     }
 }
 
+impl Default for TaskId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // Custom serialization for TaskId.
 impl serde::Serialize for TaskId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

@@ -61,3 +61,9 @@ impl<'a> SharedStats<'a> {
         self.workers_stats.push(stats);
     }
 }
+
+impl<'a> Default for SharedStats<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}

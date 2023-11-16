@@ -65,7 +65,7 @@ pub async fn run_workers<Data, Comp, Ctx>(
         command_senders
             .lock()
             .unwrap()
-            .insert(worker_id.clone(), command_sender);
+            .insert(worker_id, command_sender);
 
         worker_handlers.push(tokio::spawn(worker_wrapper::<Data, Comp, Ctx>(
             WorkerId::new(i),
