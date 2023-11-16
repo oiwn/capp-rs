@@ -2,7 +2,7 @@
 //! TODO: make sequental ops into atomic transaction
 use crate::{Task, TaskId, TaskStorage, TaskStorageError};
 use async_trait::async_trait;
-use rustis::commands::{HashCommands, ListCommands};
+use rustis::commands::{GenericCommands, HashCommands, ListCommands};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::marker::PhantomData;
@@ -138,6 +138,13 @@ where
             .redis
             .hset(&dlq_key, [(&uuid_as_str, &task_value)])
             .await?;
+        Ok(())
+    }
+
+    async fn purge(&self) -> Result<(), TaskStorageError> {
+        let _ = self.redis.del(self.get_hashmap_key()).await?;
+        let _ = self.redis.del(self.get_list_key()).await?;
+        let _ = self.redis.del(self.get_dlq_key()).await?;
         Ok(())
     }
 }

@@ -11,7 +11,7 @@ pub struct HttpClientParams<'a> {
 
 /// Helper to create typical crawling request with few useful options
 /// Assuming there is some kind of settings chunk `http_config` like:
-/// ```ignore
+/// ```notrust
 /// http:
 ///     proxy:
 ///         use: true
@@ -110,7 +110,7 @@ pub async fn fetch_url_content(
 
     let fetch_content = || async {
         tracing::info!("[{}] retrieving url...", url);
-        let response = client.get(url.clone()).send().await?;
+        let response = client.get(url).send().await?;
         let status = response.status();
         let text = response.text().await?;
         Ok((status, text))

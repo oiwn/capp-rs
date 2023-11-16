@@ -13,6 +13,12 @@ pub struct WorkerStats {
     pub tasks_failed: usize,
 }
 
+impl Default for WorkerStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WorkerStats {
     pub fn new() -> Self {
         Self {
@@ -53,5 +59,11 @@ impl<'a> SharedStats<'a> {
 
     pub fn add_worker_stats(&mut self, stats: &'a WorkerStats) {
         self.workers_stats.push(stats);
+    }
+}
+
+impl<'a> Default for SharedStats<'a> {
+    fn default() -> Self {
+        Self::new()
     }
 }

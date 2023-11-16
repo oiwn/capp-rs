@@ -19,7 +19,7 @@ pub struct InMemoryTaskStorage<D> {
     _marker1: PhantomData<D>,
 }
 
-impl<D> InMemoryTaskStorage<D> {
+impl<Data> InMemoryTaskStorage<Data> {
     /// Construct a new empty in-memory task storage
     pub fn new() -> Self {
         Self {
@@ -31,7 +31,13 @@ impl<D> InMemoryTaskStorage<D> {
     }
 }
 
-impl<D> std::fmt::Debug for InMemoryTaskStorage<D> {
+impl<Data> Default for InMemoryTaskStorage<Data> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<Data> std::fmt::Debug for InMemoryTaskStorage<Data> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Lock the mutexes to access the data.
         let hashmap = self.hashmap.lock().unwrap();
@@ -46,14 +52,14 @@ impl<D> std::fmt::Debug for InMemoryTaskStorage<D> {
 }
 
 #[async_trait]
-impl<D> TaskStorage<D> for InMemoryTaskStorage<D>
+impl<Data> TaskStorage<Data> for InMemoryTaskStorage<Data>
 where
-    D: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
+    Data: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
 {
     async fn task_ack(
         &self,
         task_id: &TaskId,
-    ) -> Result<Task<D>, TaskStorageError> {
+    ) -> Result<Task<Data>, TaskStorageError> {
         let mut hashmap = self.hashmap.lock().map_err(|_| {
             TaskStorageError::StorageError(format!("Mutex lock error: {}", task_id))
         })?;
@@ -72,20 +78,23 @@ where
     async fn task_get(
         &self,
         task_id: &TaskId,
-    ) -> Result<Task<D>, TaskStorageError> {
+    ) -> Result<Task<Data>, TaskStorageError> {
         let hashmap = self.hashmap.lock().map_err(|_| {
             TaskStorageError::StorageError(format!("Mutex lock error: {}", task_id))
         })?;
         let task_value =
-            hashmap.get(&task_id).ok_or(TaskStorageError::StorageError(
-                format!("Error getting task from HashMap: {}", task_id),
-            ))?;
-        let task: Task<D> = serde_json::from_str(task_value)
+            hashmap
+                .get(task_id)
+                .ok_or(TaskStorageError::StorageError(format!(
+                    "Error getting task from HashMap: {}",
+                    task_id
+                )))?;
+        let task: Task<Data> = serde_json::from_str(task_value)
             .map_err(|err| TaskStorageError::SerializationError(err.to_string()))?;
         Ok(task)
     }
 
-    async fn task_set(&self, task: &Task<D>) -> Result<(), TaskStorageError> {
+    async fn task_set(&self, task: &Task<Data>) -> Result<(), TaskStorageError> {
         let mut hashmap = self.hashmap.lock().map_err(|_| {
             TaskStorageError::StorageError("Lock error on task hashmap".to_string())
         })?;
@@ -95,7 +104,7 @@ where
         Ok(())
     }
 
-    async fn task_pop(&self) -> Result<Task<D>, TaskStorageError> {
+    async fn task_pop(&self) -> Result<Task<Data>, TaskStorageError> {
         let mut list = self.list.lock().map_err(|_| {
             TaskStorageError::StorageError("Lock error".to_string())
         })?;
@@ -105,14 +114,14 @@ where
 
         if let Some(task_id) = list.pop_front() {
             let task_value = hashmap.get(&task_id).unwrap();
-            let task: Task<D> = serde_json::from_str(task_value)
+            let task: Task<Data> = serde_json::from_str(task_value)
                 .map_err(|err| TaskStorageError::StorageError(err.to_string()))?;
             return Ok(task);
         }
         Err(TaskStorageError::StorageIsEmptyError)
     }
 
-    async fn task_push(&self, task: &Task<D>) -> Result<(), TaskStorageError> {
+    async fn task_push(&self, task: &Task<Data>) -> Result<(), TaskStorageError> {
         let mut list = self.list.lock().map_err(|_| {
             TaskStorageError::StorageError("Lock error on task list".to_string())
         })?;
@@ -127,13 +136,30 @@ where
         Ok(())
     }
 
-    async fn task_to_dlq(&self, task: &Task<D>) -> Result<(), TaskStorageError> {
+    async fn task_to_dlq(&self, task: &Task<Data>) -> Result<(), TaskStorageError> {
         let mut dlq = self.hashmap.lock().map_err(|_| {
             TaskStorageError::StorageError("Lock error on task hashmap".to_string())
         })?;
         let task_value = serde_json::to_string(task)
             .map_err(|err| TaskStorageError::StorageError(err.to_string()))?;
         dlq.insert(task.task_id, task_value);
+        Ok(())
+    }
+
+    // general storage operations
+    async fn purge(&self) -> Result<(), TaskStorageError> {
+        let mut list = self.list.lock().map_err(|_| {
+            TaskStorageError::StorageError("Lock error on task list".to_string())
+        })?;
+        let mut hashmap = self.hashmap.lock().map_err(|_| {
+            TaskStorageError::StorageError("Lock error on task hashmap".to_string())
+        })?;
+        let mut dlq = self.hashmap.lock().map_err(|_| {
+            TaskStorageError::StorageError("Lock error on task hashmap".to_string())
+        })?;
+        list.clear();
+        hashmap.clear();
+        dlq.clear();
         Ok(())
     }
 }
@@ -172,7 +198,8 @@ mod tests {
         let task = Task::new(TaskData { value: 33 });
         let _ = rt.block_on(storage.task_push(&task));
 
-        let task = rt.block_on(storage.task_pop()).unwrap().unwrap();
+        let task = rt.block_on(storage.task_pop()).unwrap();
+        // let task = rt.block_on(storage.task_pop()).unwrap().unwrap();
         assert_eq!(task.payload.value, 42);
         assert_eq!(storage.list.lock().unwrap().len(), 1);
         assert_eq!(storage.hashmap.lock().unwrap().keys().len(), 2);
@@ -191,7 +218,7 @@ mod tests {
         task.payload.value = 11;
         let _ = rt.block_on(storage.task_set(&task));
 
-        let task = rt.block_on(storage.task_pop()).unwrap().unwrap();
+        let task = rt.block_on(storage.task_pop()).unwrap();
         let task_acked = rt.block_on(storage.task_ack(&task.task_id)).unwrap();
         assert_eq!(task_acked.payload.value, 11);
         assert_eq!(task_acked.task_id, task.task_id);
@@ -210,7 +237,7 @@ mod tests {
         let task = Task::new(TaskData { value: 33 });
         let _ = rt.block_on(storage.task_push(&task));
 
-        let task = rt.block_on(storage.task_pop()).unwrap().unwrap();
+        let task = rt.block_on(storage.task_pop()).unwrap();
         let task = rt.block_on(storage.task_ack(&task.task_id)).unwrap();
         assert_eq!(task.payload.value, 42);
 

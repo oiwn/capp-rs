@@ -1,6 +1,8 @@
 use reqwest::{Client, StatusCode};
 use tokio::time::{timeout, Duration};
 
+// const GOOGLE: &str = "http://www.google.com";
+
 /// Check if internet is available.
 /// There are a few hosts that are commonly used to check it
 /// because they are typically reliable and have high uptime. i
@@ -8,16 +10,11 @@ use tokio::time::{timeout, Duration};
 ///     - Google's primary domain: https://www.google.com
 ///     - Cloudflare's DNS resolver: https://1.1.1.1
 ///     - Quad9's DNS resolver: https://9.9.9.9
-pub async fn internet() -> bool {
-    #[allow(unused_variables)]
-    let host_url = "https://9.9.9.9";
-    #[cfg(test)]
-    let host_url = "https://127.0.0.1:8080";
-
+pub async fn internet(http_url: &str) -> bool {
     let client = Client::new();
-    let request_future = client.get(host_url).send();
+    let request_future = client.get(http_url).send();
 
-    let response = match timeout(Duration::from_secs(5), request_future).await {
+    let response = match timeout(Duration::from_secs(1), request_future).await {
         Ok(response) => response.unwrap(),
         Err(_) => {
             tracing::error!(

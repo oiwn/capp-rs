@@ -1,8 +1,6 @@
 #+title: Notes
 
 * Tasks
-** DONE basic configuration traits
-** DONE optional feature to enable http requests
 ** TODO implement default debug trait for Configurable
 ** need workflows
 - [ ] coverage
@@ -14,19 +12,6 @@
 - [ ] optional redis
 - [ ] optional mongodb
 - [ ] optional postgres
-** DONE generic executor
-- [X] basic version
-- [X] tests for basic version
-- [X] example for basic version
-- [X] make in example in `examples/` folder
-- [X] remove E from Task type, use string representation instead
-- [X] in-memory backend for Tasks storage
-- [X] split storage trait into separate module
-- [X] docs for strage
-- [X] docs for tasks
-- [X] docs for executor
-- [X] add workers settings
-- [X] builder pattern for executor settings
 ** TODO further adjustments
 - [X] re-export common crate - thiserror
 - [X] pass context where db connections could be stored
@@ -51,24 +36,31 @@
 - [X] rename executor/executor.rs to something else
 - [X] move WorkerStats into the separate module
 - [ ] expose http endpoint with json collected basic stats from workers
-** Refactor processor.
-- [ ] shared context for processor. way to transform &Worker to SharedContext
-- [ ] make example work with improved processor
+** Refactor processor/task_runner/computation.
+- [ ] shared context for Computation. way to transform &Worker to SharedContext
+- [X] make example work with improved processor
+- [X] make better naming for processor
 - [ ] add storage error types context error types to TaskProcessorError
 ** Refactor storage (task deport)
-- [ ] new type for TaskId
-- [ ] remove custom error type for simplicity (no SE generic anymore yay!)
+- [X] new type for TaskId
+- [X] remove custom error type for simplicity (no SE generic anymore yay!)
 ** Executor
-- [ ] figure out how to move constrains from direct name of TaskStorage to something like Box<dyn impl TaskStorage>
+- [X] figure out how to move constrains from direct name of TaskStorage to something like Box<dyn impl TaskStorage>
 - [ ] better task handling in executor, queue, started, finished and TaskStatus enum
-- [ ] need catch unwind to handle all possible exceptions
-
 ** Task Deport
 - [ ] add queued time, make started time optional (should be something when execution is started)
-- [ ] split TaskStorage and TaskQueue implementation where task storage is pluggable
+- [X] split TaskStorage and TaskQueue implementation where task storage is pluggable
 - [ ] drop task exceed time for execution
 - [ ] separate thread to clean up staled tasks (or find the way how to not make them stalled)
 - [ ] add more tests
+** Important!!!!
+- [-] TaskProcessor::process should not panic? (ugh it's complicated to apply catch_unwind to async function)
+- [X] thiserror should not be optional
+- [ ] Use tokio per core executor to make tasks Sync maybe? if possible
+- [X] implement purge for TaskStorage trait
+- [ ] make whole capp-rs as async tasks executor for web crawling purposes
+- [ ] i think need to remove unnecessary workspaces
+- [ ] fix tests sometimes not drop database keys
 
 ** redis storage backend with bloom filter
 ** redis storage backend with priorities

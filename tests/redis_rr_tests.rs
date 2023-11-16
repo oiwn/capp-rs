@@ -1,11 +1,11 @@
 #[cfg(test)]
 mod tests {
     // Test redis round robin queue
+    use capp::{HasTagKey, RedisRoundRobinTaskStorage, Task, TaskStorage};
     use dotenvy::dotenv;
-    use rustis::commands::{GenericCommands, HashCommands, ListCommands};
+    use rustis::commands::GenericCommands;
     use serde::{Deserialize, Serialize};
     use std::collections::{HashMap, HashSet};
-    use task_deport::{HasTagKey, RedisRoundRobinTaskStorage, Task, TaskStorage};
     use tokio;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,8 +52,8 @@ mod tests {
             redis: &redis,
         };
         let tag_counts: HashMap<String, u32> = vec![
-            ("one".to_string(), 5), // 5 dummy data for tag1
-            ("two".to_string(), 3), // 3 dummy data for tag2
+            ("one".to_string(), 5), // 5 dummy data for tag "one"
+            ("two".to_string(), 3), // 3 dummy data for tag "two"
         ]
         .into_iter()
         .collect();
@@ -63,7 +63,7 @@ mod tests {
         for (tag, count) in tag_counts.iter() {
             for i in 0..*count {
                 tasks.push(Task::new(TaskData {
-                    tag: tag.clone(),
+                    tag: tag.into(),
                     value: i,
                 }));
             }
@@ -81,7 +81,7 @@ mod tests {
             let _ = storage.task_push(&task).await;
         }
 
-        let task = storage.task_pop().await.unwrap().unwrap();
+        let task = storage.task_pop().await.unwrap();
         assert_eq!(task.payload.tag, "one");
     }
 

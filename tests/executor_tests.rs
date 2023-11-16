@@ -1,24 +1,25 @@
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
+    use capp::computation::ComputationError;
     use capp::config::Configurable;
-    use capp::executor::processor::{TaskProcessor, TaskProcessorError};
-    use capp::executor::WorkerId;
-    use capp::executor::{self, ExecutorOptionsBuilder};
-    use capp::task_deport::{InMemoryTaskStorage, Task, TaskStorage};
+    use capp::{
+        run_workers, AbstractTaskStorage, Computation, ExecutorOptionsBuilder,
+        InMemoryTaskStorage, Task, TaskStorage, WorkerId, WorkerOptionsBuilder,
+    };
     use serde::{Deserialize, Serialize};
     use std::sync::Arc;
     use tokio::runtime::Runtime;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct TaskData {
+    pub struct TestData {
         pub domain: String,
         pub value: u32,
         pub finished: bool,
     }
 
     #[derive(Debug)]
-    pub struct TestTaskProcessor {}
+    pub struct TestComputation {}
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct Context {
@@ -45,22 +46,21 @@ mod tests {
     }
 
     #[async_trait]
-    impl TaskProcessor<TaskData, InMemoryTaskStorage<TaskData>, Context>
-        for TestTaskProcessor
-    {
+    impl Computation<TestData, Context> for TestComputation {
         /// Process will fail tasks which value can be divided to 3
-        async fn process(
+        async fn run(
             &self,
             worker_id: WorkerId,
             _ctx: Arc<Context>,
-            _storage: Arc<InMemoryTaskStorage<TaskData>>,
-            task: &mut Task<TaskData>,
-        ) -> Result<(), TaskProcessorError> {
+            _storage: AbstractTaskStorage<TestData>,
+            task: &mut Task<TestData>,
+        ) -> Result<(), ComputationError> {
             tracing::info!("[worker-{}] Processing task: {:?}", worker_id, task);
             let rem = task.payload.value % 3;
+            // fail if can be divided by 3
             if rem == 0 {
-                return Err(TaskProcessorError::ProcessorError(format!(
-                    "Can't divide {} to 3",
+                return Err(ComputationError::Function(format!(
+                    "Can be divide {} to 3",
                     &task.payload.value
                 )));
             };
@@ -74,13 +74,14 @@ mod tests {
     /// For current set following conditions should be true:
     /// total tasks = 9
     /// number of failed tasks = 4
-    fn make_storage() -> InMemoryTaskStorage<TaskData> {
+    fn make_storage() -> InMemoryTaskStorage<TestData> {
         let storage = InMemoryTaskStorage::new();
 
         let rt = Runtime::new().unwrap();
 
+        // Only 1 number can be divided by 3
         for i in 1..=3 {
-            let task: Task<TaskData> = Task::new(TaskData {
+            let task: Task<TestData> = Task::new(TestData {
                 domain: "one".to_string(),
                 value: i,
                 finished: false,
@@ -88,8 +89,9 @@ mod tests {
             let _ = rt.block_on(storage.task_push(&task));
         }
 
+        // all 3 numbers can be divided by 3
         for i in 1..=3 {
-            let task: Task<TaskData> = Task::new(TaskData {
+            let task: Task<TestData> = Task::new(TestData {
                 domain: "two".to_string(),
                 value: i * 3,
                 finished: false,
@@ -97,8 +99,9 @@ mod tests {
             let _ = rt.block_on(storage.task_push(&task));
         }
 
+        // No numbers can be divided by 3
         for _ in 1..=3 {
-            let task: Task<TaskData> = Task::new(TaskData {
+            let task: Task<TestData> = Task::new(TestData {
                 domain: "three".to_string(),
                 value: 2,
                 finished: false,
@@ -126,16 +129,24 @@ mod tests {
 
         // dbg!(&storage);
 
-        let processor = Arc::new(TestTaskProcessor {});
+        let computation = Arc::new(TestComputation {});
         let executor_options = ExecutorOptionsBuilder::default()
-            .concurrency_limit(2 as usize)
+            .worker_options(
+                WorkerOptionsBuilder::default()
+                    .max_retries(10_u32)
+                    .task_limit(3)
+                    .no_task_found_delay_ms(50_u64)
+                    .build()
+                    .unwrap(),
+            )
+            .concurrency_limit(1 as usize)
             .task_limit(Some(9))
             .build()
             .unwrap();
 
-        rt.block_on(executor::run_workers(
+        rt.block_on(run_workers(
             ctx.clone(),
-            processor,
+            computation,
             storage.clone(),
             executor_options,
         ));
@@ -143,14 +154,14 @@ mod tests {
         let storage_len_after = storage.list.lock().unwrap().len();
 
         // 4 tasks should fail
-        assert_eq!(storage_len_after, 4);
+        assert_eq!(storage_len_after, 7);
 
         // all successful tasks should be removed from storage
-        // 4 should left
+        // 7 should left
         let keys_len = storage.hashmap.lock().unwrap().len();
-        assert_eq!(keys_len, 4);
+        assert_eq!(keys_len, 7);
         let list_len = storage.list.lock().unwrap().len();
-        assert_eq!(list_len, 4);
+        assert_eq!(list_len, 7);
 
         // dbg!(&storage);
     }

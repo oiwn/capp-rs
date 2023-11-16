@@ -1,5 +1,6 @@
-use chrono::{DateTime, Utc};
+// use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::time::SystemTime;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -24,9 +25,9 @@ pub struct Task<D: Clone> {
     pub task_id: TaskId,
     pub payload: D,
     pub status: TaskStatus,
-    pub queued: DateTime<Utc>,
-    pub started: Option<DateTime<Utc>>,
-    pub finished: Option<DateTime<Utc>>,
+    pub queued_at: SystemTime,
+    pub started_at: Option<SystemTime>,
+    pub finished_at: Option<SystemTime>,
     pub retries: u32,
     pub error_msg: Option<String>,
 }
@@ -37,9 +38,9 @@ impl<D: Clone> Task<D> {
             task_id: TaskId::new(),
             payload,
             status: TaskStatus::Queued,
-            queued: Utc::now(),
-            started: None,
-            finished: None,
+            queued_at: SystemTime::now(),
+            started_at: None,
+            finished_at: None,
             retries: 0,
             error_msg: None,
         }
@@ -47,24 +48,24 @@ impl<D: Clone> Task<D> {
 
     pub fn set_in_process(&mut self) {
         self.status = TaskStatus::InProgress;
-        self.started = Some(Utc::now());
+        self.started_at = Some(SystemTime::now());
     }
 
     pub fn set_succeed(&mut self) {
         self.status = TaskStatus::Completed;
-        self.finished = Some(Utc::now());
+        self.finished_at = Some(SystemTime::now());
     }
 
     pub fn set_retry(&mut self, err_msg: &str) {
         self.status = TaskStatus::Failed;
-        self.finished = Some(Utc::now());
+        self.finished_at = Some(SystemTime::now());
         self.retries += 1;
         self.error_msg = Some(err_msg.to_string());
     }
 
     pub fn set_dlq(&mut self, err_msg: &str) {
         self.status = TaskStatus::DeadLetter;
-        self.finished = Some(Utc::now());
+        self.finished_at = Some(SystemTime::now());
         self.error_msg = Some(err_msg.to_string());
     }
 
@@ -84,6 +85,12 @@ impl TaskId {
 
     pub fn get(&self) -> Uuid {
         self.0
+    }
+}
+
+impl Default for TaskId {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -112,6 +119,6 @@ impl<'de> serde::Deserialize<'de> for TaskId {
 
 impl std::fmt::Display for TaskId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "TaskId({})", self.0)
     }
 }

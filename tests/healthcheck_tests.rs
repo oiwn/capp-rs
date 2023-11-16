@@ -48,7 +48,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(100));
 
         let rt = Runtime::new().unwrap();
-        let result = rt.block_on(async { internet().await });
+        let result = rt.block_on(async { internet("http://127.0.0.1:8080").await });
 
         assert_eq!(result, true);
 
