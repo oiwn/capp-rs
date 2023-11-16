@@ -15,7 +15,6 @@ pub use task_executor::*;
 pub use async_trait;
 #[cfg(feature = "http")]
 pub use backoff;
-pub use chrono;
 pub use derive_builder;
 #[cfg(feature = "http")]
 pub use reqwest;
