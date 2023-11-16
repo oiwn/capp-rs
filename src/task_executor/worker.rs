@@ -93,7 +93,7 @@ where
         let start_time = std::time::Instant::now();
         match self.storage.task_pop().await {
             Ok(mut task) => {
-                task.set_in_process();
+                task.set_in_progress();
                 let result = self
                     .computation
                     .run(

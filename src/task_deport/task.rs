@@ -46,7 +46,7 @@ impl<D: Clone> Task<D> {
         }
     }
 
-    pub fn set_in_process(&mut self) {
+    pub fn set_in_progress(&mut self) {
         self.status = TaskStatus::InProgress;
         self.started_at = Some(SystemTime::now());
     }
@@ -120,5 +120,185 @@ impl<'de> serde::Deserialize<'de> for TaskId {
 impl std::fmt::Display for TaskId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "TaskId({})", self.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::panic;
+
+    use super::*;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Clone, Serialize, Deserialize, Default)]
+    struct TaskData {
+        value: u32,
+    }
+
+    #[test]
+    fn task_id_serde() {
+        let task = Task::new(TaskData { value: 1 });
+        let task_id = task.task_id.clone();
+        let serialized_task_value = serde_json::to_value(task).unwrap();
+        let serialized_task_json = serialized_task_value.to_string();
+        let desrialized_task: Task<TaskData> =
+            serde_json::from_str(&serialized_task_json).unwrap();
+        assert_eq!(task_id, desrialized_task.task_id);
+    }
+
+    #[test]
+    fn test_task_creation() {
+        let task = Task::new(TaskData::default());
+        assert!(task.started_at.is_none());
+        assert!(task.finished_at.is_none());
+        assert_eq!(task.retries, 0);
+        assert_eq!(task.payload.value, 0);
+        match task.status {
+            TaskStatus::Queued => {}
+            _ => panic!("Wrong status (task.status)"),
+        };
+    }
+
+    #[test]
+    fn test_in_progress() {
+        let mut task = Task::new(TaskData::default());
+
+        task.set_in_progress();
+        match task.status {
+            TaskStatus::InProgress => {}
+            _ => panic!("Wrong status (task.status)"),
+        };
+        assert!(task.started_at.is_some());
+        assert!(task.finished_at.is_none());
+    }
+
+    #[test]
+    fn test_succeed() {
+        let mut task = Task::new(TaskData::default());
+
+        task.set_succeed();
+        match task.status {
+            TaskStatus::Completed => {}
+            _ => panic!("Wrong status (task.status)"),
+        };
+        assert!(task.finished_at.is_some());
+        assert!(task.started_at.is_none());
+    }
+
+    #[test]
+    fn test_set_retry() {
+        let mut task = Task::new(TaskData::default());
+
+        task.set_retry("Wrong task value");
+        match task.status {
+            TaskStatus::Failed => {}
+            _ => panic!("Wrong status (task.status)"),
+        };
+        assert!(task.finished_at.is_some());
+        assert_eq!(task.retries, 1);
+        assert!(task.error_msg.is_some());
+        assert!(task.started_at.is_none());
+    }
+
+    #[test]
+    fn test_set_dlq() {
+        let mut task = Task::new(TaskData::default());
+
+        task.set_dlq("Wrong task value");
+        match task.status {
+            TaskStatus::DeadLetter => {}
+            _ => panic!("Wrong status (task.status)"),
+        };
+        assert!(task.finished_at.is_some());
+        assert!(task.started_at.is_none());
+        assert!(task.error_msg.is_some());
+    }
+
+    #[test]
+    fn task_flow_succeed() {
+        let mut task = Task::new(TaskData::default());
+
+        task.set_in_progress();
+        task.payload.value += 1;
+
+        std::thread::sleep(std::time::Duration::from_millis(5));
+
+        task.set_retry("Wrong task value");
+        task.payload.value += 1;
+
+        task.set_in_progress();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+
+        task.set_succeed();
+
+        match task.status {
+            TaskStatus::Completed => {}
+            _ => panic!("Wrong status (task.status)"),
+        };
+        assert_eq!(task.retries, 1);
+        assert_eq!(task.get_payload().value, 2);
+        assert!(task.started_at.is_some());
+        assert!(task.finished_at.is_some());
+
+        // finished_at - started_at
+        assert!(
+            task.finished_at
+                .unwrap()
+                .duration_since(task.started_at.unwrap())
+                .unwrap()
+                < std::time::Duration::from_millis(10)
+        );
+        // finished_at - queue_at
+        assert!(
+            task.finished_at
+                .unwrap()
+                .duration_since(task.queued_at)
+                .unwrap()
+                >= std::time::Duration::from_millis(10)
+        );
+    }
+
+    #[test]
+    fn test_flow() {
+        let mut task = Task::new(TaskData::default());
+
+        task.set_in_progress();
+        task.payload.value += 1;
+
+        std::thread::sleep(std::time::Duration::from_millis(5));
+
+        task.set_retry("Wrong task value");
+        task.payload.value += 1;
+
+        task.set_in_progress();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+
+        task.set_dlq("Failed to complete task");
+
+        match task.status {
+            TaskStatus::DeadLetter => {}
+            _ => panic!("Wrong status (task.status)"),
+        };
+        assert_eq!(task.retries, 1);
+        assert_eq!(task.get_payload().value, 2);
+        assert!(task.started_at.is_some());
+        assert!(task.finished_at.is_some());
+
+        // finished_at - started_at
+        assert!(
+            task.finished_at
+                .unwrap()
+                .duration_since(task.started_at.unwrap())
+                .unwrap()
+                < std::time::Duration::from_millis(10)
+        );
+        // finished_at - queue_at
+        assert!(
+            task.finished_at
+                .unwrap()
+                .duration_since(task.queued_at)
+                .unwrap()
+                >= std::time::Duration::from_millis(10)
+        );
     }
 }
