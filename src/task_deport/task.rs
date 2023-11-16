@@ -257,4 +257,48 @@ mod tests {
                 >= std::time::Duration::from_millis(10)
         );
     }
+
+    #[test]
+    fn test_flow() {
+        let mut task = Task::new(TaskData::default());
+
+        task.set_in_progress();
+        task.payload.value += 1;
+
+        std::thread::sleep(std::time::Duration::from_millis(5));
+
+        task.set_retry("Wrong task value");
+        task.payload.value += 1;
+
+        task.set_in_progress();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+
+        task.set_dlq("Failed to complete task");
+
+        match task.status {
+            TaskStatus::DeadLetter => {}
+            _ => panic!("Wrong status (task.status)"),
+        };
+        assert_eq!(task.retries, 1);
+        assert_eq!(task.get_payload().value, 2);
+        assert!(task.started_at.is_some());
+        assert!(task.finished_at.is_some());
+
+        // finished_at - started_at
+        assert!(
+            task.finished_at
+                .unwrap()
+                .duration_since(task.started_at.unwrap())
+                .unwrap()
+                < std::time::Duration::from_millis(10)
+        );
+        // finished_at - queue_at
+        assert!(
+            task.finished_at
+                .unwrap()
+                .duration_since(task.queued_at)
+                .unwrap()
+                >= std::time::Duration::from_millis(10)
+        );
+    }
 }
