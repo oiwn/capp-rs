@@ -41,7 +41,6 @@ tracing-subscriber = "0.3.17"
 
 [dev-dependencies]
 capp = { path = ".", features = ["http", "healthcheck", "redis"] }
-serde_json = "1.0.106"
 mongodb = { version = "2.6.1", features = ["tokio-runtime"] }
 scraper = "0.17.1"
 dotenvy = "0.15.7"

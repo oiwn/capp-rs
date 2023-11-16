@@ -49,7 +49,7 @@
 - [ ] better task handling in executor, queue, started, finished and TaskStatus enum
 ** Task Deport
 - [ ] add queued time, make started time optional (should be something when execution is started)
-- [ ] split TaskStorage and TaskQueue implementation where task storage is pluggable
+- [X] split TaskStorage and TaskQueue implementation where task storage is pluggable
 - [ ] drop task exceed time for execution
 - [ ] separate thread to clean up staled tasks (or find the way how to not make them stalled)
 - [ ] add more tests
@@ -60,6 +60,7 @@
 - [X] implement purge for TaskStorage trait
 - [ ] make whole capp-rs as async tasks executor for web crawling purposes
 - [ ] i think need to remove unnecessary workspaces
+- [ ] fix tests sometimes not drop database keys
 
 ** redis storage backend with bloom filter
 ** redis storage backend with priorities
