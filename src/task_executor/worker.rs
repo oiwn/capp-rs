@@ -114,11 +114,17 @@ where
                         let successful_task =
                             self.storage.task_ack(&task.task_id).await.unwrap();
                         tracing::info!(
-                            "[worker-{}] Task {} succeed: {:?}",
-                            self.worker_id,
+                            "Task {} succeed: {:?}",
                             &successful_task.task_id,
                             &successful_task.payload
                         );
+
+                        // tracing::info!(
+                        //     "[worker-{}] Task {} succeed: {:?}",
+                        //     self.worker_id,
+                        //     &successful_task.task_id,
+                        //     &successful_task.payload
+                        // );
 
                         // record stats on success
                         self.stats.record_execution_time(start_time.elapsed());
@@ -129,18 +135,24 @@ where
                         if task.retries < self.options.max_retries {
                             self.storage.task_push(&task).await.unwrap();
                             tracing::error!(
-                                "[worker-{}] Task {} failed, retrying ({}): {:?}",
-                                self.worker_id,
+                                "Task {} failed, retrying ({}): {:?}",
                                 &task.task_id,
                                 &task.retries,
                                 &err
                             );
+
+                            // tracing::error!(
+                            //     "[worker-{}] Task {} failed, retrying ({}): {:?}",
+                            //     self.worker_id,
+                            //     &task.task_id,
+                            //     &task.retries,
+                            //     &err
+                            // );
                         } else {
                             task.set_dlq("Max retries");
                             self.storage.task_to_dlq(&task).await.unwrap();
                             tracing::error!(
-                                "[worker-{}] Task {} failed, max reties ({}): {:?}",
-                                self.worker_id,
+                                "Task {} failed, max reties ({}): {:?}",
                                 &task.task_id,
                                 &task.retries,
                                 &err
@@ -153,10 +165,7 @@ where
                 }
             }
             Err(TaskStorageError::StorageIsEmptyError) => {
-                tracing::warn!(
-                    "[worker-{}] No tasks found, waiting...",
-                    self.worker_id
-                );
+                tracing::warn!("No tasks found, waiting...");
                 // wait for a while till try to fetch task
                 tokio::time::sleep(tokio::time::Duration::from_millis(
                     self.options.no_task_found_delay_ms,
@@ -185,8 +194,8 @@ impl std::fmt::Display for WorkerId {
     }
 }
 
-/// A wrapper for the worker function that also checks for task
-/// limits and handles shutdown signals.
+/// This wrapper used to create new Worker setup internal logging
+/// and handle comminications with worker
 pub async fn worker_wrapper<Data, Comp, Ctx>(
     worker_id: WorkerId,
     ctx: Arc<Ctx>,
@@ -215,22 +224,28 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
     );
     let mut should_stop = false;
 
+    // setup spans
+    let span = tracing::info_span!("worker", worker_id = %worker_id);
+    let _enter = span.enter();
+
     'worker: loop {
         tokio::select! {
             _ = terminate.recv() => {
-                tracing::info!("[worker-{}] terminating immediately", worker_id);
+                tracing::info!("Terminating immediately");
                 return;
             },
             run_result = worker.run(), if !should_stop => {
                 match commands.try_recv() {
                     Ok(WorkerCommand::Shutdown) => {
-                        tracing::info!("[worker-{}] shut down received", worker_id);
+                        tracing::error!("Shutdown received");
                         should_stop = true;
                     }
                     Err(TryRecvError::Disconnected) => break 'worker,
                     _ => {}
 
                 }
+                // If worker ask to shutdown for some reason
+                // i.e some amount of tasks finished
                 if let Ok(re) = run_result {
                     if re == false {
                         return;
@@ -241,15 +256,12 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
 
         // If a stop command was received, finish any ongoing work and then exit.
         if should_stop {
-            tracing::info!(
-                "[worker-{}] completing current task before stopping.",
-                worker_id
-            );
+            tracing::info!("[completing current task before stopping.",);
             break;
         }
     }
 
-    tracing::info!("[worker-{}] completed", worker_id);
+    tracing::info!("completed");
 }
 
 #[cfg(test)]

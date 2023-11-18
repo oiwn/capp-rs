@@ -83,6 +83,10 @@ pub async fn run_workers<Data, Comp, Ctx>(
         )));
     }
 
+    // Following part setup separate thread to catch ctrl+c
+    // signal. Single press will send Shutdown signal to all workers.
+    // next ctrl-c will terminate workers immediately.
+
     let ctrl_c_counter = Arc::new(AtomicUsize::new(0));
 
     // Setup signal handling
@@ -91,7 +95,9 @@ pub async fn run_workers<Data, Comp, Ctx>(
 
     tokio::spawn(async move {
         loop {
-            signal::ctrl_c().await.expect("Failed to listen for event");
+            signal::ctrl_c()
+                .await
+                .expect("Failed to listen for ctrl+c event");
             let count = signal_counter.fetch_add(1, Ordering::SeqCst);
 
             match count {
@@ -130,6 +136,8 @@ pub async fn run_workers<Data, Comp, Ctx>(
             }
         }
     }
+
+    tracing::info!("All workers stopped")
 }
 
 #[cfg(test)]

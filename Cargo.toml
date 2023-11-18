@@ -1,6 +1,6 @@
 [package]
 name = "capp"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 license = "MIT"
 authors = ["oiwn"]
@@ -50,9 +50,3 @@ dotenvy = "0.15.7"
 http = ["dep:backoff", "dep:reqwest"]
 healthcheck = ["dep:reqwest"]
 redis = ["dep:rustis"]
-
-# size optimization
-[profile.release]
-opt-level = "s" # or "z" for more aggressive size optimization
-lto = true # Enable Link Time Optimization
-codegen-units = 1 # Reduce parallel code generation units to maximize optimizations

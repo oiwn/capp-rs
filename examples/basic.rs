@@ -50,11 +50,13 @@ impl Computation<TaskData, Context> for DivisionComputation {
         _storage: Arc<dyn TaskStorage<TaskData> + Send + Sync>,
         task: &mut Task<TaskData>,
     ) -> Result<(), ComputationError> {
-        tracing::info!(
-            "[worker-{}] Task received to process: {:?}",
-            worker_id,
-            task.get_payload()
-        );
+        tracing::info!("Task received to process: {:?}", task.get_payload());
+
+        // tracing::info!(
+        //     "[worker-{}] Task received to process: {:?}",
+        //     worker_id,
+        //     task.get_payload()
+        // );
         let rem = task.payload.value % 3;
         if rem != 0 {
             let err_msg = format!("Can't divide {} by 3", task.payload.value);
@@ -115,7 +117,7 @@ async fn main() {
     let executor_options = ExecutorOptionsBuilder::default()
         .worker_options(
             WorkerOptionsBuilder::default()
-                .task_limit(6)
+                .task_limit(10)
                 .build()
                 .unwrap(),
         )
