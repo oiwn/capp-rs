@@ -61,6 +61,19 @@
 - [ ] make whole capp-rs as async tasks executor for web crawling purposes
 - [ ] i think need to remove unnecessary workspaces
 - [ ] fix tests sometimes not drop database keys
+** Workers manager
+Need something to manager workers. I think worker should return anyhow:Result<ComputationResult> and if Computation
+failed manager run worker again. Also there can be thread somewhere which will run another worker instead of failed.
+** Workers communications
+Worker should have bi-directional channels to communicate with nodes and channel to accept termination signal.
+add Anyhow::Error for worker run
+Manager should collect stats about workers
+** Computation function
+- [ ] computation function should return anyhow::Error
+- [ ] computation could be paused and resumed
+** Idiomatic logging
+- [ ] use tracing spans to pass worker_id info
+
 
 ** redis storage backend with bloom filter
 ** redis storage backend with priorities

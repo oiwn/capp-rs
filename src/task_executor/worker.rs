@@ -6,7 +6,10 @@ use crate::{
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{
+    broadcast,
+    mpsc::{self, error::TryRecvError},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkerId(usize);
@@ -23,8 +26,9 @@ pub struct WorkerOptions {
 }
 
 pub enum WorkerCommand {
-    Stop,      // stop after current task processed
-    Terminate, // terminate immediately
+    Shutdown, // Gracefully shut down worker
+              // Stop,     // Stop worker for a while (current task will be finished)
+              // Resume,   // Resume worker
 }
 
 pub struct Worker<Data, Comp, Ctx> {
@@ -77,7 +81,7 @@ where
     /// 2) run computation over task
     /// 3) update task according to computation result
     /// Return true if should continue or false otherwise
-    pub async fn run(&mut self) -> bool {
+    pub async fn run(&mut self) -> anyhow::Result<bool> {
         // Implement limiting amount of tasks per worker
         if let Some(limit) = self.options.task_limit {
             if self.stats.tasks_processed >= limit {
@@ -86,7 +90,7 @@ where
                     self.worker_id,
                     limit
                 );
-                return false;
+                return Ok(false);
             }
         };
 
@@ -161,7 +165,7 @@ where
             }
             Err(_err) => {}
         };
-        true
+        Ok(true)
     }
 }
 
@@ -189,6 +193,7 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
     storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
     computation: Arc<Comp>,
     mut commands: mpsc::Receiver<WorkerCommand>,
+    mut terminate: broadcast::Receiver<()>,
     worker_options: WorkerOptions,
 ) where
     Data: std::fmt::Debug
@@ -212,33 +217,25 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
 
     'worker: loop {
         tokio::select! {
-            biased;
+            _ = terminate.recv() => {
+                tracing::info!("[worker-{}] terminating immediately", worker_id);
+                return;
+            },
+            run_result = worker.run(), if !should_stop => {
+                match commands.try_recv() {
+                    Ok(WorkerCommand::Shutdown) => {
+                        tracing::info!("[worker-{}] shut down received", worker_id);
+                        should_stop = true;
+                    }
+                    Err(TryRecvError::Disconnected) => break 'worker,
+                    _ => {}
 
-            command = commands.recv() => {
-                match command {
-                    Some(WorkerCommand::Terminate) => {
-                        // Terminate immediately
-                        tracing::info!("[worker-{}] terminating immediately.", worker_id);
+                }
+                if let Ok(re) = run_result {
+                    if re == false {
                         return;
                     }
-                    Some(WorkerCommand::Stop) => {
-                        // Stop after current work is done, only if not already stopping
-                        if !should_stop {
-                            tracing::info!("[worker-{}] stopping after current work.", worker_id);
-                            should_stop = true;
-                        }
-                    }
-                    None => {
-                        // The command channel has closed, we should stop the worker
-                        break 'worker;
-                    }
                 }
-            },
-            should_continue = worker.run(), if !should_stop => {
-                if !should_continue {
-                    break 'worker;
-                }
-                // Normal work execution
             }
         };
 
@@ -248,7 +245,6 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
                 "[worker-{}] completing current task before stopping.",
                 worker_id
             );
-            worker.run().await;
             break;
         }
     }
