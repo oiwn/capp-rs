@@ -45,18 +45,13 @@ impl Computation<TaskData, Context> for DivisionComputation {
     /// TaskRunner will fail tasks which value can't be divided by 3
     async fn run(
         &self,
-        worker_id: WorkerId,
+        _worker_id: WorkerId,
         _ctx: Arc<Context>,
         _storage: Arc<dyn TaskStorage<TaskData> + Send + Sync>,
         task: &mut Task<TaskData>,
     ) -> Result<(), ComputationError> {
         tracing::info!("Task received to process: {:?}", task.get_payload());
 
-        // tracing::info!(
-        //     "[worker-{}] Task received to process: {:?}",
-        //     worker_id,
-        //     task.get_payload()
-        // );
         let rem = task.payload.value % 3;
         if rem != 0 {
             let err_msg = format!("Can't divide {} by 3", task.payload.value);

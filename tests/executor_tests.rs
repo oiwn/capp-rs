@@ -135,7 +135,7 @@ mod tests {
                 WorkerOptionsBuilder::default()
                     .max_retries(10_u32)
                     .task_limit(3)
-                    .no_task_found_delay_ms(50_u64)
+                    .no_task_found_delay(std::time::Duration::from_millis(50))
                     .build()
                     .unwrap(),
             )

@@ -38,9 +38,13 @@ failed manager run worker again. Also there can be thread somewhere which will r
 Worker should have bi-directional channels to communicate with nodes and channel to accept termination signal.
 add Anyhow::Error for worker run
 Manager should collect stats about workers
+- [X] worker sleep timeout - make it std::time::Duration
 ** Computation function
 - [X] computation function should return anyhow::Error
 - [ ] computation could be paused and resumed
+** InMemory storage backend
+- [ ] Probably i need to Box list and hashmap since they could grow large and quickly overflow the stack
+** Consider to use Tower as abstraction for function
 
 
 ** redis storage backend with bloom filter

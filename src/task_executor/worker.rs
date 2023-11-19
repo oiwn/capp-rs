@@ -5,7 +5,7 @@ use crate::{
 };
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use tokio::sync::{
     broadcast,
     mpsc::{self, error::TryRecvError},
@@ -21,8 +21,8 @@ pub struct WorkerOptions {
     pub max_retries: u32,
     #[builder(default = "None")]
     pub task_limit: Option<usize>,
-    #[builder(default = "5000")]
-    pub no_task_found_delay_ms: u64,
+    #[builder(default = "std::time::Duration::from_secs(5)")]
+    pub no_task_found_delay: Duration,
 }
 
 pub enum WorkerCommand {
@@ -119,13 +119,6 @@ where
                             &successful_task.payload
                         );
 
-                        // tracing::info!(
-                        //     "[worker-{}] Task {} succeed: {:?}",
-                        //     self.worker_id,
-                        //     &successful_task.task_id,
-                        //     &successful_task.payload
-                        // );
-
                         // record stats on success
                         self.stats.record_execution_time(start_time.elapsed());
                         self.stats.record_success();
@@ -140,14 +133,6 @@ where
                                 &task.retries,
                                 &err
                             );
-
-                            // tracing::error!(
-                            //     "[worker-{}] Task {} failed, retrying ({}): {:?}",
-                            //     self.worker_id,
-                            //     &task.task_id,
-                            //     &task.retries,
-                            //     &err
-                            // );
                         } else {
                             task.set_dlq("Max retries");
                             self.storage.task_to_dlq(&task).await.unwrap();
@@ -167,10 +152,7 @@ where
             Err(TaskStorageError::StorageIsEmptyError) => {
                 tracing::warn!("No tasks found, waiting...");
                 // wait for a while till try to fetch task
-                tokio::time::sleep(tokio::time::Duration::from_millis(
-                    self.options.no_task_found_delay_ms,
-                ))
-                .await;
+                tokio::time::sleep(self.options.no_task_found_delay).await;
             }
             Err(_err) => {}
         };
@@ -247,7 +229,7 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
                 // If worker ask to shutdown for some reason
                 // i.e some amount of tasks finished
                 if let Ok(re) = run_result {
-                    if re == false {
+                    if !re {
                         return;
                     }
                 }
@@ -275,6 +257,6 @@ mod tests {
         let options = WorkerOptionsBuilder::default().build().unwrap();
         assert_eq!(options.max_retries, 3);
         assert_eq!(options.task_limit, None);
-        assert_eq!(options.no_task_found_delay_ms, 5000);
+        assert_eq!(options.no_task_found_delay, Duration::from_millis(5000));
     }
 }
