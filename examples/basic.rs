@@ -3,7 +3,7 @@ use capp::{
     computation::{Computation, ComputationError},
     config::Configurable,
     task_deport::{InMemoryTaskStorage, Task, TaskStorage},
-    ExecutorOptionsBuilder, WorkerId,
+    ExecutorOptionsBuilder, WorkerId, WorkerOptionsBuilder,
 };
 use serde::{Deserialize, Serialize};
 use std::{path, sync::Arc};
@@ -45,24 +45,22 @@ impl Computation<TaskData, Context> for DivisionComputation {
     /// TaskRunner will fail tasks which value can't be divided by 3
     async fn run(
         &self,
-        worker_id: WorkerId,
+        _worker_id: WorkerId,
         _ctx: Arc<Context>,
         _storage: Arc<dyn TaskStorage<TaskData> + Send + Sync>,
         task: &mut Task<TaskData>,
     ) -> Result<(), ComputationError> {
-        tracing::info!(
-            "[worker-{}] Task received to process: {:?}",
-            worker_id,
-            task.get_payload()
-        );
+        tracing::info!("Task received to process: {:?}", task.get_payload());
+
         let rem = task.payload.value % 3;
         if rem != 0 {
             let err_msg = format!("Can't divide {} by 3", task.payload.value);
+            tokio::time::sleep(tokio::time::Duration::from_secs(rem as u64)).await;
             return Err(ComputationError::Function(err_msg));
         };
 
         task.payload.finished = true;
-        tokio::time::sleep(tokio::time::Duration::from_secs(rem as u64)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         Ok(())
     }
 }
@@ -92,7 +90,7 @@ async fn make_storage() -> Arc<dyn TaskStorage<TaskData> + Send + Sync> {
         let _ = storage.task_push(&task).await;
     }
 
-    for _ in 1..=5 {
+    for _ in 1..=10 {
         let task: Task<TaskData> = Task::new(TaskData {
             domain: "three".to_string(),
             value: 2,
@@ -112,6 +110,12 @@ async fn main() {
 
     let computation = Arc::new(DivisionComputation {});
     let executor_options = ExecutorOptionsBuilder::default()
+        .worker_options(
+            WorkerOptionsBuilder::default()
+                .task_limit(10)
+                .build()
+                .unwrap(),
+        )
         .task_limit(30)
         .concurrency_limit(4_usize)
         .build()

@@ -5,8 +5,6 @@ use crate::task_executor::{
     worker_wrapper, Computation, WorkerCommand, WorkerOptions, WorkerOptionsBuilder,
 };
 use derive_builder::Builder;
-use tokio::{signal, sync::mpsc};
-
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     collections::HashMap,
@@ -14,6 +12,10 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
     },
+};
+use tokio::{
+    signal,
+    sync::{broadcast, mpsc},
 };
 
 type WorkerCommandSenders =
@@ -57,6 +59,8 @@ pub async fn run_workers<Data, Comp, Ctx>(
     let command_senders: WorkerCommandSenders =
         Arc::new(Mutex::new(HashMap::new()));
 
+    let (terminate_sender, _) = broadcast::channel::<()>(10);
+
     for i in 1..=options.concurrency_limit {
         let worker_id = WorkerId::new(i);
         let (command_sender, command_receiver) =
@@ -66,6 +70,7 @@ pub async fn run_workers<Data, Comp, Ctx>(
             .lock()
             .unwrap()
             .insert(worker_id, command_sender);
+        let terminate_receiver = terminate_sender.subscribe();
 
         worker_handlers.push(tokio::spawn(worker_wrapper::<Data, Comp, Ctx>(
             WorkerId::new(i),
@@ -73,9 +78,14 @@ pub async fn run_workers<Data, Comp, Ctx>(
             Arc::clone(&storage),
             Arc::clone(&computation),
             command_receiver,
+            terminate_receiver,
             options.worker_options.clone(),
         )));
     }
+
+    // Following part setup separate thread to catch ctrl+c
+    // signal. Single press will send Shutdown signal to all workers.
+    // next ctrl-c will terminate workers immediately.
 
     let ctrl_c_counter = Arc::new(AtomicUsize::new(0));
 
@@ -85,7 +95,9 @@ pub async fn run_workers<Data, Comp, Ctx>(
 
     tokio::spawn(async move {
         loop {
-            signal::ctrl_c().await.expect("Failed to listen for event");
+            signal::ctrl_c()
+                .await
+                .expect("Failed to listen for ctrl+c event");
             let count = signal_counter.fetch_add(1, Ordering::SeqCst);
 
             match count {
@@ -99,7 +111,7 @@ pub async fn run_workers<Data, Comp, Ctx>(
                         lock.values().cloned().collect()
                     };
                     for sender in senders {
-                        let _ = sender.send(WorkerCommand::Stop).await;
+                        let _ = sender.send(WorkerCommand::Shutdown).await;
                     }
                 }
                 _ => {
@@ -107,13 +119,7 @@ pub async fn run_workers<Data, Comp, Ctx>(
                     tracing::warn!(
                         "Ctrl+C received again, terminating all workers..."
                     );
-                    let senders: Vec<_> = {
-                        let lock = command_senders.lock().unwrap();
-                        lock.values().cloned().collect()
-                    };
-                    for sender in senders {
-                        let _ = sender.send(WorkerCommand::Terminate).await;
-                    }
+                    terminate_sender.send(()).unwrap();
                     break;
                 }
             }
@@ -122,14 +128,16 @@ pub async fn run_workers<Data, Comp, Ctx>(
 
     for handler in worker_handlers {
         match handler.await {
-            Ok(worker) => {
-                tracing::info!("Worker finished: {:?}", worker);
+            Ok(res) => {
+                tracing::info!("Worker stopped: {:?}", res);
             }
             Err(err) => {
                 tracing::error!("Fatal error in one of the workers: {:?}", err);
             }
         }
     }
+
+    tracing::info!("All workers stopped")
 }
 
 #[cfg(test)]

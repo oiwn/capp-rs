@@ -1,7 +1,6 @@
 #+title: Notes
 
 * Tasks
-** TODO implement default debug trait for Configurable
 ** need workflows
 - [ ] coverage
 - [X] tests/clippy/check/fmt
@@ -12,55 +11,41 @@
 - [ ] optional redis
 - [ ] optional mongodb
 - [ ] optional postgres
-** TODO further adjustments
-- [X] re-export common crate - thiserror
-- [X] pass context where db connections could be stored
-- [X] rename example/basic.rs into executor_basic.rs
-- [X] make_sorage return TaskStorage instead of wrapped with Arc<>
-- [X] fix max_retries
-- [X] fix tests after adding context to the executor
-- [ ] adjust async tests to [tokio::test] and drop initialization of async runtime in code
-- [X] task fail into storage, to collect totaly (by max_retries) failed tasks
-- [X] reexport as much as possible from task_deport
-- [X] optional redis storage backend using rustis
-- [-] separate tests for redis backend
-- [-] try to move tests init common function into separate file in tests/ folder
-- [X] use same builder pattern for Application
-- [X] pass task_id into the process
-- [X] re-export Uuid
-- [X] optional dependencies for task_deport
-- [X] seriously figure out dependencies and reexport crates
 ** Refactor worker. Add basic monitoring capabilities.
-- [X] worker is struct
-- [X] add stats fields to collect worker stats
-- [X] rename executor/executor.rs to something else
-- [X] move WorkerStats into the separate module
+- [ ] adjust async tests to [tokio::test] and drop initialization of async runtime in code
 - [ ] expose http endpoint with json collected basic stats from workers
 ** Refactor processor/task_runner/computation.
 - [ ] shared context for Computation. way to transform &Worker to SharedContext
-- [X] make example work with improved processor
-- [X] make better naming for processor
 - [ ] add storage error types context error types to TaskProcessorError
 ** Refactor storage (task deport)
-- [X] new type for TaskId
-- [X] remove custom error type for simplicity (no SE generic anymore yay!)
 ** Executor
-- [X] figure out how to move constrains from direct name of TaskStorage to something like Box<dyn impl TaskStorage>
 - [ ] better task handling in executor, queue, started, finished and TaskStatus enum
 ** Task Deport
 - [ ] add queued time, make started time optional (should be something when execution is started)
-- [X] split TaskStorage and TaskQueue implementation where task storage is pluggable
 - [ ] drop task exceed time for execution
 - [ ] separate thread to clean up staled tasks (or find the way how to not make them stalled)
 - [ ] add more tests
 ** Important!!!!
 - [-] TaskProcessor::process should not panic? (ugh it's complicated to apply catch_unwind to async function)
-- [X] thiserror should not be optional
 - [ ] Use tokio per core executor to make tasks Sync maybe? if possible
-- [X] implement purge for TaskStorage trait
 - [ ] make whole capp-rs as async tasks executor for web crawling purposes
 - [ ] i think need to remove unnecessary workspaces
 - [ ] fix tests sometimes not drop database keys
+** Workers manager
+Need something to manager workers. I think worker should return anyhow:Result<ComputationResult> and if Computation
+failed manager run worker again. Also there can be thread somewhere which will run another worker instead of failed.
+** Workers communications
+Worker should have bi-directional channels to communicate with nodes and channel to accept termination signal.
+add Anyhow::Error for worker run
+Manager should collect stats about workers
+- [X] worker sleep timeout - make it std::time::Duration
+** Computation function
+- [X] computation function should return anyhow::Error
+- [ ] computation could be paused and resumed
+** InMemory storage backend
+- [ ] Probably i need to Box list and hashmap since they could grow large and quickly overflow the stack
+** Consider to use Tower as abstraction for function
+
 
 ** redis storage backend with bloom filter
 ** redis storage backend with priorities

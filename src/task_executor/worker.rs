@@ -5,8 +5,11 @@ use crate::{
 };
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
-use std::sync::Arc;
-use tokio::sync::mpsc;
+use std::{sync::Arc, time::Duration};
+use tokio::sync::{
+    broadcast,
+    mpsc::{self, error::TryRecvError},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkerId(usize);
@@ -18,13 +21,14 @@ pub struct WorkerOptions {
     pub max_retries: u32,
     #[builder(default = "None")]
     pub task_limit: Option<usize>,
-    #[builder(default = "5000")]
-    pub no_task_found_delay_ms: u64,
+    #[builder(default = "std::time::Duration::from_secs(5)")]
+    pub no_task_found_delay: Duration,
 }
 
 pub enum WorkerCommand {
-    Stop,      // stop after current task processed
-    Terminate, // terminate immediately
+    Shutdown, // Gracefully shut down worker
+              // Stop,     // Stop worker for a while (current task will be finished)
+              // Resume,   // Resume worker
 }
 
 pub struct Worker<Data, Comp, Ctx> {
@@ -77,7 +81,7 @@ where
     /// 2) run computation over task
     /// 3) update task according to computation result
     /// Return true if should continue or false otherwise
-    pub async fn run(&mut self) -> bool {
+    pub async fn run(&mut self) -> anyhow::Result<bool> {
         // Implement limiting amount of tasks per worker
         if let Some(limit) = self.options.task_limit {
             if self.stats.tasks_processed >= limit {
@@ -86,7 +90,7 @@ where
                     self.worker_id,
                     limit
                 );
-                return false;
+                return Ok(false);
             }
         };
 
@@ -110,8 +114,7 @@ where
                         let successful_task =
                             self.storage.task_ack(&task.task_id).await.unwrap();
                         tracing::info!(
-                            "[worker-{}] Task {} succeed: {:?}",
-                            self.worker_id,
+                            "Task {} succeed: {:?}",
                             &successful_task.task_id,
                             &successful_task.payload
                         );
@@ -125,8 +128,7 @@ where
                         if task.retries < self.options.max_retries {
                             self.storage.task_push(&task).await.unwrap();
                             tracing::error!(
-                                "[worker-{}] Task {} failed, retrying ({}): {:?}",
-                                self.worker_id,
+                                "Task {} failed, retrying ({}): {:?}",
                                 &task.task_id,
                                 &task.retries,
                                 &err
@@ -135,8 +137,7 @@ where
                             task.set_dlq("Max retries");
                             self.storage.task_to_dlq(&task).await.unwrap();
                             tracing::error!(
-                                "[worker-{}] Task {} failed, max reties ({}): {:?}",
-                                self.worker_id,
+                                "Task {} failed, max reties ({}): {:?}",
                                 &task.task_id,
                                 &task.retries,
                                 &err
@@ -149,19 +150,13 @@ where
                 }
             }
             Err(TaskStorageError::StorageIsEmptyError) => {
-                tracing::warn!(
-                    "[worker-{}] No tasks found, waiting...",
-                    self.worker_id
-                );
+                tracing::warn!("No tasks found, waiting...");
                 // wait for a while till try to fetch task
-                tokio::time::sleep(tokio::time::Duration::from_millis(
-                    self.options.no_task_found_delay_ms,
-                ))
-                .await;
+                tokio::time::sleep(self.options.no_task_found_delay).await;
             }
             Err(_err) => {}
         };
-        true
+        Ok(true)
     }
 }
 
@@ -181,14 +176,15 @@ impl std::fmt::Display for WorkerId {
     }
 }
 
-/// A wrapper for the worker function that also checks for task
-/// limits and handles shutdown signals.
+/// This wrapper used to create new Worker setup internal logging
+/// and handle comminications with worker
 pub async fn worker_wrapper<Data, Comp, Ctx>(
     worker_id: WorkerId,
     ctx: Arc<Ctx>,
     storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
     computation: Arc<Comp>,
     mut commands: mpsc::Receiver<WorkerCommand>,
+    mut terminate: broadcast::Receiver<()>,
     worker_options: WorkerOptions,
 ) where
     Data: std::fmt::Debug
@@ -210,50 +206,44 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
     );
     let mut should_stop = false;
 
+    // setup spans
+    let span = tracing::info_span!("worker", worker_id = %worker_id);
+    let _enter = span.enter();
+
     'worker: loop {
         tokio::select! {
-            biased;
+            _ = terminate.recv() => {
+                tracing::info!("Terminating immediately");
+                return;
+            },
+            run_result = worker.run(), if !should_stop => {
+                match commands.try_recv() {
+                    Ok(WorkerCommand::Shutdown) => {
+                        tracing::error!("Shutdown received");
+                        should_stop = true;
+                    }
+                    Err(TryRecvError::Disconnected) => break 'worker,
+                    _ => {}
 
-            command = commands.recv() => {
-                match command {
-                    Some(WorkerCommand::Terminate) => {
-                        // Terminate immediately
-                        tracing::info!("[worker-{}] terminating immediately.", worker_id);
+                }
+                // If worker ask to shutdown for some reason
+                // i.e some amount of tasks finished
+                if let Ok(re) = run_result {
+                    if !re {
                         return;
                     }
-                    Some(WorkerCommand::Stop) => {
-                        // Stop after current work is done, only if not already stopping
-                        if !should_stop {
-                            tracing::info!("[worker-{}] stopping after current work.", worker_id);
-                            should_stop = true;
-                        }
-                    }
-                    None => {
-                        // The command channel has closed, we should stop the worker
-                        break 'worker;
-                    }
                 }
-            },
-            should_continue = worker.run(), if !should_stop => {
-                if !should_continue {
-                    break 'worker;
-                }
-                // Normal work execution
             }
         };
 
         // If a stop command was received, finish any ongoing work and then exit.
         if should_stop {
-            tracing::info!(
-                "[worker-{}] completing current task before stopping.",
-                worker_id
-            );
-            worker.run().await;
+            tracing::info!("[completing current task before stopping.",);
             break;
         }
     }
 
-    tracing::info!("[worker-{}] completed", worker_id);
+    tracing::info!("completed");
 }
 
 #[cfg(test)]
@@ -267,6 +257,6 @@ mod tests {
         let options = WorkerOptionsBuilder::default().build().unwrap();
         assert_eq!(options.max_retries, 3);
         assert_eq!(options.task_limit, None);
-        assert_eq!(options.no_task_found_delay_ms, 5000);
+        assert_eq!(options.no_task_found_delay, Duration::from_millis(5000));
     }
 }
