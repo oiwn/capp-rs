@@ -5,7 +5,9 @@ pub mod task_executor;
 pub mod healthcheck;
 #[cfg(feature = "http")]
 pub mod http;
+mod support;
 pub mod task_deport;
+pub mod test_utils;
 
 // Crates
 pub use task_deport::*;

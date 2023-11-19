@@ -45,6 +45,9 @@ Manager should collect stats about workers
 ** InMemory storage backend
 - [ ] Probably i need to Box list and hashmap since they could grow large and quickly overflow the stack
 ** Consider to use Tower as abstraction for function
+** Renaming?
+- [ ] task_deport -> storage
+- [ ] task_executor -> manager
 
 
 ** redis storage backend with bloom filter
