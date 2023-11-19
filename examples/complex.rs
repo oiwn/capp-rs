@@ -3,7 +3,7 @@ use capp::{
     computation::{Computation, ComputationError},
     config::Configurable,
     run_workers,
-    task_deport::{RedisTaskStorage, Task, TaskStorage},
+    storage::{RedisTaskStorage, Task, TaskStorage},
     ExecutorOptionsBuilder, WorkerId,
 };
 use rustis::commands::HashCommands;

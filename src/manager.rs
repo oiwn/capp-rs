@@ -3,7 +3,7 @@ pub mod stats;
 mod utils;
 pub mod worker;
 
-pub use computation::Computation;
+pub use computation::{Computation, ComputationError};
 pub use stats::{SharedStats, WorkerStats};
 pub use utils::run_workers;
 pub use utils::ExecutorOptions;

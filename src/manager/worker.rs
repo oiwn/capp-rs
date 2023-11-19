@@ -1,6 +1,6 @@
 use crate::{
     config::Configurable,
-    task_deport::{TaskStorage, TaskStorageError},
+    storage::{TaskStorage, TaskStorageError},
     AbstractTaskStorage, Computation, WorkerStats,
 };
 use derive_builder::Builder;
@@ -27,8 +27,6 @@ pub struct WorkerOptions {
 
 pub enum WorkerCommand {
     Shutdown, // Gracefully shut down worker
-              // Stop,     // Stop worker for a while (current task will be finished)
-              // Resume,   // Resume worker
 }
 
 pub struct Worker<Data, Comp, Ctx> {

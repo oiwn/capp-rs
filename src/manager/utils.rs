@@ -1,8 +1,11 @@
 use super::WorkerId;
-use crate::config::Configurable;
-use crate::task_deport::TaskStorage;
-use crate::task_executor::{
-    worker_wrapper, Computation, WorkerCommand, WorkerOptions, WorkerOptionsBuilder,
+use crate::{
+    config::Configurable,
+    manager::{
+        worker_wrapper, Computation, WorkerCommand, WorkerOptions,
+        WorkerOptionsBuilder,
+    },
+    storage::TaskStorage,
 };
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
