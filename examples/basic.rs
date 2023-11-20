@@ -1,7 +1,10 @@
 use async_trait::async_trait;
 use capp::{
-    config::Configurable, Computation, ComputationError, ExecutorOptionsBuilder,
-    InMemoryTaskStorage, Task, TaskStorage, WorkerId, WorkerOptionsBuilder,
+    computation::{Computation, ComputationError},
+    config::Configurable,
+    manager::{WorkersManager, WorkersManagerOptionsBuilder},
+    storage::{InMemoryTaskStorage, Task, TaskStorage},
+    worker::{WorkerId, WorkerOptionsBuilder},
 };
 use serde::{Deserialize, Serialize};
 use std::{path, sync::Arc};
@@ -67,8 +70,8 @@ impl Computation<TaskData, Context> for DivisionComputation {
 /// For current set following conditions should be true:
 /// total tasks = 9
 /// number of failed tasks = 4
-async fn make_storage() -> Arc<dyn TaskStorage<TaskData> + Send + Sync> {
-    let storage = Arc::new(InMemoryTaskStorage::new());
+async fn make_storage() -> impl TaskStorage<TaskData> + Send + Sync {
+    let storage = InMemoryTaskStorage::new();
 
     for i in 1..=5 {
         let task: Task<TaskData> = Task::new(TaskData {
@@ -103,11 +106,11 @@ async fn make_storage() -> Arc<dyn TaskStorage<TaskData> + Send + Sync> {
 async fn main() {
     tracing_subscriber::fmt::init();
     let config_path = "tests/simple_config.yml";
-    let ctx = Arc::new(Context::from_config(config_path));
+    let ctx = Context::from_config(config_path);
     let storage = make_storage().await;
 
-    let computation = Arc::new(DivisionComputation {});
-    let executor_options = ExecutorOptionsBuilder::default()
+    let computation = DivisionComputation {};
+    let manager_options = WorkersManagerOptionsBuilder::default()
         .worker_options(
             WorkerOptionsBuilder::default()
                 .task_limit(10)
@@ -118,5 +121,8 @@ async fn main() {
         .concurrency_limit(4_usize)
         .build()
         .unwrap();
-    capp::run_workers(ctx, computation, storage, executor_options).await;
+
+    let mut manager =
+        WorkersManager::new(ctx, computation, storage, manager_options);
+    manager.run_workers().await;
 }
