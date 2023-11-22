@@ -34,8 +34,8 @@ pub struct Worker<Data, Comp, Ctx> {
     ctx: Arc<Ctx>,
     storage: AbstractTaskStorage<Data>,
     computation: Arc<Comp>,
-    stats: WorkerStats,
-    options: WorkerOptions,
+    pub stats: WorkerStats,
+    pub options: WorkerOptions,
 }
 
 /// A worker implementation that fetches a task from the storage, processes it,
@@ -80,14 +80,13 @@ where
     /// 3) update task according to computation result
     /// Return true if should continue or false otherwise
     pub async fn run(&mut self) -> anyhow::Result<bool> {
+        let span = tracing::info_span!("worker", worker_id = %self.worker_id);
+        let _span_guard = span.enter();
+
         // Implement limiting amount of tasks per worker
         if let Some(limit) = self.options.task_limit {
             if self.stats.tasks_processed >= limit {
-                tracing::info!(
-                    "[{}] task_limit reached: {}",
-                    self.worker_id,
-                    limit
-                );
+                tracing::info!("task_limit reached: {}", limit);
                 return Ok(false);
             }
         };
@@ -98,7 +97,7 @@ where
                 task.set_in_progress();
                 let result = self
                     .computation
-                    .run(
+                    .call(
                         self.worker_id,
                         self.ctx.clone(),
                         self.storage.clone(),
@@ -158,6 +157,17 @@ where
     }
 }
 
+impl<Data, Comp, Ctx> std::fmt::Debug for Worker<Data, Comp, Ctx> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Worker")
+            .field("worker_id", &self.worker_id)
+            .field("options", &self.options)
+            .field("stats", &self.stats)
+            // Optionally, you can add other fields here
+            .finish()
+    }
+}
+
 impl WorkerId {
     pub fn new(id: usize) -> Self {
         Self(id)
@@ -205,8 +215,8 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
     let mut should_stop = false;
 
     // setup spans
-    let span = tracing::info_span!("worker", worker_id = %worker_id);
-    let _enter = span.enter();
+    // let span = tracing::info_span!("worker", worker_id = %worker_id);
+    // let _enter = span.enter();
 
     'worker: loop {
         tokio::select! {
@@ -236,7 +246,7 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
 
         // If a stop command was received, finish any ongoing work and then exit.
         if should_stop {
-            tracing::info!("[completing current task before stopping.",);
+            tracing::info!("Completing current task before stopping.",);
             break;
         }
     }

@@ -54,7 +54,13 @@ impl<Data> std::fmt::Debug for InMemoryTaskStorage<Data> {
 #[async_trait]
 impl<Data> TaskStorage<Data> for InMemoryTaskStorage<Data>
 where
-    Data: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
+    Data: std::fmt::Debug
+        + Clone
+        + Serialize
+        + DeserializeOwned
+        + Send
+        + Sync
+        + 'static,
 {
     async fn task_ack(
         &self,

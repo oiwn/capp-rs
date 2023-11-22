@@ -43,6 +43,7 @@ anyhow = "1.0.75"
 http-body-util = "0.1.0"
 bytes = "1.5.0"
 pin-project-lite = "0.2.13"
+tracing-futures = "0.2.5"
 
 [dev-dependencies]
 capp = { path = ".", features = ["http", "healthcheck", "redis"] }

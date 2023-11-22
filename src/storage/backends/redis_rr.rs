@@ -50,7 +50,14 @@ pub struct RedisRoundRobinTaskStorage<D> {
 #[async_trait]
 impl<D> TaskStorage<D> for RedisRoundRobinTaskStorage<D>
 where
-    D: Clone + HasTagKey + Serialize + DeserializeOwned + Send + Sync + 'static,
+    D: std::fmt::Debug
+        + Clone
+        + HasTagKey
+        + Serialize
+        + DeserializeOwned
+        + Send
+        + Sync
+        + 'static,
 {
     async fn task_ack(
         &self,

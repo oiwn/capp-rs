@@ -34,7 +34,7 @@ where
     /// Do computation The worker_id is passed for logging or
     /// debugging purposes. The task is a mutable reference,
     /// allowing the processor to modify the task data as part of the processing.
-    async fn run(
+    async fn call(
         &self,
         worker_id: WorkerId,
         ctx: Arc<Ctx>,

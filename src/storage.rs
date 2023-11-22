@@ -42,7 +42,13 @@ pub enum TaskStorageError {
 #[async_trait]
 pub trait TaskStorage<Data>
 where
-    Data: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
+    Data: std::fmt::Debug
+        + Clone
+        + Serialize
+        + DeserializeOwned
+        + Send
+        + Sync
+        + 'static,
 {
     // task operations
     async fn task_ack(

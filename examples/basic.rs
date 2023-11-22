@@ -44,13 +44,17 @@ impl Context {
 #[async_trait]
 impl Computation<TaskData, Context> for DivisionComputation {
     /// TaskRunner will fail tasks which value can't be divided by 3
-    async fn run(
+    async fn call(
         &self,
-        _worker_id: WorkerId,
+        worker_id: WorkerId,
         _ctx: Arc<Context>,
         _storage: Arc<dyn TaskStorage<TaskData> + Send + Sync>,
         task: &mut Task<TaskData>,
     ) -> Result<(), ComputationError> {
+        // setup spans
+        // let span = tracing::info_span!("computation", worker_id = %worker_id);
+        // let _enter = span.enter();
+
         tracing::info!("Task received to process: {:?}", task.get_payload());
 
         let rem = task.payload.value % 3;
