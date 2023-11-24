@@ -38,18 +38,7 @@ pub struct WorkersManagerOptions {
 }
 
 // New WorkersManager struct
-pub struct WorkersManager<Data, Comp, Ctx>
-where
-    Data: Clone
-        + Serialize
-        + DeserializeOwned
-        + Send
-        + Sync
-        + 'static
-        + std::fmt::Debug,
-    Comp: Computation<Data, Ctx> + Send + Sync + 'static,
-    Ctx: Configurable + Send + Sync + 'static,
-{
+pub struct WorkersManager<Data, Comp, Ctx> {
     ctx: Arc<Ctx>,
     computation: Arc<Comp>,
     storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
@@ -86,11 +75,9 @@ where
 
     pub async fn run_workers(&mut self) {
         // This will start the workers and handle the shutdown signals
-        // This will start the workers and handle the shutdown signals
         let mut worker_handlers = Vec::new();
         let command_senders: WorkerCommandSenders =
             Arc::new(Mutex::new(HashMap::new()));
-
         let (terminate_sender, _) = broadcast::channel::<()>(10);
 
         for i in 1..=self.options.concurrency_limit {
@@ -118,7 +105,30 @@ where
         // Following part setup separate thread to catch ctrl+c
         // signal. Single press will send Shutdown signal to all workers.
         // next ctrl-c will terminate workers immediately.
+        self.ctrl_c_handler(command_senders, terminate_sender).await;
 
+        for (worker_id, handler) in worker_handlers.into_iter().enumerate() {
+            let worker_id = worker_id + 1;
+            let span = tracing::info_span!("worker", _id = %worker_id);
+            let _guard = span.enter();
+            match handler.await {
+                Ok(res) => {
+                    tracing::info!("Worker stopped: {:?}", res);
+                }
+                Err(err) => {
+                    tracing::error!("Fatal error in one of the workers: {:?}", err);
+                }
+            }
+        }
+
+        tracing::info!("All workers stopped")
+    }
+
+    async fn ctrl_c_handler(
+        &mut self,
+        command_senders: WorkerCommandSenders,
+        terminate_sender: tokio::sync::broadcast::Sender<()>,
+    ) {
         let ctrl_c_counter = Arc::new(AtomicUsize::new(0));
 
         // Setup signal handling
@@ -157,129 +167,8 @@ where
                 }
             }
         });
-
-        for handler in worker_handlers {
-            match handler.await {
-                Ok(res) => {
-                    tracing::info!("Worker stopped: {:?}", res);
-                }
-                Err(err) => {
-                    tracing::error!("Fatal error in one of the workers: {:?}", err);
-                }
-            }
-        }
-
-        tracing::info!("All workers stopped")
     }
-
-    // async fn ctrl_c_handler(&mut self) {}
 }
-
-/// Runs the executor with the provided task processor, storage, and options.
-/// This function creates a number of workers based on the concurrency limit option.
-/// It then waits for either a shutdown signal (Ctrl+C) or for the task limit
-/// to be reached. In either case, it sends a shutdown signal to all workers
-/// and waits for them to finish.
-// pub async fn run_workers<Data, Comp, Ctx>(
-//     ctx: Arc<Ctx>,
-//     computation: Arc<Comp>,
-//     storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
-//     options: WorkersManagerOptions,
-// ) where
-//     Data: Clone
-//         + Serialize
-//         + DeserializeOwned
-//         + Send
-//         + Sync
-//         + 'static
-//         + std::fmt::Debug,
-//     Comp: Computation<Data, Ctx> + Send + Sync + 'static,
-//     Ctx: Configurable + Send + Sync + 'static,
-// {
-//     let mut worker_handlers = Vec::new();
-//     let command_senders: WorkerCommandSenders =
-//         Arc::new(Mutex::new(HashMap::new()));
-
-//     let (terminate_sender, _) = broadcast::channel::<()>(10);
-
-//     for i in 1..=options.concurrency_limit {
-//         let worker_id = WorkerId::new(i);
-//         let (command_sender, command_receiver) =
-//             mpsc::channel::<WorkerCommand>(100);
-
-//         command_senders
-//             .lock()
-//             .unwrap()
-//             .insert(worker_id, command_sender);
-//         let terminate_receiver = terminate_sender.subscribe();
-
-//         worker_handlers.push(tokio::spawn(worker_wrapper::<Data, Comp, Ctx>(
-//             WorkerId::new(i),
-//             Arc::clone(&ctx),
-//             Arc::clone(&storage),
-//             Arc::clone(&computation),
-//             command_receiver,
-//             terminate_receiver,
-//             options.worker_options.clone(),
-//         )));
-//     }
-
-//     // Following part setup separate thread to catch ctrl+c
-//     // signal. Single press will send Shutdown signal to all workers.
-//     // next ctrl-c will terminate workers immediately.
-
-//     let ctrl_c_counter = Arc::new(AtomicUsize::new(0));
-
-//     // Setup signal handling
-//     let signal_counter = ctrl_c_counter.clone();
-//     let command_senders = command_senders.clone();
-
-//     tokio::spawn(async move {
-//         loop {
-//             signal::ctrl_c()
-//                 .await
-//                 .expect("Failed to listen for ctrl+c event");
-//             let count = signal_counter.fetch_add(1, Ordering::SeqCst);
-
-//             match count {
-//                 0 => {
-//                     // First Ctrl+C: Attempt to gracefully stop all workers.
-//                     tracing::warn!(
-//                         "Ctrl+C received, sending stop command to all workers..."
-//                     );
-//                     let senders: Vec<_> = {
-//                         let lock = command_senders.lock().unwrap();
-//                         lock.values().cloned().collect()
-//                     };
-//                     for sender in senders {
-//                         let _ = sender.send(WorkerCommand::Shutdown).await;
-//                     }
-//                 }
-//                 _ => {
-//                     // Second Ctrl+C: Force terminate all workers.
-//                     tracing::warn!(
-//                         "Ctrl+C received again, terminating all workers..."
-//                     );
-//                     terminate_sender.send(()).unwrap();
-//                     break;
-//                 }
-//             }
-//         }
-//     });
-
-//     for handler in worker_handlers {
-//         match handler.await {
-//             Ok(res) => {
-//                 tracing::info!("Worker stopped: {:?}", res);
-//             }
-//             Err(err) => {
-//                 tracing::error!("Fatal error in one of the workers: {:?}", err);
-//             }
-//         }
-//     }
-
-//     tracing::info!("All workers stopped")
-// }
 
 #[cfg(test)]
 mod tests {

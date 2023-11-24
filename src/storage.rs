@@ -11,7 +11,7 @@ pub mod task;
 pub use backends::InMemoryTaskStorage;
 #[cfg(feature = "redis")]
 pub use backends::{RedisRoundRobinTaskStorage, RedisTaskStorage};
-pub use task::{Task, TaskId};
+pub use task::{Task, TaskId, TaskStatus};
 
 pub type AbstractTaskStorage<D> = std::sync::Arc<dyn TaskStorage<D> + Send + Sync>;
 

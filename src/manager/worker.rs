@@ -1,7 +1,7 @@
 use crate::{
     config::Configurable,
+    prelude::{AbstractTaskStorage, Computation, WorkerStats},
     storage::{TaskStorage, TaskStorageError},
-    AbstractTaskStorage, Computation, WorkerStats,
 };
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
@@ -80,9 +80,6 @@ where
     /// 3) update task according to computation result
     /// Return true if should continue or false otherwise
     pub async fn run(&mut self) -> anyhow::Result<bool> {
-        let span = tracing::info_span!("worker", worker_id = %self.worker_id);
-        let _span_guard = span.enter();
-
         // Implement limiting amount of tasks per worker
         if let Some(limit) = self.options.task_limit {
             if self.stats.tasks_processed >= limit {
@@ -95,15 +92,16 @@ where
         match self.storage.task_pop().await {
             Ok(mut task) => {
                 task.set_in_progress();
-                let result = self
-                    .computation
-                    .call(
-                        self.worker_id,
-                        self.ctx.clone(),
-                        self.storage.clone(),
-                        &mut task,
-                    )
-                    .await;
+                let result = {
+                    self.computation
+                        .call(
+                            self.worker_id,
+                            self.ctx.clone(),
+                            self.storage.clone(),
+                            &mut task,
+                        )
+                        .await
+                };
                 match result {
                     Ok(_) => {
                         task.set_succeed();
@@ -215,8 +213,8 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
     let mut should_stop = false;
 
     // setup spans
-    // let span = tracing::info_span!("worker", worker_id = %worker_id);
-    // let _enter = span.enter();
+    let span = tracing::info_span!("worker", _id = %worker_id);
+    let _enter = span.enter();
 
     'worker: loop {
         tokio::select! {

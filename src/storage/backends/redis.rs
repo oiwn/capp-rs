@@ -1,6 +1,6 @@
 //! Provides implementation of trait to store task into redis
 //! TODO: make sequental ops into atomic transaction
-use crate::{Task, TaskId, TaskStorage, TaskStorageError};
+use crate::prelude::*;
 use async_trait::async_trait;
 use rustis::commands::{GenericCommands, HashCommands, ListCommands};
 use serde::de::DeserializeOwned;

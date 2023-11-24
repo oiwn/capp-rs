@@ -1,10 +1,11 @@
 use async_trait::async_trait;
+use capp::prelude::{
+    Computation, ComputationError, WorkerId, WorkerOptionsBuilder,
+};
 use capp::{
-    computation::{Computation, ComputationError},
     config::Configurable,
     manager::{WorkersManager, WorkersManagerOptionsBuilder},
     storage::{InMemoryTaskStorage, Task, TaskStorage},
-    worker::{WorkerId, WorkerOptionsBuilder},
 };
 use serde::{Deserialize, Serialize};
 use std::{path, sync::Arc};
@@ -46,7 +47,7 @@ impl Computation<TaskData, Context> for DivisionComputation {
     /// TaskRunner will fail tasks which value can't be divided by 3
     async fn call(
         &self,
-        worker_id: WorkerId,
+        _worker_id: WorkerId,
         _ctx: Arc<Context>,
         _storage: Arc<dyn TaskStorage<TaskData> + Send + Sync>,
         task: &mut Task<TaskData>,

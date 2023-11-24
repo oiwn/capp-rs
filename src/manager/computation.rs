@@ -1,4 +1,4 @@
-use crate::{storage::Task, AbstractTaskStorage};
+use crate::prelude::{AbstractTaskStorage, Task};
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
