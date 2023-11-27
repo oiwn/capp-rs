@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use capp::{RedisTaskStorage, Task, TaskStorage};
+    use capp::prelude::{RedisTaskStorage, Task, TaskStorage};
     use dotenvy::dotenv;
     use rustis::commands::{HashCommands, ListCommands};
     use serde::{Deserialize, Serialize};

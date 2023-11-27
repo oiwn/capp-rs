@@ -25,6 +25,7 @@
 //! Note: The exact tag key for each task is determined from the `TaskData`
 //! field, and can be configured during the storage initialization.
 
+use crate::prelude::{HasTagKey, Task, TaskId, TaskStorage, TaskStorageError};
 use async_trait::async_trait;
 use rustis::commands::{GenericCommands, HashCommands, ListCommands};
 use serde::{de::DeserializeOwned, Serialize};
@@ -35,8 +36,6 @@ use std::{
         Arc, Mutex,
     },
 };
-
-use crate::{HasTagKey, Task, TaskId, TaskStorage, TaskStorageError};
 
 pub struct RedisRoundRobinTaskStorage<D> {
     pub key: String,
@@ -50,7 +49,14 @@ pub struct RedisRoundRobinTaskStorage<D> {
 #[async_trait]
 impl<D> TaskStorage<D> for RedisRoundRobinTaskStorage<D>
 where
-    D: Clone + HasTagKey + Serialize + DeserializeOwned + Send + Sync + 'static,
+    D: std::fmt::Debug
+        + Clone
+        + HasTagKey
+        + Serialize
+        + DeserializeOwned
+        + Send
+        + Sync
+        + 'static,
 {
     async fn task_ack(
         &self,

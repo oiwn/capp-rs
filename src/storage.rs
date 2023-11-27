@@ -11,7 +11,7 @@ pub mod task;
 pub use backends::InMemoryTaskStorage;
 #[cfg(feature = "redis")]
 pub use backends::{RedisRoundRobinTaskStorage, RedisTaskStorage};
-pub use task::{Task, TaskId};
+pub use task::{Task, TaskId, TaskStatus};
 
 pub type AbstractTaskStorage<D> = std::sync::Arc<dyn TaskStorage<D> + Send + Sync>;
 
@@ -42,7 +42,13 @@ pub enum TaskStorageError {
 #[async_trait]
 pub trait TaskStorage<Data>
 where
-    Data: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
+    Data: std::fmt::Debug
+        + Clone
+        + Serialize
+        + DeserializeOwned
+        + Send
+        + Sync
+        + 'static,
 {
     // task operations
     async fn task_ack(

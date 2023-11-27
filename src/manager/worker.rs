@@ -1,7 +1,7 @@
 use crate::{
     config::Configurable,
-    task_deport::{TaskStorage, TaskStorageError},
-    AbstractTaskStorage, Computation, WorkerStats,
+    prelude::{AbstractTaskStorage, Computation, WorkerStats},
+    storage::{TaskStorage, TaskStorageError},
 };
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
@@ -27,8 +27,6 @@ pub struct WorkerOptions {
 
 pub enum WorkerCommand {
     Shutdown, // Gracefully shut down worker
-              // Stop,     // Stop worker for a while (current task will be finished)
-              // Resume,   // Resume worker
 }
 
 pub struct Worker<Data, Comp, Ctx> {
@@ -36,8 +34,8 @@ pub struct Worker<Data, Comp, Ctx> {
     ctx: Arc<Ctx>,
     storage: AbstractTaskStorage<Data>,
     computation: Arc<Comp>,
-    stats: WorkerStats,
-    options: WorkerOptions,
+    pub stats: WorkerStats,
+    pub options: WorkerOptions,
 }
 
 /// A worker implementation that fetches a task from the storage, processes it,
@@ -85,11 +83,7 @@ where
         // Implement limiting amount of tasks per worker
         if let Some(limit) = self.options.task_limit {
             if self.stats.tasks_processed >= limit {
-                tracing::info!(
-                    "[{}] task_limit reached: {}",
-                    self.worker_id,
-                    limit
-                );
+                tracing::info!("task_limit reached: {}", limit);
                 return Ok(false);
             }
         };
@@ -98,15 +92,16 @@ where
         match self.storage.task_pop().await {
             Ok(mut task) => {
                 task.set_in_progress();
-                let result = self
-                    .computation
-                    .run(
-                        self.worker_id,
-                        self.ctx.clone(),
-                        self.storage.clone(),
-                        &mut task,
-                    )
-                    .await;
+                let result = {
+                    self.computation
+                        .call(
+                            self.worker_id,
+                            self.ctx.clone(),
+                            self.storage.clone(),
+                            &mut task,
+                        )
+                        .await
+                };
                 match result {
                     Ok(_) => {
                         task.set_succeed();
@@ -160,6 +155,17 @@ where
     }
 }
 
+impl<Data, Comp, Ctx> std::fmt::Debug for Worker<Data, Comp, Ctx> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Worker")
+            .field("worker_id", &self.worker_id)
+            .field("options", &self.options)
+            .field("stats", &self.stats)
+            // Optionally, you can add other fields here
+            .finish()
+    }
+}
+
 impl WorkerId {
     pub fn new(id: usize) -> Self {
         Self(id)
@@ -207,7 +213,7 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
     let mut should_stop = false;
 
     // setup spans
-    let span = tracing::info_span!("worker", worker_id = %worker_id);
+    let span = tracing::info_span!("worker", _id = %worker_id);
     let _enter = span.enter();
 
     'worker: loop {
@@ -238,7 +244,7 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
 
         // If a stop command was received, finish any ongoing work and then exit.
         if should_stop {
-            tracing::info!("[completing current task before stopping.",);
+            tracing::info!("Completing current task before stopping.",);
             break;
         }
     }

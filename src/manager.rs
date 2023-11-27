@@ -1,15 +1,14 @@
 pub mod computation;
 pub mod stats;
-mod utils;
 pub mod worker;
+pub mod workers_manager;
 
-pub use computation::Computation;
+pub use computation::{Computation, ComputationError};
 pub use stats::{SharedStats, WorkerStats};
-pub use utils::run_workers;
-pub use utils::ExecutorOptions;
-pub use utils::ExecutorOptionsBuilder;
-pub use utils::ExecutorOptionsBuilderError;
 pub use worker::{
     worker_wrapper, Worker, WorkerCommand, WorkerId, WorkerOptions,
     WorkerOptionsBuilder,
+};
+pub use workers_manager::{
+    WorkersManager, WorkersManagerOptions, WorkersManagerOptionsBuilder,
 };

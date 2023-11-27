@@ -1,7 +1,7 @@
 //! In-memory implementation of TaskStorage trait. The storage allows tasks to be
 //! pushed to and popped from a queue, and also allows tasks to be set and
 //! retrieved by their UUID.
-use crate::{Task, TaskId, TaskStorage, TaskStorageError};
+use crate::prelude::{Task, TaskId, TaskStorage, TaskStorageError};
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -54,7 +54,13 @@ impl<Data> std::fmt::Debug for InMemoryTaskStorage<Data> {
 #[async_trait]
 impl<Data> TaskStorage<Data> for InMemoryTaskStorage<Data>
 where
-    Data: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
+    Data: std::fmt::Debug
+        + Clone
+        + Serialize
+        + DeserializeOwned
+        + Send
+        + Sync
+        + 'static,
 {
     async fn task_ack(
         &self,
@@ -169,11 +175,11 @@ mod tests {
     use std::assert_eq;
 
     use super::*;
-    use crate::Task;
+    use crate::prelude::Task;
     use serde::{Deserialize, Serialize};
     use tokio::runtime::Runtime;
 
-    #[derive(Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     struct TaskData {
         value: u32,
     }

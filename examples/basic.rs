@@ -1,9 +1,11 @@
 use async_trait::async_trait;
+use capp::prelude::{
+    Computation, ComputationError, WorkerId, WorkerOptionsBuilder,
+};
 use capp::{
-    computation::{Computation, ComputationError},
     config::Configurable,
-    task_deport::{InMemoryTaskStorage, Task, TaskStorage},
-    ExecutorOptionsBuilder, WorkerId, WorkerOptionsBuilder,
+    manager::{WorkersManager, WorkersManagerOptionsBuilder},
+    storage::{InMemoryTaskStorage, Task, TaskStorage},
 };
 use serde::{Deserialize, Serialize};
 use std::{path, sync::Arc};
@@ -18,7 +20,7 @@ pub struct TaskData {
 #[derive(Debug)]
 pub struct DivisionComputation;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct Context {
     name: String,
     config: serde_yaml::Value,
@@ -43,13 +45,17 @@ impl Context {
 #[async_trait]
 impl Computation<TaskData, Context> for DivisionComputation {
     /// TaskRunner will fail tasks which value can't be divided by 3
-    async fn run(
+    async fn call(
         &self,
         _worker_id: WorkerId,
-        _ctx: Arc<Context>,
+        ctx: Arc<Context>,
         _storage: Arc<dyn TaskStorage<TaskData> + Send + Sync>,
         task: &mut Task<TaskData>,
     ) -> Result<(), ComputationError> {
+        // setup spans
+        // let span = tracing::info_span!("computation", worker_id = %worker_id);
+        // let _enter = span.enter();
+
         tracing::info!("Task received to process: {:?}", task.get_payload());
 
         let rem = task.payload.value % 3;
@@ -60,6 +66,9 @@ impl Computation<TaskData, Context> for DivisionComputation {
         };
 
         task.payload.finished = true;
+        if ctx.name == "test-app".to_string() {
+            tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+        }
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         Ok(())
     }
@@ -69,8 +78,8 @@ impl Computation<TaskData, Context> for DivisionComputation {
 /// For current set following conditions should be true:
 /// total tasks = 9
 /// number of failed tasks = 4
-async fn make_storage() -> Arc<dyn TaskStorage<TaskData> + Send + Sync> {
-    let storage = Arc::new(InMemoryTaskStorage::new());
+async fn make_storage() -> impl TaskStorage<TaskData> + Send + Sync {
+    let storage = InMemoryTaskStorage::new();
 
     for i in 1..=5 {
         let task: Task<TaskData> = Task::new(TaskData {
@@ -105,11 +114,11 @@ async fn make_storage() -> Arc<dyn TaskStorage<TaskData> + Send + Sync> {
 async fn main() {
     tracing_subscriber::fmt::init();
     let config_path = "tests/simple_config.yml";
-    let ctx = Arc::new(Context::from_config(config_path));
+    let ctx = Context::from_config(config_path);
     let storage = make_storage().await;
 
-    let computation = Arc::new(DivisionComputation {});
-    let executor_options = ExecutorOptionsBuilder::default()
+    let computation = DivisionComputation {};
+    let manager_options = WorkersManagerOptionsBuilder::default()
         .worker_options(
             WorkerOptionsBuilder::default()
                 .task_limit(10)
@@ -120,5 +129,8 @@ async fn main() {
         .concurrency_limit(4_usize)
         .build()
         .unwrap();
-    capp::run_workers(ctx, computation, storage, executor_options).await;
+
+    let mut manager =
+        WorkersManager::new(ctx, computation, storage, manager_options);
+    manager.run_workers().await;
 }

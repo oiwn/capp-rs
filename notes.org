@@ -19,7 +19,7 @@
 - [ ] add storage error types context error types to TaskProcessorError
 ** Refactor storage (task deport)
 ** Executor
-- [ ] better task handling in executor, queue, started, finished and TaskStatus enum
+- [X] better task handling in executor, queue, started, finished and TaskStatus enum
 ** Task Deport
 - [ ] add queued time, make started time optional (should be something when execution is started)
 - [ ] drop task exceed time for execution
@@ -28,8 +28,7 @@
 ** Important!!!!
 - [-] TaskProcessor::process should not panic? (ugh it's complicated to apply catch_unwind to async function)
 - [ ] Use tokio per core executor to make tasks Sync maybe? if possible
-- [ ] make whole capp-rs as async tasks executor for web crawling purposes
-- [ ] i think need to remove unnecessary workspaces
+- [X] i think need to remove unnecessary workspaces
 - [ ] fix tests sometimes not drop database keys
 ** Workers manager
 Need something to manager workers. I think worker should return anyhow:Result<ComputationResult> and if Computation
@@ -45,10 +44,13 @@ Manager should collect stats about workers
 ** InMemory storage backend
 - [ ] Probably i need to Box list and hashmap since they could grow large and quickly overflow the stack
 ** Consider to use Tower as abstraction for function
-
-
+** DONE Renaming?
+- [X] task_deport -> storage
+- [X] task_executor -> manager
+** DONE prelude rs
+** TODO tower integration
+** I think need to update Status states with channels.
 ** redis storage backend with bloom filter
 ** redis storage backend with priorities
-
 * Notes
 ** httpbin could be launched as container "docker run -p 80:80 kennethreitz/httpbin"
