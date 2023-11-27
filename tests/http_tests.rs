@@ -1,9 +1,11 @@
+mod common;
+
 #[cfg(test)]
 mod tests {
+    use crate::common::http_server::{run_service, TestServiceFactory};
     use capp::http::{
         build_http_client, fetch_url, fetch_url_content, HttpClientParams,
     };
-    use capp::test_utils::{run_service, TestServiceFactory};
 
     // pub async fn start_test_server(addr: SocketAddr) {
     //     let make_svc = make_service_fn(|_conn| async {

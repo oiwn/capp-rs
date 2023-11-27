@@ -39,10 +39,10 @@ pub struct WorkersManagerOptions {
 
 // New WorkersManager struct
 pub struct WorkersManager<Data, Comp, Ctx> {
-    ctx: Arc<Ctx>,
-    computation: Arc<Comp>,
-    storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
-    options: WorkersManagerOptions,
+    pub ctx: Arc<Ctx>,
+    pub computation: Arc<Comp>,
+    pub storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+    pub options: WorkersManagerOptions,
     // worker_handlers: Vec<tokio::task::JoinHandle<()>>,
     // command_senders: WorkerCommandSenders,
 }

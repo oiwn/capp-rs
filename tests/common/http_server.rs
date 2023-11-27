@@ -9,7 +9,8 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 
-use crate::support::TokioIo;
+mod support;
+use support::TokioIo;
 
 pub trait ServiceFactory {
     type ServiceType: Service<

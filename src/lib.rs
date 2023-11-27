@@ -5,10 +5,11 @@ pub mod healthcheck;
 pub mod http;
 pub mod manager;
 pub mod prelude;
-pub mod service;
 pub mod storage;
-mod support;
-pub mod test_utils;
+// #[cfg(test)]
+// mod support;
+// #[cfg(test)]
+// pub mod test_utils;
 
 // re-export
 pub use async_trait;

@@ -175,11 +175,11 @@ mod tests {
     use std::assert_eq;
 
     use super::*;
-    use crate::Task;
+    use crate::prelude::Task;
     use serde::{Deserialize, Serialize};
     use tokio::runtime::Runtime;
 
-    #[derive(Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     struct TaskData {
         value: u32,
     }

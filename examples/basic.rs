@@ -20,7 +20,7 @@ pub struct TaskData {
 #[derive(Debug)]
 pub struct DivisionComputation;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct Context {
     name: String,
     config: serde_yaml::Value,
@@ -48,7 +48,7 @@ impl Computation<TaskData, Context> for DivisionComputation {
     async fn call(
         &self,
         _worker_id: WorkerId,
-        _ctx: Arc<Context>,
+        ctx: Arc<Context>,
         _storage: Arc<dyn TaskStorage<TaskData> + Send + Sync>,
         task: &mut Task<TaskData>,
     ) -> Result<(), ComputationError> {
@@ -66,6 +66,9 @@ impl Computation<TaskData, Context> for DivisionComputation {
         };
 
         task.payload.finished = true;
+        if ctx.name == "test-app".to_string() {
+            tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+        }
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         Ok(())
     }

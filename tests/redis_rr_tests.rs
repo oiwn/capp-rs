@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
     // Test redis round robin queue
-    use capp::{HasTagKey, RedisRoundRobinTaskStorage, Task, TaskStorage};
+    use capp::prelude::Task;
+    use capp::storage::{HasTagKey, RedisRoundRobinTaskStorage, TaskStorage};
     use dotenvy::dotenv;
     use rustis::commands::GenericCommands;
     use serde::{Deserialize, Serialize};
@@ -81,7 +82,7 @@ mod tests {
             let _ = storage.task_push(&task).await;
         }
 
-        let task = storage.task_pop().await.unwrap();
+        let _task = storage.task_pop().await.unwrap();
         // assert!(vec!["one", "two"].contains(task.payload.tag));
         // assert_eq!(task.payload.tag, "one");
     }

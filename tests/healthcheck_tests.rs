@@ -1,7 +1,9 @@
+mod common;
+
 #[cfg(test)]
 mod tests {
+    use crate::common::http_server::{run_service, TestServiceFactory};
     use capp::healthcheck::internet;
-    use capp::test_utils::{run_service, TestServiceFactory};
 
     #[test]
     fn ping_healthcheck_service() {

@@ -1,10 +1,11 @@
+use async_trait::async_trait;
+use capp::prelude::{WorkerId, WorkerOptionsBuilder};
 use capp::{
-    async_trait::async_trait,
-    computation::{Computation, ComputationError},
     config::Configurable,
-    run_workers,
+    manager::{
+        Computation, ComputationError, WorkersManager, WorkersManagerOptionsBuilder,
+    },
     storage::{RedisTaskStorage, Task, TaskStorage},
-    ExecutorOptionsBuilder, WorkerId,
 };
 use rustis::commands::HashCommands;
 use serde::{Deserialize, Serialize};
@@ -19,6 +20,7 @@ pub struct TaskData {
 
 pub struct DivisionComputation;
 
+#[derive(Clone)]
 pub struct Context {
     pub redis: rustis::client::Client,
     config: serde_yaml::Value,
@@ -55,7 +57,7 @@ impl Context {
 #[async_trait]
 impl Computation<TaskData, Context> for DivisionComputation {
     /// Processor will fail tasks which value can be divided to 3
-    async fn run(
+    async fn call(
         &self,
         worker_id: WorkerId,
         ctx: Arc<Context>,
@@ -93,7 +95,7 @@ impl Computation<TaskData, Context> for DivisionComputation {
 /// number of failed tasks = 4
 async fn make_storage(
     client: rustis::client::Client,
-) -> Arc<dyn TaskStorage<TaskData> + Send + Sync> {
+) -> impl TaskStorage<TaskData> + Send + Sync {
     let storage = RedisTaskStorage::new("capp-complex", client);
 
     for i in 1..=5 {
@@ -122,7 +124,7 @@ async fn make_storage(
         });
         let _ = storage.task_push(&task).await;
     }
-    Arc::new(storage)
+    storage
 }
 
 #[tokio::main]
@@ -131,17 +133,24 @@ async fn main() {
     // Load app
     let config_path = "tests/simple_config.yml";
     std::env::set_var("REDIS_URI", "redis://localhost:6379/15");
-    let ctx = Arc::new(Context::from_config(config_path).await);
+    let ctx = Context::from_config(config_path).await;
     let storage = make_storage(ctx.redis.clone()).await;
 
-    let computation = Arc::new(DivisionComputation {});
-    let executor_options = ExecutorOptionsBuilder::default()
+    let computation = DivisionComputation {};
+    let manager_options = WorkersManagerOptionsBuilder::default()
+        .worker_options(
+            WorkerOptionsBuilder::default()
+                .task_limit(10)
+                .build()
+                .unwrap(),
+        )
         .concurrency_limit(4_usize)
         .build()
         .unwrap();
-    run_workers(ctx.clone(), computation, storage, executor_options).await;
+    let mut manager =
+        WorkersManager::new(ctx.clone(), computation, storage, manager_options);
+    manager.run_workers().await;
 
-    let sum_of_value: i64 =
-        ctx.clone().redis.hget("capp-complex", "sum").await.unwrap();
+    let sum_of_value: i64 = ctx.redis.hget("capp-complex", "sum").await.unwrap();
     tracing::info!("Sum of values: {}", sum_of_value);
 }
