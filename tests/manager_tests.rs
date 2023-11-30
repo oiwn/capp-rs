@@ -123,13 +123,13 @@ mod tests {
     fn test_manager() {
         let rt = Runtime::new().unwrap();
 
-        let ctx = Context::from_config("tests/simple_config.yml");
-        let storage = make_storage();
+        let ctx = Arc::new(Context::from_config("tests/simple_config.yml"));
+        let storage = Arc::new(make_storage());
 
         let storage_len_before = storage.list.lock().unwrap().len();
         assert_eq!(storage_len_before, 9);
 
-        let computation = TestComputation {};
+        let computation = Arc::new(TestComputation {});
         let manager_options = WorkersManagerOptionsBuilder::default()
             .worker_options(
                 WorkerOptionsBuilder::default()
@@ -144,18 +144,22 @@ mod tests {
             .build()
             .unwrap();
 
-        let mut manager =
-            WorkersManager::new(ctx, computation, storage, manager_options);
+        let mut manager = WorkersManager::new_from_arcs(
+            ctx,
+            computation,
+            storage.clone(),
+            manager_options,
+        );
         rt.block_on(manager.run_workers());
 
-        // let storage_len_after = storage.list.lock().unwrap().len();
+        let storage_len_after = storage.list.lock().unwrap().len();
 
         // 4 tasks should fail
-        // assert_eq!(storage_len_after, 7);
+        assert_eq!(storage_len_after, 7);
         // all successful tasks should be removed from storage
         // 7 should left
-        // let keys_len = storage.hashmap.lock().unwrap().len();
-        // assert_eq!(keys_len, 7);
+        let keys_len = storage.hashmap.lock().unwrap().len();
+        assert_eq!(keys_len, 7);
 
         // dbg!(&storage);
     }

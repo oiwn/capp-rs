@@ -252,6 +252,76 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
     tracing::info!("completed");
 }
 
+/// This wrapper used to create new Worker setup internal logging
+/// and handle comminications with worker
+pub async fn worker_wrapper_old<Data, Comp, Ctx>(
+    worker_id: WorkerId,
+    ctx: Arc<Ctx>,
+    storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+    computation: Arc<Comp>,
+    mut commands: mpsc::Receiver<WorkerCommand>,
+    mut terminate: broadcast::Receiver<()>,
+    worker_options: WorkerOptions,
+) where
+    Data: std::fmt::Debug
+        + Clone
+        + Serialize
+        + DeserializeOwned
+        + Send
+        + Sync
+        + 'static,
+    Comp: Computation<Data, Ctx> + Send + Sync + 'static,
+    Ctx: Configurable + Send + Sync + 'static,
+{
+    let mut worker = Worker::new(
+        worker_id,
+        ctx.clone(),
+        storage.clone(),
+        computation.clone(),
+        worker_options,
+    );
+    let mut should_stop = false;
+
+    // setup spans
+    let span = tracing::info_span!("worker", _id = %worker_id);
+    let _enter = span.enter();
+
+    'worker: loop {
+        tokio::select! {
+            _ = terminate.recv() => {
+                tracing::info!("Terminating immediately");
+                return;
+            },
+            run_result = worker.run(), if !should_stop => {
+                match commands.try_recv() {
+                    Ok(WorkerCommand::Shutdown) => {
+                        tracing::error!("Shutdown received");
+                        should_stop = true;
+                    }
+                    Err(TryRecvError::Disconnected) => break 'worker,
+                    _ => {}
+
+                }
+                // If worker ask to shutdown for some reason
+                // i.e some amount of tasks finished
+                if let Ok(re) = run_result {
+                    if !re {
+                        return;
+                    }
+                }
+            }
+        };
+
+        // If a stop command was received, finish any ongoing work and then exit.
+        if should_stop {
+            tracing::info!("Completing current task before stopping.",);
+            break;
+        }
+    }
+
+    tracing::info!("completed");
+}
+
 #[cfg(test)]
 mod tests {
     use std::assert_eq;
