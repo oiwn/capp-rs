@@ -21,6 +21,14 @@ use tokio::{
     sync::{broadcast, mpsc},
 };
 
+// TODO:  I think would be cool to move storage, function and context at once
+#[allow(unused)]
+pub struct WorkerManagerParams<Data, Comp, Ctx> {
+    pub ctx: Ctx,
+    pub computation: Comp,
+    pub storage: Box<dyn TaskStorage<Data> + Send + Sync>,
+}
+
 type WorkerCommandSenders =
     Arc<Mutex<HashMap<WorkerId, mpsc::Sender<WorkerCommand>>>>;
 
@@ -39,6 +47,7 @@ pub struct WorkersManagerOptions {
 
 // New WorkersManager struct
 pub struct WorkersManager<Data, Comp, Ctx> {
+    // params: Arc<WorkerManagerParams<Data, Comp, Ctx>>,
     pub ctx: Arc<Ctx>,
     pub computation: Arc<Comp>,
     pub storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
@@ -69,6 +78,20 @@ where
             ctx: Arc::new(ctx),
             computation: Arc::new(computation),
             storage: Arc::new(storage),
+            options,
+        }
+    }
+
+    pub fn new_from_arcs(
+        ctx: Arc<Ctx>,
+        computation: Arc<Comp>,
+        storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+        options: WorkersManagerOptions,
+    ) -> Self {
+        Self {
+            ctx,
+            computation,
+            storage,
             options,
         }
     }
