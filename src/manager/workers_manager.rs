@@ -20,6 +20,7 @@ use tokio::{
     signal,
     sync::{broadcast, mpsc},
 };
+use tracing::Instrument;
 
 // TODO:  I think would be cool to move storage, function and context at once
 #[allow(unused)]
@@ -114,7 +115,8 @@ where
                 .insert(worker_id, command_sender);
             let terminate_receiver = terminate_sender.subscribe();
 
-            worker_handlers.push(tokio::spawn(worker_wrapper::<Data, Comp, Ctx>(
+            let worker_span = tracing::info_span!("worker", worker_id = %i);
+            let worker = tokio::spawn(worker_wrapper::<Data, Comp, Ctx>(
                 WorkerId::new(i),
                 Arc::clone(&self.ctx),
                 Arc::clone(&self.storage),
@@ -122,7 +124,9 @@ where
                 command_receiver,
                 terminate_receiver,
                 self.options.worker_options.clone(),
-            )));
+            ))
+            .instrument(worker_span.clone());
+            worker_handlers.push(worker);
         }
 
         // Following part setup separate thread to catch ctrl+c
@@ -130,10 +134,7 @@ where
         // next ctrl-c will terminate workers immediately.
         self.ctrl_c_handler(command_senders, terminate_sender).await;
 
-        for (worker_id, handler) in worker_handlers.into_iter().enumerate() {
-            let worker_id = worker_id + 1;
-            let span = tracing::info_span!("worker", _id = %worker_id);
-            let _guard = span.enter();
+        for handler in worker_handlers {
             match handler.await {
                 Ok(res) => {
                     tracing::info!("Worker stopped: {:?}", res);
