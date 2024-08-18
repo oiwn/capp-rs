@@ -55,7 +55,7 @@ pub trait Configurable {
                 let remaining_keys = &keys[1..];
 
                 if let Some(value) =
-                    map.get(&serde_yaml::Value::String(key.to_string()))
+                    map.get(serde_yaml::Value::String(key.to_string()))
                 {
                     if remaining_keys.is_empty() {
                         Some(value)
