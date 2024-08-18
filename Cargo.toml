@@ -20,7 +20,14 @@ exclude = [
     "notes.org"
 ]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "capp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "capp"
+path = "src/main.rs"
+
 
 [dependencies]
 async-trait = { version = "0.1" }
