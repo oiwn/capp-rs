@@ -20,4 +20,5 @@ windows:
   - window_name: notes
     panes:
       - shell_command:
-        - emacs -nw notes.org
+        - clear
+        # - emacs -nw notes.org
