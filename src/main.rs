@@ -1,19 +1,24 @@
-use async_trait::async_trait;
+/* use async_trait::async_trait;
+use new::{Middleware, RequestHandler, TaskStorage, Worker};
 use std::{collections::VecDeque, io, sync::Arc};
 use tokio::{
     self,
     sync::Mutex as AsyncMutex,
     time::{self, Duration},
-};
+}; */
 
 mod new;
 
-use new::{Middleware, RequestHandler, TaskStorage, Worker};
+#[tokio::main]
+async fn main() {
+    println!("Such main.rs much of dead code. Wow.");
+}
 
-struct MyHandler;
+/*
+struct TaskHandler;
 
 #[async_trait]
-impl RequestHandler for MyHandler {
+impl RequestHandler for TaskHandler {
     type Req = Task;
     type Res = String;
     type Error = io::Error;
@@ -99,7 +104,7 @@ async fn main() {
         })
         .await;
 
-    let handler = MyHandler;
+    let handler = TaskHandler;
     let worker = Worker { storage, handler };
 
     match worker.run().await {
@@ -107,3 +112,4 @@ async fn main() {
         Err(e) => println!("Worker terminated with an error: {:?}", e),
     }
 }
+*/

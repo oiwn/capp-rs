@@ -1,7 +1,7 @@
 use crate::{
     config::Configurable,
-    prelude::{AbstractTaskStorage, Computation, WorkerStats},
-    storage::{TaskStorage, TaskStorageError},
+    manager::{Computation, WorkerStats},
+    queue::{AbstractTaskQueue, TaskQueue, TaskQueueError},
 };
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
@@ -32,7 +32,7 @@ pub enum WorkerCommand {
 pub struct Worker<Data, Comp, Ctx> {
     worker_id: WorkerId,
     ctx: Arc<Ctx>,
-    storage: AbstractTaskStorage<Data>,
+    queue: AbstractTaskQueue<Data>,
     computation: Arc<Comp>,
     pub stats: WorkerStats,
     pub options: WorkerOptions,
@@ -56,14 +56,14 @@ where
     pub fn new(
         worker_id: WorkerId,
         ctx: Arc<Ctx>,
-        storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+        queue: Arc<dyn TaskQueue<Data> + Send + Sync>,
         computation: Arc<Comp>,
         options: WorkerOptions,
     ) -> Self {
         Self {
             worker_id,
             ctx,
-            storage,
+            queue,
             computation,
             options,
             stats: WorkerStats::new(),
@@ -78,6 +78,7 @@ where
     /// 1) pop task from queue (or wait a bit)
     /// 2) run computation over task
     /// 3) update task according to computation result
+    ///
     /// Return true if should continue or false otherwise
     pub async fn run(&mut self) -> anyhow::Result<bool> {
         // Implement limiting amount of tasks per worker
@@ -89,7 +90,7 @@ where
         };
 
         let start_time = std::time::Instant::now();
-        match self.storage.task_pop().await {
+        match self.queue.pop().await {
             Ok(mut task) => {
                 task.set_in_progress();
                 let result = {
@@ -97,7 +98,7 @@ where
                         .call(
                             self.worker_id,
                             self.ctx.clone(),
-                            self.storage.clone(),
+                            self.queue.clone(),
                             &mut task,
                         )
                         .await
@@ -105,13 +106,12 @@ where
                 match result {
                     Ok(_) => {
                         task.set_succeed();
-                        self.storage.task_set(&task).await.unwrap();
-                        let successful_task =
-                            self.storage.task_ack(&task.task_id).await.unwrap();
+                        self.queue.set(&task).await.unwrap();
+                        self.queue.ack(&task.task_id).await.unwrap();
                         tracing::info!(
                             "Task {} succeed: {:?}",
-                            &successful_task.task_id,
-                            &successful_task.payload
+                            &task.task_id,
+                            &task.payload
                         );
 
                         // record stats on success
@@ -121,7 +121,7 @@ where
                     Err(err) => {
                         task.set_retry(&err.to_string());
                         if task.retries < self.options.max_retries {
-                            self.storage.task_push(&task).await.unwrap();
+                            self.queue.push(&task).await.unwrap();
                             tracing::error!(
                                 "Task {} failed, retrying ({}): {:?}",
                                 &task.task_id,
@@ -130,7 +130,7 @@ where
                             );
                         } else {
                             task.set_dlq("Max retries");
-                            self.storage.task_to_dlq(&task).await.unwrap();
+                            self.queue.nack(&task).await.unwrap();
                             tracing::error!(
                                 "Task {} failed, max reties ({}): {:?}",
                                 &task.task_id,
@@ -144,8 +144,8 @@ where
                     }
                 }
             }
-            Err(TaskStorageError::StorageIsEmptyError) => {
-                tracing::warn!("No tasks found, waiting...");
+            Err(TaskQueueError::QueueEmpty) => {
+                tracing::warn!("[{}] No tasks found, waiting...", self.worker_id);
                 // wait for a while till try to fetch task
                 tokio::time::sleep(self.options.no_task_found_delay).await;
             }
@@ -187,7 +187,7 @@ impl std::fmt::Display for WorkerId {
 pub async fn worker_wrapper<Data, Comp, Ctx>(
     worker_id: WorkerId,
     ctx: Arc<Ctx>,
-    storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+    storage: Arc<dyn TaskQueue<Data> + Send + Sync>,
     computation: Arc<Comp>,
     mut commands: mpsc::Receiver<WorkerCommand>,
     mut terminate: broadcast::Receiver<()>,
@@ -257,7 +257,7 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
 pub async fn worker_wrapper_old<Data, Comp, Ctx>(
     worker_id: WorkerId,
     ctx: Arc<Ctx>,
-    storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+    storage: Arc<dyn TaskQueue<Data> + Send + Sync>,
     computation: Arc<Comp>,
     mut commands: mpsc::Receiver<WorkerCommand>,
     mut terminate: broadcast::Receiver<()>,

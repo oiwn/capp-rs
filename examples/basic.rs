@@ -5,7 +5,8 @@ use capp::prelude::{
 use capp::{
     config::Configurable,
     manager::{WorkersManager, WorkersManagerOptionsBuilder},
-    storage::{InMemoryTaskStorage, Task, TaskStorage},
+    queue::{AbstractTaskQueue, InMemoryTaskQueue, TaskQueue},
+    task::Task,
 };
 use serde::{Deserialize, Serialize};
 use std::{path, sync::Arc};
@@ -36,7 +37,7 @@ impl Context {
     fn from_config(config_file_path: impl AsRef<path::Path>) -> Self {
         let config = Self::load_config(config_file_path);
         Self {
-            name: "test-app".to_string(),
+            name: "basic-app".to_string(),
             config: config.unwrap(),
         }
     }
@@ -49,13 +50,9 @@ impl Computation<TaskData, Context> for DivisionComputation {
         &self,
         _worker_id: WorkerId,
         ctx: Arc<Context>,
-        _storage: Arc<dyn TaskStorage<TaskData> + Send + Sync>,
+        _queue: AbstractTaskQueue<TaskData>,
         task: &mut Task<TaskData>,
     ) -> Result<(), ComputationError> {
-        // setup spans
-        // let span = tracing::info_span!("computation", worker_id = %worker_id);
-        // let _enter = span.enter();
-
         tracing::info!("Task received to process: {:?}", task.get_payload());
 
         let rem = task.payload.value % 3;
@@ -78,8 +75,8 @@ impl Computation<TaskData, Context> for DivisionComputation {
 /// For current set following conditions should be true:
 /// total tasks = 9
 /// number of failed tasks = 4
-async fn make_storage() -> impl TaskStorage<TaskData> + Send + Sync {
-    let storage = InMemoryTaskStorage::new();
+async fn make_storage() -> impl TaskQueue<TaskData> + Send + Sync {
+    let storage = InMemoryTaskQueue::new();
 
     for i in 1..=5 {
         let task: Task<TaskData> = Task::new(TaskData {
@@ -87,7 +84,7 @@ async fn make_storage() -> impl TaskStorage<TaskData> + Send + Sync {
             value: i,
             finished: false,
         });
-        let _ = storage.task_push(&task).await;
+        let _ = storage.push(&task).await;
     }
 
     for i in 1..=5 {
@@ -96,7 +93,7 @@ async fn make_storage() -> impl TaskStorage<TaskData> + Send + Sync {
             value: i * 3,
             finished: false,
         });
-        let _ = storage.task_push(&task).await;
+        let _ = storage.push(&task).await;
     }
 
     for _ in 1..=10 {
@@ -105,7 +102,7 @@ async fn make_storage() -> impl TaskStorage<TaskData> + Send + Sync {
             value: 2,
             finished: false,
         });
-        let _ = storage.task_push(&task).await;
+        let _ = storage.push(&task).await;
     }
     storage
 }

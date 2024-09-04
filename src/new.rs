@@ -11,6 +11,7 @@ pub trait RequestHandler {
 }
 
 #[async_trait]
+#[allow(dead_code)]
 pub trait Middleware<T: RequestHandler> {
     async fn process(&self, handler: &T, req: T::Req) -> Result<T::Res, T::Error>;
 }

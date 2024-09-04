@@ -1,4 +1,5 @@
-use crate::prelude::{AbstractTaskStorage, Task};
+use crate::queue::AbstractTaskQueue;
+use crate::task::Task;
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
@@ -41,7 +42,7 @@ where
         // NOTE: i used type alias instead of this
         // is something put this line back and remove next one!
         // storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
-        storage: AbstractTaskStorage<Data>,
+        queue: AbstractTaskQueue<Data>,
         task: &mut Task<Data>,
     ) -> Result<(), ComputationError>;
 }
