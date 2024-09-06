@@ -21,9 +21,9 @@ mod tests {
             .expect("Error while establishing redis connection")
     }
 
-    async fn setup_queue() -> RedisTaskQueue<TestData> {
+    async fn setup_queue(name: &str) -> RedisTaskQueue<TestData> {
         let redis = get_redis_connection().await;
-        RedisTaskQueue::new(redis, "capp-test-queue")
+        RedisTaskQueue::new(redis, name)
             .await
             .expect("Failed to create RedisTaskQueue")
     }
@@ -37,8 +37,70 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_typical_workflow() {
+        let redis = get_redis_connection().await;
+        let queue: RedisTaskQueue<TestData> =
+            RedisTaskQueue::new(redis, "capp-test-workflow")
+                .await
+                .expect("Failed to create RedisTaskQueue");
+        // clean queue
+        queue
+            .client
+            .del([&queue.list_key, &queue.hashmap_key, &queue.dlq_key])
+            .await
+            .expect("Failed to clean up Redis keys");
+
+        // check push
+        let task = Task::new(TestData { value: 42 });
+        let result = queue.push(&task).await;
+        assert!(result.is_ok());
+
+        // check pop
+        let task_from_queue = queue.pop().await;
+        assert!(!&task_from_queue.is_err());
+        let task_from_queue = task_from_queue.unwrap();
+        assert!(task_from_queue.get_payload().value == 42);
+
+        // ack task and check queue is empty
+        let acked = queue.ack(&task_from_queue.task_id).await;
+        assert!(acked.is_ok());
+        let queue_list_len = queue.client.llen(&queue.list_key).await;
+        assert_eq!(queue_list_len.unwrap(), 0);
+        let queue_hashmap_len = queue.client.hlen(&queue.hashmap_key).await;
+        assert_eq!(queue_hashmap_len.unwrap(), 0);
+
+        // check how ack/nack working and check ordering
+        let task_1 = Task::new(TestData { value: 1 });
+        let task_2 = Task::new(TestData { value: 2 });
+        let _ = queue.push(&task_1).await;
+        let _ = queue.push(&task_2).await;
+        let queue_list_len = queue.client.llen(&queue.list_key).await;
+        assert_eq!(queue_list_len.unwrap(), 2);
+        let queue_hashmap_len = queue.client.hlen(&queue.hashmap_key).await;
+        assert_eq!(queue_hashmap_len.unwrap(), 2);
+
+        let task_1_from_queue = queue.pop().await.unwrap();
+        assert_eq!(task_1_from_queue.payload.value, 1);
+        let acked = queue.ack(&task_1_from_queue.task_id).await;
+        assert!(acked.is_ok());
+
+        let task_2_from_queue = queue.pop().await.unwrap();
+        assert_eq!(task_2_from_queue.payload.value, 2);
+        let nacked = queue.nack(&task_2_from_queue).await;
+        assert!(nacked.is_ok());
+        let dlq_len = queue.client.llen(&queue.dlq_key).await.unwrap();
+        assert_eq!(dlq_len, 1);
+
+        queue
+            .client
+            .del([&queue.list_key, &queue.hashmap_key, &queue.dlq_key])
+            .await
+            .expect("Failed to clean up Redis keys");
+    }
+
+    #[tokio::test]
     async fn test_push_and_pop() {
-        let queue = setup_queue().await;
+        let queue = setup_queue("capp-test-push-pop").await;
         let task = Task::new(TestData { value: 42 });
 
         queue.push(&task).await.expect("Failed to push task");
@@ -51,7 +113,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_push_multiple_and_pop_order() {
-        let queue = setup_queue().await;
+        let queue = setup_queue("capp-test-push-pop-order").await;
         let tasks = vec![
             Task::new(TestData { value: 1 }),
             Task::new(TestData { value: 2 }),
@@ -74,11 +136,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_ack() {
-        let queue = setup_queue().await;
+        let queue = setup_queue("capp-test-ack").await;
         let task = Task::new(TestData { value: 42 });
 
         queue.push(&task).await.expect("Failed to push task");
         let popped_task = queue.pop().await.expect("Failed to pop task");
+        dbg!(&popped_task);
         queue
             .ack(&popped_task.task_id)
             .await
@@ -96,7 +159,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_nack() {
-        let queue = setup_queue().await;
+        let queue = setup_queue("capp-test-nack").await;
         let task = Task::new(TestData { value: 42 });
 
         queue.push(&task).await.expect("Failed to push task");
@@ -113,23 +176,26 @@ mod tests {
             "Task should have been removed from hashmap after nack"
         );
 
-        let dlq_tasks: Vec<String> = queue
+        let dlq_len = queue
             .client
-            .lrange(&queue.dlq_key, 0, -1)
+            .llen(&queue.dlq_key)
             .await
             .expect("Failed to read DLQ");
-        assert_eq!(dlq_tasks.len(), 1, "Task should have been added to DLQ");
+        assert_eq!(dlq_len, 1, "Task should have been added to DLQ");
 
-        let dlq_task: Task<TestData> = serde_json::from_str(&dlq_tasks[0])
+        let dlq_task: Vec<String> =
+            queue.client.rpop(&queue.dlq_key, 1).await.unwrap();
+
+        let dlq_task: Task<TestData> = serde_json::from_str(&dlq_task[0])
             .expect("Failed to deserialize task from DLQ");
-        assert_eq!(dlq_task.payload, popped_task.payload);
+        assert_eq!(dlq_task.payload.value, popped_task.payload.value);
 
         cleanup_queue(&queue).await;
     }
 
     #[tokio::test]
     async fn test_set() {
-        let queue = setup_queue().await;
+        let queue = setup_queue("capp-test-set").await;
         let mut task = Task::new(TestData { value: 42 });
 
         queue.push(&task).await.expect("Failed to push task");
@@ -151,13 +217,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_queue_empty() {
-        let queue = setup_queue().await;
+        let queue = setup_queue("capp-test-empty").await;
+        cleanup_queue(&queue).await;
 
         match queue.pop().await {
             Err(TaskQueueError::QueueEmpty) => (),
             _ => panic!("Expected QueueEmpty error"),
         }
-
-        cleanup_queue(&queue).await;
     }
 }

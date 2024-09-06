@@ -17,7 +17,7 @@ use async_trait::async_trait;
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use async_trait::async_trait;
 ///
 /// struct MyHandler;

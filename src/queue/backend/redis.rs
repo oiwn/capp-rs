@@ -1,5 +1,4 @@
 //! Provides implementation of trait to store task into redis
-//! TODO: make sequental ops into atomic transaction
 use crate::prelude::*;
 use async_trait::async_trait;
 use rustis::client::{BatchPreparedCommand, Client, Pipeline};
@@ -57,11 +56,12 @@ where
             .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
 
         let mut pipeline = self.client.create_pipeline();
-        pipeline.rpush(&self.list_key, &task_json).forget();
+        pipeline
+            .rpush(&self.list_key, &task.task_id.to_string())
+            .forget();
         pipeline
             .hset(&self.hashmap_key, [(&task.task_id.to_string(), &task_json)])
             .forget();
-
         self.execute_pipeline(pipeline).await
     }
 
@@ -71,6 +71,8 @@ where
             .lpop(&self.list_key, 1)
             .await
             .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
+
+        dbg!(&task_ids);
 
         if !task_ids.is_empty() {
             let task_id = task_ids.first().unwrap();
@@ -86,21 +88,19 @@ where
     }
 
     async fn ack(&self, task_id: &TaskId) -> Result<(), TaskQueueError> {
-        self.client
-            .del(task_id.to_string())
-            .await
-            .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
+        let uuid_as_str = task_id.to_string();
+        let _ = self.client.hdel(&self.hashmap_key, &uuid_as_str).await?;
         Ok(())
     }
 
     async fn nack(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
+        let uuid_as_str = task.task_id.to_string();
         let task_json = serde_json::to_string(task)
             .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
 
         let mut pipeline = self.client.create_pipeline();
         pipeline.rpush(&self.dlq_key, &task_json).forget();
-        pipeline.del(task.task_id.to_string()).forget();
-
+        pipeline.hdel(&self.hashmap_key, &uuid_as_str).forget();
         self.execute_pipeline(pipeline).await
     }
 

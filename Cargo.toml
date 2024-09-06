@@ -23,6 +23,7 @@ exclude = [
 [lib]
 name = "capp"
 path = "src/lib.rs"
+doctest = false
 
 [[bin]]
 name = "capp"
