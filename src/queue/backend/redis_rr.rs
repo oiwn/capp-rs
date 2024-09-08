@@ -14,7 +14,9 @@ use crate::queue::{HasTagKey, TaskQueue, TaskQueueError};
 use crate::task::{Task, TaskId};
 use async_trait::async_trait;
 use rustis::client::{BatchPreparedCommand, Client, Pipeline};
-use rustis::commands::{HashCommands, ListCommands, StringCommands};
+use rustis::commands::{
+    GenericCommands, HashCommands, ListCommands, StringCommands,
+};
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::HashSet;
 use std::marker::PhantomData;
@@ -84,7 +86,7 @@ impl<D> RedisRoundRobinTaskQueue<D> {
         Ok(())
     }
 
-    async fn get_next_non_empty_tag(
+    pub async fn get_next_non_empty_tag(
         &self,
     ) -> Result<Option<String>, TaskQueueError> {
         for tag in self.tags.iter() {
@@ -94,6 +96,20 @@ impl<D> RedisRoundRobinTaskQueue<D> {
             }
         }
         Ok(None)
+    }
+
+    pub async fn purge(&self) -> Result<usize, TaskQueueError> {
+        let mut keys_to_delete = vec![self.get_hashmap_key(), self.get_dlq_key()];
+        // Add list keys for all tags
+        for tag in self.tags.iter() {
+            keys_to_delete.push(self.get_list_key(tag));
+        }
+        // Add counter keys to the list of keys to delete
+        keys_to_delete.extend(self.get_counter_keys());
+        self.client
+            .del(keys_to_delete)
+            .await
+            .map_err(|e| TaskQueueError::QueueError(e.to_string()))
     }
 }
 

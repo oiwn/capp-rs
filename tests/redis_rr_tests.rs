@@ -344,4 +344,65 @@ mod tests {
             _ => panic!("Expected QueueEmpty error"),
         }
     }
+
+    #[tokio::test]
+    async fn test_purge() {
+        let queue = setup_queue("purge-test").await;
+
+        // Push some tasks
+        let tasks = vec![
+            Task::new(TestData {
+                value: 1,
+                tag: "tag1".to_string(),
+            }),
+            Task::new(TestData {
+                value: 2,
+                tag: "tag2".to_string(),
+            }),
+            Task::new(TestData {
+                value: 3,
+                tag: "tag3".to_string(),
+            }),
+        ];
+
+        for task in &tasks {
+            queue.push(task).await.expect("Failed to push task");
+        }
+
+        // Verify that tasks are in the queue
+        for _ in 0..3 {
+            assert!(queue.pop().await.is_ok(), "Should be able to pop a task");
+        }
+
+        // Purge the queue
+        queue.purge().await.expect("Failed to purge queue");
+
+        // Verify that all queues are empty
+        assert!(
+            matches!(queue.pop().await, Err(TaskQueueError::QueueEmpty)),
+            "Queue should be empty after purge"
+        );
+
+        // Verify that all keys have been deleted
+        let mut keys_to_check = vec![
+            queue.get_hashmap_key(),
+            queue.get_list_key("tag1"),
+            queue.get_list_key("tag2"),
+            queue.get_list_key("tag3"),
+            queue.get_dlq_key(),
+        ];
+        keys_to_check.extend(queue.get_counter_keys());
+
+        for key in keys_to_check {
+            let exists: usize = queue
+                .client
+                .exists(&key)
+                .await
+                .expect("Failed to check key existence");
+            assert!(exists == 0, "Key {} should not exist after purge", key);
+        }
+
+        // Clean up any remaining keys (though there shouldn't be any)
+        cleanup_queue(&queue).await;
+    }
 }
