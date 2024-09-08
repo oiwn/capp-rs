@@ -46,16 +46,21 @@ impl Computation<TaskData, Context> for DivisionComputation {
     /// TaskRunner will fail tasks which value can't be divided by 3
     async fn call(
         &self,
-        _worker_id: WorkerId,
+        worker_id: WorkerId,
         _ctx: Arc<Context>,
         _queue: AbstractTaskQueue<TaskData>,
         task: &mut Task<TaskData>,
     ) -> Result<(), ComputationError> {
-        tracing::info!("Task received to process: {:?}", task.get_payload());
+        tracing::info!(
+            "[{}] Test division task: {:?}",
+            worker_id,
+            task.get_payload()
+        );
 
         let rem = task.payload.value % 3;
         if rem != 0 {
-            let err_msg = format!("Can't divide {} by 3", task.payload.value);
+            let err_msg =
+                format!("[{}] Can't divide {} by 3", worker_id, task.payload.value);
             tokio::time::sleep(tokio::time::Duration::from_secs(rem as u64)).await;
             return Err(ComputationError::Function(err_msg));
         };

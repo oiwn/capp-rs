@@ -78,13 +78,16 @@ where
     /// 1) pop task from queue (or wait a bit)
     /// 2) run computation over task
     /// 3) update task according to computation result
-    ///
-    /// Return true if should continue or false otherwise
+    ///    Return true if should continue or false otherwise
     pub async fn run(&mut self) -> anyhow::Result<bool> {
         // Implement limiting amount of tasks per worker
         if let Some(limit) = self.options.task_limit {
             if self.stats.tasks_processed >= limit {
-                tracing::info!("task_limit reached: {}", limit);
+                tracing::info!(
+                    "[{}] task_limit reached: {}",
+                    self.worker_id,
+                    limit
+                );
                 return Ok(false);
             }
         };
@@ -109,7 +112,8 @@ where
                         self.queue.set(&task).await.unwrap();
                         self.queue.ack(&task.task_id).await.unwrap();
                         tracing::info!(
-                            "Task {} succeed: {:?}",
+                            "[{}] Task {} succeed: {:?}",
+                            self.worker_id,
                             &task.task_id,
                             &task.payload
                         );
@@ -123,7 +127,8 @@ where
                         if task.retries < self.options.max_retries {
                             self.queue.push(&task).await.unwrap();
                             tracing::error!(
-                                "Task {} failed, retrying ({}): {:?}",
+                                "[{}] Task {} failed, retrying ({}): {:?}",
+                                self.worker_id,
                                 &task.task_id,
                                 &task.retries,
                                 &err
@@ -132,7 +137,8 @@ where
                             task.set_dlq("Max retries");
                             self.queue.nack(&task).await.unwrap();
                             tracing::error!(
-                                "Task {} failed, max reties ({}): {:?}",
+                                "[{}] Task {} failed, max reties ({}): {:?}",
+                                self.worker_id,
                                 &task.task_id,
                                 &task.retries,
                                 &err
@@ -211,10 +217,6 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
         worker_options,
     );
     let mut should_stop = false;
-
-    // setup spans
-    let span = tracing::info_span!("worker", _id = %worker_id);
-    let _enter = span.enter();
 
     'worker: loop {
         tokio::select! {

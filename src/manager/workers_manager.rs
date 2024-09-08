@@ -121,14 +121,16 @@ where
 
         for (worker_id, handler) in worker_handlers.into_iter().enumerate() {
             let worker_id = worker_id + 1;
-            let span = tracing::info_span!("worker", _id = %worker_id);
-            let _guard = span.enter();
             match handler.await {
                 Ok(res) => {
-                    tracing::info!("Worker stopped: {:?}", res);
+                    tracing::info!("[{}] Worker stopped: {:?}", worker_id, res);
                 }
                 Err(err) => {
-                    tracing::error!("Fatal error in one of the workers: {:?}", err);
+                    tracing::error!(
+                        "[{}] Fatal error in one of the workers: {:?}",
+                        worker_id,
+                        err
+                    );
                 }
             }
         }

@@ -6,7 +6,6 @@ pub mod http;
 pub mod manager;
 pub mod prelude;
 pub mod queue;
-// pub mod storage;
 pub mod task;
 // #[cfg(test)]
 // mod support;

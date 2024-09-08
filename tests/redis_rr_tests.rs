@@ -46,13 +46,15 @@ mod tests {
     }
 
     async fn cleanup_queue(queue: &RedisRoundRobinTaskQueue<TestData>) {
-        let keys_to_delete = vec![
+        let mut keys_to_delete = vec![
             queue.get_hashmap_key(),
             queue.get_list_key("tag1"),
             queue.get_list_key("tag2"),
             queue.get_list_key("tag3"),
             queue.get_dlq_key(),
         ];
+        // Add counter keys to the list of keys to delete
+        keys_to_delete.extend(queue.get_counter_keys());
         queue
             .client
             .del(keys_to_delete)
@@ -244,13 +246,15 @@ mod tests {
         // Attempt to pop again, should be empty
         match queue.pop().await {
             Err(TaskQueueError::QueueEmpty) => (),
-            _ => panic!("Expecte"),
+            _ => panic!("Queue not empty!"),
         }
+        cleanup_queue(&queue).await;
     }
 
     #[tokio::test]
     async fn test_ack() {
-        let queue = setup_queue("capp-test-rr-ack").await;
+        let queue = setup_queue("ack").await;
+        cleanup_queue(&queue).await;
         let task = Task::new(TestData {
             value: 42,
             tag: "tag1".to_string(),
@@ -275,7 +279,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_nack() {
-        let queue = setup_queue("capp-test-rr-nack").await;
+        let queue = setup_queue("nack").await;
         let task = Task::new(TestData {
             value: 42,
             tag: "tag1".to_string(),
@@ -307,7 +311,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_set() {
-        let queue = setup_queue("capp-test-rr-set").await;
+        let queue = setup_queue("set").await;
         let mut task = Task::new(TestData {
             value: 42,
             tag: "tag1".to_string(),
@@ -332,7 +336,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_queue_empty() {
-        let queue = setup_queue("capp-test-rr-empty").await;
+        let queue = setup_queue("empty").await;
         cleanup_queue(&queue).await;
 
         match queue.pop().await {
