@@ -2,7 +2,7 @@
 use crate::prelude::*;
 use async_trait::async_trait;
 use rustis::client::{BatchPreparedCommand, Client, Pipeline};
-use rustis::commands::{GenericCommands, HashCommands, ListCommands};
+use rustis::commands::{HashCommands, ListCommands};
 use serde::{de::DeserializeOwned, Serialize};
 use std::marker::PhantomData;
 

@@ -23,7 +23,6 @@ pub struct DivisionComputation;
 
 #[derive(Debug)]
 pub struct Context {
-    name: String,
     config: serde_yaml::Value,
 }
 
@@ -37,7 +36,6 @@ impl Context {
     fn from_config(config_file_path: impl AsRef<path::Path>) -> Self {
         let config = Self::load_config(config_file_path);
         Self {
-            name: "basic-app".to_string(),
             config: config.unwrap(),
         }
     }
@@ -49,7 +47,7 @@ impl Computation<TaskData, Context> for DivisionComputation {
     async fn call(
         &self,
         _worker_id: WorkerId,
-        ctx: Arc<Context>,
+        _ctx: Arc<Context>,
         _queue: AbstractTaskQueue<TaskData>,
         task: &mut Task<TaskData>,
     ) -> Result<(), ComputationError> {
@@ -63,9 +61,6 @@ impl Computation<TaskData, Context> for DivisionComputation {
         };
 
         task.payload.finished = true;
-        if ctx.name == "test-app".to_string() {
-            tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-        }
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         Ok(())
     }

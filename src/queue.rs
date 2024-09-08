@@ -12,8 +12,7 @@ use thiserror::Error;
 
 pub use backend::InMemoryTaskQueue;
 #[cfg(feature = "redis")]
-// pub use backend::{RedisRoundRobinTaskStorage, RedisTaskStorage};
-pub use backend::RedisTaskQueue;
+pub use backend::{RedisRoundRobinTaskQueue, RedisTaskQueue};
 
 #[derive(Error, Debug)]
 pub enum TaskQueueError {
