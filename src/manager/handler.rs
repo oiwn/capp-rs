@@ -2,7 +2,11 @@
 //! for asynchronous task processing. It allows for flexible implementation of
 //! request handling with associated types for requests, responses, and errors.
 
+use crate::prelude::WorkerId;
+use crate::queue::AbstractTaskQueue;
+use crate::task::Task;
 use async_trait::async_trait;
+use std::sync::Arc;
 
 /// A trait for handling asynchronous tasks or requests.
 ///
@@ -54,6 +58,19 @@ pub trait TaskHandler {
     /// - `Ok(res)` containing the response if the request was handled successfully.
     /// - `Err(error)` if an error occurred during request handling.
     async fn handle(&self, req: &Self::Req) -> Result<Self::Res, Self::Error>;
+}
+
+#[async_trait::async_trait]
+pub trait RequestBuilder<D, Ctx, Req>
+where
+    D: std::fmt::Debug + Clone,
+{
+    async fn build_request(
+        worker_id: WorkerId,
+        ctx: Arc<Ctx>,
+        queue: AbstractTaskQueue<D>,
+        task: &Task<D>,
+    ) -> Req;
 }
 
 #[cfg(test)]

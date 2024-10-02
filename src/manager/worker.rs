@@ -227,7 +227,7 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
             run_result = worker.run(), if !should_stop => {
                 match commands.try_recv() {
                     Ok(WorkerCommand::Shutdown) => {
-                        tracing::error!("Shutdown received");
+                        tracing::error!("[{}] Shutdown received", worker_id);
                         should_stop = true;
                     }
                     Err(TryRecvError::Disconnected) => break 'worker,
@@ -246,7 +246,10 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
 
         // If a stop command was received, finish any ongoing work and then exit.
         if should_stop {
-            tracing::info!("Completing current task before stopping.",);
+            tracing::info!(
+                "[{}] Completing current task before stopping.",
+                worker_id
+            );
             break;
         }
     }

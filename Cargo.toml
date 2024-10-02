@@ -34,7 +34,7 @@ path = "src/main.rs"
 async-trait = { version = "0.1" }
 backoff = { version = "0.4", optional = true, features = ["tokio"] }
 derive_builder = { version = "0.20" }
-reqwest = { version = "0.12", features = ["gzip", "rustls-tls"], optional = true }
+reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"], optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_yaml = "0.9"
