@@ -72,8 +72,6 @@ where
             .await
             .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
 
-        dbg!(&task_ids);
-
         if !task_ids.is_empty() {
             let task_id = task_ids.first().unwrap();
             let task_value: String =
