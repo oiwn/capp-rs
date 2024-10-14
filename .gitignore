@@ -19,3 +19,5 @@ Cargo.lock
 .env
 /tmp
 tags
+
+.DS_Store

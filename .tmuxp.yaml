@@ -20,5 +20,8 @@ windows:
   - window_name: notes
     panes:
       - shell_command:
-        - clear
-        # - emacs -nw notes.org
+        - emacs -nw notes.org
+  - window_name: redis
+    panes:
+      - shell_command:
+        - just connect-redis
