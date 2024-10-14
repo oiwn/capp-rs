@@ -20,6 +20,7 @@ use tokio::{
     signal,
     sync::{broadcast, mpsc},
 };
+use tracing::Instrument;
 
 type WorkerCommandSenders =
     Arc<Mutex<HashMap<WorkerId, mpsc::Sender<WorkerCommand>>>>;
@@ -103,7 +104,8 @@ where
                 .insert(worker_id, command_sender);
             let terminate_receiver = terminate_sender.subscribe();
 
-            worker_handlers.push(tokio::spawn(worker_wrapper::<Data, Comp, Ctx>(
+            let worker_span = tracing::info_span!("worker", worker_id = %i);
+            let worker = tokio::spawn(worker_wrapper::<Data, Comp, Ctx>(
                 WorkerId::new(i),
                 Arc::clone(&self.ctx),
                 Arc::clone(&self.queue),
@@ -111,7 +113,9 @@ where
                 command_receiver,
                 terminate_receiver,
                 self.options.worker_options.clone(),
-            )));
+            ))
+            .instrument(worker_span.clone());
+            worker_handlers.push(worker);
         }
 
         // Following part setup separate thread to catch ctrl+c
