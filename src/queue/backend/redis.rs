@@ -32,9 +32,14 @@ impl<D> RedisTaskQueue<D> {
         &self,
         pipeline: Pipeline<'_>,
     ) -> Result<(), TaskQueueError> {
+        // NOTE: this strange construction .map(|_: ()| ())
+        // This change explicitly specifies that we're expecting a () (unit type) as the successful
+        // result of execute(). By doing this, we're no longer relying on the never type fallback,
+        // which resolves the warning.
         pipeline
             .execute()
             .await
+            .map(|_: ()| ())
             .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
         Ok(())
     }

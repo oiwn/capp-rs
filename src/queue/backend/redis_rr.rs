@@ -82,6 +82,7 @@ impl<D> RedisRoundRobinTaskQueue<D> {
         pipeline
             .execute()
             .await
+            .map(|_: ()| ())
             .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
         Ok(())
     }
