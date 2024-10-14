@@ -78,6 +78,7 @@ where
     /// 1) pop task from queue (or wait a bit)
     /// 2) run computation over task
     /// 3) update task according to computation result
+    ///
     /// Return true if should continue or false otherwise
     pub async fn run(&mut self) -> anyhow::Result<bool> {
         // Implement limiting amount of tasks per worker

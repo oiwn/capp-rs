@@ -26,6 +26,7 @@
 //!
 //! This module is designed to be used optionally within a larger application context,
 //! providing URL classification capabilities when needed without being a mandatory component.
+#![warn(clippy::unwrap_used)]
 use indexmap::IndexMap;
 use regex::Regex;
 use url::Url;
@@ -113,10 +114,7 @@ impl Router {
         let mut classified = ClassifiedURLs::new();
         for url in urls {
             if let Some(category) = self.classifier.classify(&url) {
-                classified
-                    .entry(category)
-                    .or_insert_with(Vec::new)
-                    .push(url);
+                classified.entry(category).or_default().push(url);
             }
         }
         classified
@@ -137,12 +135,19 @@ impl Router {
     }
 }
 
+impl Default for Router {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClassificationRule for RegexRule {
     fn classify(&self, url: &Url) -> Option<String> {
         let domain = url.domain()?;
         let path = url.path();
         let test_str = format!("{}{}", domain, path);
 
+        #[allow(clippy::collapsible_if)]
         if self.allow.iter().any(|r| r.is_match(&test_str)) {
             if self.except.iter().all(|r| !r.is_match(&test_str)) {
                 return Some(self.name.clone());
