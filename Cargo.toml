@@ -52,10 +52,6 @@ regex = "1.11"
 
 [dev-dependencies]
 capp = { path = ".", features = ["http", "healthcheck", "redis"] }
-# capp = { path = ".", features = ["http", "healthcheck"] }
-# mongodb = { version = "2.6.1", features = ["tokio-runtime"] }
-# scraper = "0.17.1"
-dotenvy = "0.15"
 hyper = { version = "1.3", features = ["server", "http1"] }
 http-body-util = "0.1"
 bytes = "1.6"
@@ -63,9 +59,9 @@ pin-project-lite = "0.2"
 dotenvy = "0.15"
 scraper = "0.19"
 rand = "0.8"
-md5 = "0.7.0"
-url = "2.5.0"
-base64 = "0.22.1"
+md5 = "0.7"
+url = "2.5"
+base64 = "0.22"
 
 [features]
 http = ["dep:backoff", "dep:reqwest"]
