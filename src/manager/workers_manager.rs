@@ -5,7 +5,7 @@ use crate::{
         worker_wrapper, Computation, WorkerCommand, WorkerOptions,
         WorkerOptionsBuilder,
     },
-    storage::TaskStorage,
+    queue::TaskQueue,
 };
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
@@ -21,14 +21,6 @@ use tokio::{
     sync::{broadcast, mpsc},
 };
 use tracing::Instrument;
-
-// TODO:  I think would be cool to move storage, function and context at once
-#[allow(unused)]
-pub struct WorkerManagerParams<Data, Comp, Ctx> {
-    pub ctx: Ctx,
-    pub computation: Comp,
-    pub storage: Box<dyn TaskStorage<Data> + Send + Sync>,
-}
 
 type WorkerCommandSenders =
     Arc<Mutex<HashMap<WorkerId, mpsc::Sender<WorkerCommand>>>>;
@@ -48,13 +40,10 @@ pub struct WorkersManagerOptions {
 
 // New WorkersManager struct
 pub struct WorkersManager<Data, Comp, Ctx> {
-    // params: Arc<WorkerManagerParams<Data, Comp, Ctx>>,
     pub ctx: Arc<Ctx>,
     pub computation: Arc<Comp>,
-    pub storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+    pub queue: Arc<dyn TaskQueue<Data> + Send + Sync>,
     pub options: WorkersManagerOptions,
-    // worker_handlers: Vec<tokio::task::JoinHandle<()>>,
-    // command_senders: WorkerCommandSenders,
 }
 
 impl<Data, Comp, Ctx> WorkersManager<Data, Comp, Ctx>
@@ -72,13 +61,13 @@ where
     pub fn new(
         ctx: Ctx,
         computation: Comp,
-        storage: impl TaskStorage<Data> + Send + Sync + 'static,
+        queue: impl TaskQueue<Data> + Send + Sync + 'static,
         options: WorkersManagerOptions,
     ) -> Self {
         Self {
             ctx: Arc::new(ctx),
             computation: Arc::new(computation),
-            storage: Arc::new(storage),
+            queue: Arc::new(queue),
             options,
         }
     }
@@ -86,13 +75,13 @@ where
     pub fn new_from_arcs(
         ctx: Arc<Ctx>,
         computation: Arc<Comp>,
-        storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+        queue: Arc<dyn TaskQueue<Data> + Send + Sync>,
         options: WorkersManagerOptions,
     ) -> Self {
         Self {
             ctx,
             computation,
-            storage,
+            queue,
             options,
         }
     }
@@ -119,7 +108,7 @@ where
             let worker = tokio::spawn(worker_wrapper::<Data, Comp, Ctx>(
                 WorkerId::new(i),
                 Arc::clone(&self.ctx),
-                Arc::clone(&self.storage),
+                Arc::clone(&self.queue),
                 Arc::clone(&self.computation),
                 command_receiver,
                 terminate_receiver,
@@ -134,13 +123,18 @@ where
         // next ctrl-c will terminate workers immediately.
         self.ctrl_c_handler(command_senders, terminate_sender).await;
 
-        for handler in worker_handlers {
+        for (worker_id, handler) in worker_handlers.into_iter().enumerate() {
+            let worker_id = worker_id + 1;
             match handler.await {
                 Ok(res) => {
-                    tracing::info!("Worker stopped: {:?}", res);
+                    tracing::info!("[{}] Worker stopped: {:?}", worker_id, res);
                 }
                 Err(err) => {
-                    tracing::error!("Fatal error in one of the workers: {:?}", err);
+                    tracing::error!(
+                        "[{}] Fatal error in one of the workers: {:?}",
+                        worker_id,
+                        err
+                    );
                 }
             }
         }

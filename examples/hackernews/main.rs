@@ -2,16 +2,16 @@
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE, Engine as _};
 use capp::prelude::{
-    Computation, ComputationError, InMemoryTaskStorage, Task, TaskStorage,
-    WorkerId, WorkerOptionsBuilder, WorkersManager, WorkersManagerOptionsBuilder,
+    Computation, ComputationError, InMemoryTaskQueue, Task, TaskQueue, WorkerId,
+    WorkerOptionsBuilder, WorkersManager, WorkersManagerOptionsBuilder,
 };
 use capp::{config::Configurable, http, reqwest};
 use capp::{tracing, tracing_subscriber};
-use once_cell::sync::Lazy;
 use rand::{seq::SliceRandom, thread_rng};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
+use std::sync::LazyLock;
 use std::{
     collections::HashSet,
     path,
@@ -21,8 +21,8 @@ use url::{ParseError, Url};
 
 const SEED_URLS: [&str; 1] = ["https://news.ycombinator.com"];
 
-static URL_SET: Lazy<Arc<Mutex<HashSet<String>>>> = Lazy::new(|| {
-    let mut set: HashSet<String> = HashSet::new();
+static URL_SET: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| {
+    let mut set = HashSet::new();
     // Add some urls we do not want to add into queue
     set.insert("https://news.ycombinator.com/submit".into());
     set.insert("https://news.ycombinator.com/jobs".into());
@@ -31,7 +31,7 @@ static URL_SET: Lazy<Arc<Mutex<HashSet<String>>>> = Lazy::new(|| {
     set.insert("https://news.ycombinator.com/newcomments".into());
     set.insert("https://news.ycombinator.com/front".into());
     set.insert("https://news.ycombinator.com/newest".into());
-    Arc::new(Mutex::new(set))
+    Mutex::new(set)
 });
 
 #[derive(Debug)]
@@ -99,7 +99,7 @@ impl Computation<SiteLink, Context> for HNCrawler {
         &self,
         worker_id: WorkerId,
         ctx: Arc<Context>,
-        storage: Arc<dyn TaskStorage<SiteLink> + Send + Sync + 'static>,
+        storage: Arc<dyn TaskQueue<SiteLink> + Send + Sync + 'static>,
         task: &mut Task<SiteLink>,
     ) -> Result<(), ComputationError> {
         tracing::info!("[worker-{}] Processing task: {:?}", worker_id, task);
@@ -189,13 +189,13 @@ impl HNCrawler {
     // Store links to website for further crawling
     async fn store_links_website(
         links: Vec<Url>,
-        storage: Arc<dyn TaskStorage<SiteLink> + Send + Sync>,
+        storage: Arc<dyn TaskQueue<SiteLink> + Send + Sync>,
     ) -> Result<usize, anyhow::Error> {
         let mut links_stored = 0;
         tracing::info!("Adding {} links to the queue...", links.len());
 
         for link in links.iter() {
-            let link_str = link.as_str().to_string();
+            let link_str = link.as_str().to_owned();
 
             let should_store = {
                 // Scoped lock acquisition
@@ -205,7 +205,7 @@ impl HNCrawler {
 
             if should_store {
                 let link_data = SiteLink { url: link_str };
-                storage.task_push(&Task::new(link_data)).await?;
+                storage.push(&Task::new(link_data)).await?;
                 links_stored += 1;
             }
         }
@@ -353,7 +353,7 @@ async fn main() {
         .build()
         .unwrap();
 
-    let storage: InMemoryTaskStorage<SiteLink> = InMemoryTaskStorage::new();
+    let storage: InMemoryTaskQueue<SiteLink> = InMemoryTaskQueue::new();
     let tasks_queue_len = storage.list.lock().unwrap().len();
 
     tracing::info!("Website links tasks in queue: {}", tasks_queue_len);
@@ -362,7 +362,7 @@ async fn main() {
         tracing::warn!("Queue is empty! Seeding urls... {}", SEED_URLS.join(" "));
         for url in SEED_URLS.iter() {
             let initial_task = Task::new(SiteLink::new(url));
-            let _ = storage.task_push(&initial_task).await;
+            let _ = storage.push(&initial_task).await;
         }
     }
 

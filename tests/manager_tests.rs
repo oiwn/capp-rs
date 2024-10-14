@@ -6,9 +6,8 @@ mod tests {
         Computation, ComputationError, WorkerId, WorkerOptionsBuilder,
         WorkersManager, WorkersManagerOptionsBuilder,
     };
-    use capp::storage::{
-        AbstractTaskStorage, InMemoryTaskStorage, Task, TaskStorage,
-    };
+    use capp::queue::{AbstractTaskQueue, InMemoryTaskQueue, TaskQueue};
+    use capp::task::Task;
     use serde::{Deserialize, Serialize};
     use std::sync::Arc;
     use tokio::runtime::Runtime;
@@ -54,7 +53,7 @@ mod tests {
             &self,
             worker_id: WorkerId,
             _ctx: Arc<Context>,
-            _storage: AbstractTaskStorage<TestData>,
+            _storage: AbstractTaskQueue<TestData>,
             task: &mut Task<TestData>,
         ) -> Result<(), ComputationError> {
             tracing::info!("[worker-{}] Processing task: {:?}", worker_id, task);
@@ -76,8 +75,8 @@ mod tests {
     /// For current set following conditions should be true:
     /// total tasks = 9
     /// number of failed tasks = 4
-    fn make_storage() -> InMemoryTaskStorage<TestData> {
-        let storage = InMemoryTaskStorage::new();
+    fn make_storage() -> InMemoryTaskQueue<TestData> {
+        let storage = InMemoryTaskQueue::new();
 
         let rt = Runtime::new().unwrap();
 
@@ -88,7 +87,7 @@ mod tests {
                 value: i,
                 finished: false,
             });
-            let _ = rt.block_on(storage.task_push(&task));
+            let _ = rt.block_on(storage.push(&task));
         }
 
         // all 3 numbers can be divided by 3
@@ -98,7 +97,7 @@ mod tests {
                 value: i * 3,
                 finished: false,
             });
-            let _ = rt.block_on(storage.task_push(&task));
+            let _ = rt.block_on(storage.push(&task));
         }
 
         // No numbers can be divided by 3
@@ -108,7 +107,7 @@ mod tests {
                 value: 2,
                 finished: false,
             });
-            let _ = rt.block_on(storage.task_push(&task));
+            let _ = rt.block_on(storage.push(&task));
         }
         storage
     }

@@ -1,7 +1,7 @@
 use crate::{
     config::Configurable,
-    prelude::{AbstractTaskStorage, Computation, WorkerStats},
-    storage::{TaskStorage, TaskStorageError},
+    manager::{Computation, WorkerStats},
+    queue::{AbstractTaskQueue, TaskQueue, TaskQueueError},
 };
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
@@ -32,7 +32,7 @@ pub enum WorkerCommand {
 pub struct Worker<Data, Comp, Ctx> {
     worker_id: WorkerId,
     ctx: Arc<Ctx>,
-    storage: AbstractTaskStorage<Data>,
+    queue: AbstractTaskQueue<Data>,
     computation: Arc<Comp>,
     pub stats: WorkerStats,
     pub options: WorkerOptions,
@@ -56,14 +56,14 @@ where
     pub fn new(
         worker_id: WorkerId,
         ctx: Arc<Ctx>,
-        storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+        queue: Arc<dyn TaskQueue<Data> + Send + Sync>,
         computation: Arc<Comp>,
         options: WorkerOptions,
     ) -> Self {
         Self {
             worker_id,
             ctx,
-            storage,
+            queue,
             computation,
             options,
             stats: WorkerStats::new(),
@@ -84,13 +84,17 @@ where
         // Implement limiting amount of tasks per worker
         if let Some(limit) = self.options.task_limit {
             if self.stats.tasks_processed >= limit {
-                tracing::info!("task_limit reached: {}", limit);
+                tracing::info!(
+                    "[{}] task_limit reached: {}",
+                    self.worker_id,
+                    limit
+                );
                 return Ok(false);
             }
         };
 
         let start_time = std::time::Instant::now();
-        match self.storage.task_pop().await {
+        match self.queue.pop().await {
             Ok(mut task) => {
                 task.set_in_progress();
                 let result = {
@@ -98,7 +102,7 @@ where
                         .call(
                             self.worker_id,
                             self.ctx.clone(),
-                            self.storage.clone(),
+                            self.queue.clone(),
                             &mut task,
                         )
                         .await
@@ -106,13 +110,13 @@ where
                 match result {
                     Ok(_) => {
                         task.set_succeed();
-                        self.storage.task_set(&task).await.unwrap();
-                        let successful_task =
-                            self.storage.task_ack(&task.task_id).await.unwrap();
+                        self.queue.set(&task).await.unwrap();
+                        self.queue.ack(&task.task_id).await.unwrap();
                         tracing::info!(
-                            "Task {} succeed: {:?}",
-                            &successful_task.task_id,
-                            &successful_task.payload
+                            "[{}] Task {} succeed: {:?}",
+                            self.worker_id,
+                            &task.task_id,
+                            &task.payload
                         );
 
                         // record stats on success
@@ -122,18 +126,20 @@ where
                     Err(err) => {
                         task.set_retry(&err.to_string());
                         if task.retries < self.options.max_retries {
-                            self.storage.task_push(&task).await.unwrap();
+                            self.queue.push(&task).await.unwrap();
                             tracing::error!(
-                                "Task {} failed, retrying ({}): {:?}",
+                                "[{}] Task {} failed, retrying ({}): {:?}",
+                                self.worker_id,
                                 &task.task_id,
                                 &task.retries,
                                 &err
                             );
                         } else {
                             task.set_dlq("Max retries");
-                            self.storage.task_to_dlq(&task).await.unwrap();
+                            self.queue.nack(&task).await.unwrap();
                             tracing::error!(
-                                "Task {} failed, max reties ({}): {:?}",
+                                "[{}] Task {} failed, max reties ({}): {:?}",
+                                self.worker_id,
                                 &task.task_id,
                                 &task.retries,
                                 &err
@@ -145,8 +151,8 @@ where
                     }
                 }
             }
-            Err(TaskStorageError::StorageIsEmptyError) => {
-                tracing::warn!("No tasks found, waiting...");
+            Err(TaskQueueError::QueueEmpty) => {
+                tracing::warn!("[{}] No tasks found, waiting...", self.worker_id);
                 // wait for a while till try to fetch task
                 tokio::time::sleep(self.options.no_task_found_delay).await;
             }
@@ -188,7 +194,7 @@ impl std::fmt::Display for WorkerId {
 pub async fn worker_wrapper<Data, Comp, Ctx>(
     worker_id: WorkerId,
     ctx: Arc<Ctx>,
-    storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+    storage: Arc<dyn TaskQueue<Data> + Send + Sync>,
     computation: Arc<Comp>,
     mut commands: mpsc::Receiver<WorkerCommand>,
     mut terminate: broadcast::Receiver<()>,
@@ -213,10 +219,6 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
     );
     let mut should_stop = false;
 
-    // setup spans
-    let span = tracing::info_span!("worker", _id = %worker_id);
-    let _enter = span.enter();
-
     'worker: loop {
         tokio::select! {
             _ = terminate.recv() => {
@@ -226,7 +228,7 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
             run_result = worker.run(), if !should_stop => {
                 match commands.try_recv() {
                     Ok(WorkerCommand::Shutdown) => {
-                        tracing::error!("Shutdown received");
+                        tracing::error!("[{}] Shutdown received", worker_id);
                         should_stop = true;
                     }
                     Err(TryRecvError::Disconnected) => break 'worker,
@@ -245,7 +247,10 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
 
         // If a stop command was received, finish any ongoing work and then exit.
         if should_stop {
-            tracing::info!("Completing current task before stopping.",);
+            tracing::info!(
+                "[{}] Completing current task before stopping.",
+                worker_id
+            );
             break;
         }
     }
@@ -258,7 +263,7 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
 pub async fn worker_wrapper_old<Data, Comp, Ctx>(
     worker_id: WorkerId,
     ctx: Arc<Ctx>,
-    storage: Arc<dyn TaskStorage<Data> + Send + Sync>,
+    storage: Arc<dyn TaskQueue<Data> + Send + Sync>,
     computation: Arc<Comp>,
     mut commands: mpsc::Receiver<WorkerCommand>,
     mut terminate: broadcast::Receiver<()>,
