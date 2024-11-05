@@ -1,6 +1,16 @@
 #+title: Notes
 
 * Tasks
+** Figure out if it's possible to implement similar api for capp-rs:
+```
+ let app_state = AppState {
+        sqlite: Arc::new(sqlite),
+};
+let router = axum::Router::new()
+        .route("/authors", post(create_author))
+        .layer(trace_layer)
+        .with_state(app_state);
+```
 ** need workflows
 - [ ] coverage
 - [X] tests/clippy/check/fmt

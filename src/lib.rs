@@ -29,7 +29,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! capp = "0.4.1"
+//! capp = "0.4"
 //! ```
 //!
 //! Check examples!
@@ -49,13 +49,11 @@ pub mod healthcheck;
 pub mod http;
 pub mod manager;
 pub mod prelude;
+#[cfg(feature = "http")]
+pub mod proxy;
 pub mod queue;
 pub mod router;
 pub mod task;
-// #[cfg(test)]
-// mod support;
-// #[cfg(test)]
-// pub mod test_utils;
 
 // re-export
 pub use async_trait;

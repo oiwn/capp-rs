@@ -39,7 +39,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         let params = HttpClientParams {
-            proxy: None,
+            proxy_provider: None,
             timeout: 5,
             connect_timeout: 2,
             user_agent: "test-client",

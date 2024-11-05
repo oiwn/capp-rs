@@ -4,12 +4,12 @@
 
 pub mod backend;
 
-use crate::task::{Task, TaskId};
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
 
+use crate::task::{Task, TaskId};
 pub use backend::InMemoryTaskQueue;
 #[cfg(feature = "redis")]
 pub use backend::{RedisRoundRobinTaskQueue, RedisTaskQueue};

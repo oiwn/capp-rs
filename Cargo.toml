@@ -1,6 +1,6 @@
 [package]
 name = "capp"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 license = "MIT"
 authors = ["oiwn"]
@@ -49,6 +49,7 @@ tracing-futures = "0.2"
 indexmap = "2.6"
 url = "2.5"
 regex = "1.11"
+rand = { version = "0.8", optional = true } 
 
 [dev-dependencies]
 capp = { path = ".", features = ["http", "healthcheck", "redis"] }
@@ -64,6 +65,6 @@ url = "2.5"
 base64 = "0.22"
 
 [features]
-http = ["dep:backoff", "dep:reqwest"]
+http = ["dep:backoff", "dep:reqwest", "dep:rand"]
 healthcheck = ["dep:reqwest"]
 redis = ["dep:rustis"]
