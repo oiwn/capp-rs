@@ -61,6 +61,8 @@ pub use async_trait;
 pub use backoff;
 pub use derive_builder;
 pub use indexmap;
+#[cfg(feature = "http")]
+pub use rand;
 pub use regex;
 #[cfg(feature = "http")]
 pub use reqwest;

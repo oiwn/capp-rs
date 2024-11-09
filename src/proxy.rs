@@ -1,13 +1,18 @@
 use rand::seq::SliceRandom;
 use rand::thread_rng;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 // Add Debug to the trait bounds
 pub trait ProxyProvider: Send + Sync + fmt::Debug {
     fn get_proxy(&self) -> Option<String>;
 }
+
+static PORT_RANGE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\{(\d+)-(\d+)\}").expect("Failed to compile port range regex")
+});
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyConfig {
@@ -16,16 +21,37 @@ pub struct ProxyConfig {
 }
 
 impl ProxyConfig {
+    fn expand_uri(uri: &str) -> Vec<String> {
+        if let Some(captures) = PORT_RANGE_RE.captures(uri) {
+            if let (Some(start), Some(end)) = (
+                captures.get(1).and_then(|m| m.as_str().parse::<u16>().ok()),
+                captures.get(2).and_then(|m| m.as_str().parse::<u16>().ok()),
+            ) {
+                if start <= end {
+                    return (start..=end)
+                        .map(|port| uri.replace(&captures[0], &port.to_string()))
+                        .collect();
+                }
+            }
+        }
+        vec![uri.to_string()]
+    }
+
     pub fn from_config(config: &serde_yaml::Value) -> Option<Self> {
         let use_proxy = config["use"].as_bool()?;
         let uris = if use_proxy {
             match config["uris"].as_sequence() {
                 Some(seq) => seq
                     .iter()
-                    .filter_map(|v| v.as_str().map(String::from))
+                    .filter_map(|v| v.as_str())
+                    .flat_map(|uri| Self::expand_uri(uri))
                     .collect(),
                 None => {
-                    vec![config["uri"].as_str()?.to_string()]
+                    if let Some(uri) = config["uri"].as_str() {
+                        Self::expand_uri(uri)
+                    } else {
+                        vec![]
+                    }
                 }
             }
         } else {
@@ -36,20 +62,14 @@ impl ProxyConfig {
     }
 }
 
-// Use a thread-safe RNG
 #[derive(Debug)]
 pub struct RandomProxyProvider {
     config: ProxyConfig,
-    // Use once_cell to lazily initialize the Mutex
-    rng: Mutex<()>, // We'll create a new RNG for each call instead
 }
 
 impl RandomProxyProvider {
     pub fn new(config: ProxyConfig) -> Self {
-        Self {
-            config,
-            rng: Mutex::new(()),
-        }
+        Self { config }
     }
 
     pub fn from_config(config: &serde_yaml::Value) -> Option<Self> {
@@ -64,7 +84,6 @@ impl ProxyProvider for RandomProxyProvider {
             return None;
         }
 
-        let _lock = self.rng.lock().ok()?;
         // Create a new thread_rng for each call
         let mut rng = thread_rng();
         self.config.uris.choose(&mut rng).cloned()
@@ -130,6 +149,15 @@ mod tests {
     "#;
 
     #[test]
+    fn test_proxy_provider() {
+        let config: Value = serde_yaml::from_str(YAML_CONF_SINGLE).unwrap();
+        let provider = RandomProxyProvider::from_config(&config["proxy"]).unwrap();
+
+        let proxy_url = provider.get_proxy().unwrap();
+        assert!(proxy_url.as_str() == "http://proxy1.example.com:8080");
+    }
+
+    #[test]
     fn test_random_proxy_provider() {
         let config: Value = serde_yaml::from_str(YAML_CONF_MULTIPLE).unwrap();
         let provider = RandomProxyProvider::from_config(&config["proxy"]).unwrap();
@@ -174,5 +202,85 @@ mod tests {
 
         let provider = RandomProxyProvider::from_config(&config["proxy"]).unwrap();
         assert_eq!(provider.get_proxy(), None);
+    }
+
+    #[test]
+    fn test_proxy_config_port_range() {
+        let yaml = r#"
+        proxy:
+            use: true
+            uri: http://proxy1.example.com:{8080-8082}
+        "#;
+
+        let config: Value = serde_yaml::from_str(yaml).unwrap();
+        let proxy_config = ProxyConfig::from_config(&config["proxy"]).unwrap();
+
+        assert_eq!(proxy_config.uris.len(), 3);
+        assert!(proxy_config
+            .uris
+            .contains(&"http://proxy1.example.com:8080".to_string()));
+        assert!(proxy_config
+            .uris
+            .contains(&"http://proxy1.example.com:8081".to_string()));
+        assert!(proxy_config
+            .uris
+            .contains(&"http://proxy1.example.com:8082".to_string()));
+    }
+
+    #[test]
+    fn test_proxy_config_multiple_uris_with_ranges() {
+        let yaml = r#"
+        proxy:
+            use: true
+            uris:
+                - http://proxy1.example.com:{8080-8082}
+                - http://proxy2.example.com:8090
+                - http://proxy3.example.com:{9000-9001}
+        "#;
+
+        let config: Value = serde_yaml::from_str(yaml).unwrap();
+        let proxy_config = ProxyConfig::from_config(&config["proxy"]).unwrap();
+
+        assert_eq!(proxy_config.uris.len(), 6); // 3 from first range + 1 single + 2 from last range
+        assert!(proxy_config
+            .uris
+            .contains(&"http://proxy2.example.com:8090".to_string()));
+    }
+
+    #[test]
+    fn test_invalid_port_range() {
+        let yaml = r#"
+        proxy:
+            use: true
+            uri: http://proxy1.example.com:{8082-8080}
+        "#;
+
+        let config: Value = serde_yaml::from_str(yaml).unwrap();
+        let proxy_config = ProxyConfig::from_config(&config["proxy"]).unwrap();
+
+        // Should treat invalid range as literal string
+        assert_eq!(proxy_config.uris.len(), 1);
+        assert_eq!(
+            proxy_config.uris[0],
+            "http://proxy1.example.com:{8082-8080}".to_string()
+        );
+    }
+
+    #[test]
+    fn test_no_port_range() {
+        let yaml = r#"
+        proxy:
+            use: true
+            uri: http://proxy1.example.com:8080
+        "#;
+
+        let config: Value = serde_yaml::from_str(yaml).unwrap();
+        let proxy_config = ProxyConfig::from_config(&config["proxy"]).unwrap();
+
+        assert_eq!(proxy_config.uris.len(), 1);
+        assert_eq!(
+            proxy_config.uris[0],
+            "http://proxy1.example.com:8080".to_string()
+        );
     }
 }

@@ -1,6 +1,7 @@
 #+title: Notes
 
 * Tasks
+** Need some kind of statistics
 ** Figure out if it's possible to implement similar api for capp-rs:
 ```
  let app_state = AppState {
