@@ -1,11 +1,11 @@
+use crate::proxy::{ProxyProvider, RandomProxyProvider};
 use backoff::ExponentialBackoffBuilder;
-use std::time::Duration;
 
 #[derive(Debug)]
 pub struct HttpClientParams<'a> {
     pub timeout: u64,
     pub connect_timeout: u64,
-    pub proxy: Option<reqwest::Proxy>,
+    pub proxy_provider: Option<Box<dyn ProxyProvider + Send + Sync>>,
     pub user_agent: &'a str,
 }
 
@@ -31,20 +31,22 @@ impl<'a> HttpClientParams<'a> {
             .expect("No timeout field in config");
         let connect_timeout = http_config["connect_timeout"]
             .as_u64()
-            .expect("No connect_timout field in config");
-        let need_proxy: bool = http_config["proxy"]["use"]
-            .as_bool()
-            .expect("No use field for proxy in config");
-        let proxy = if need_proxy {
-            let proxy_uri = http_config["proxy"]["uri"].as_str().unwrap();
-            Some(reqwest::Proxy::all(proxy_uri).expect("Error setting up proxy"))
-        } else {
-            None
-        };
+            .expect("No connect_timeout field in config");
+
+        let proxy_provider =
+            if http_config["proxy"]["use"].as_bool().unwrap_or(false) {
+                Some(Box::new(
+                    RandomProxyProvider::from_config(&http_config["proxy"])
+                        .expect("Failed to create proxy provider"),
+                ) as Box<dyn ProxyProvider + Send + Sync>)
+            } else {
+                None
+            };
+
         Self {
             timeout,
             connect_timeout,
-            proxy,
+            proxy_provider,
             user_agent,
         }
     }
@@ -63,23 +65,26 @@ pub fn parse_proxy_uri(uri: &str) -> String {
 }
 */
 
-/// Helper to create typical crawling request with sane defaultsx
+// Modified build_http_client function
 pub fn build_http_client(
     params: HttpClientParams,
 ) -> Result<reqwest::Client, reqwest::Error> {
     let mut client_builder = reqwest::ClientBuilder::new()
         .use_rustls_tls()
         .danger_accept_invalid_certs(true)
-        .timeout(Duration::from_secs(params.timeout))
-        .connect_timeout(Duration::from_secs(params.connect_timeout))
+        .timeout(std::time::Duration::from_secs(params.timeout))
+        .connect_timeout(std::time::Duration::from_secs(params.connect_timeout))
         .user_agent(params.user_agent);
 
-    if let Some(proxy) = params.proxy {
-        client_builder = client_builder.proxy(proxy);
+    if let Some(proxy_provider) = params.proxy_provider {
+        if let Some(proxy_uri) = proxy_provider.get_proxy() {
+            client_builder = client_builder.proxy(
+                reqwest::Proxy::all(&proxy_uri).expect("Failed to create proxy"),
+            );
+        }
     }
 
-    let client = client_builder.build()?;
-    Ok(client)
+    client_builder.build()
 }
 
 /// Fetch url with retries (with sane defaults),
@@ -145,7 +150,7 @@ mod tests {
         let client = build_http_client(HttpClientParams {
             timeout: 10,
             connect_timeout: 5,
-            proxy: None,
+            proxy_provider: None,
             user_agent: "hello",
         });
 
