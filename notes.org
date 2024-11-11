@@ -1,7 +1,11 @@
 #+title: Notes
 
+* Project structure
+- [X] capp - api to library
+- [ ] app-context - to load configuration and keep some internal key-value state
+
 * Major Tasks
-** Split to workspaces
+** DONE Split to workspaces
 
 * Tasks
 ** Need some kind of statistics
