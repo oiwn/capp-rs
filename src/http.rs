@@ -1,6 +1,36 @@
+//! HTTP client module for making web requests with configurable proxy support.
+//!
+//! This module provides functionality for building and configuring HTTP clients with
+//! features such as:
+//! - Configurable proxy support with port range expansion
+//! - Timeout settings
+//! - User agent customization
+//! - Retry mechanisms with exponential backoff
+//!
+//! # Example
+//! ```no_run
+//! use capp::http::{HttpClientParams, build_http_client};
+//! use serde_yaml::Value;
+//!
+//! let config: Value = serde_yaml::from_str(r#"
+//! http:
+//!     proxy:
+//!         use: true
+//!         uri: http://proxy.example.com:{8080-8082}
+//!     timeout: 30
+//!     connect_timeout: 10
+//! "#).unwrap();
+//!
+//! let params = HttpClientParams::from_config(&config["http"], "my-crawler/1.0");
+//! let client = build_http_client(params).unwrap();
+//! ```
 use crate::proxy::{ProxyProvider, RandomProxyProvider};
 use backoff::ExponentialBackoffBuilder;
 
+/// Parameters for configuring an HTTP client.
+///
+/// This struct holds all configuration needed to build a customized HTTP client,
+/// including timeout settings, proxy configuration, and user agent string.
 #[derive(Debug)]
 pub struct HttpClientParams<'a> {
     pub timeout: u64,
@@ -9,19 +39,28 @@ pub struct HttpClientParams<'a> {
     pub user_agent: &'a str,
 }
 
-/// Helper to create typical crawling request with few useful options
-/// Assuming there is some kind of settings chunk `http_config` like:
-/// ```notrust
-/// http:
-///     proxy:
-///         use: true
-///         uri: http://bro:admin@proxygate1.com:420420
-///     timeout: 30
-///     connect_timeout: 10
-/// ```
-/// uri could contain range of ports like:
-/// http://bro:admin@proxygate1.com:{420420..420440}
 impl<'a> HttpClientParams<'a> {
+    /// Creates an HttpClientParams instance from a YAML configuration.
+    ///
+    /// The configuration should follow this structure:
+    /// ```yaml
+    /// http:
+    ///     proxy:
+    ///         use: true
+    ///         uri: http://user:pass@proxy.example.com:8080
+    ///     timeout: 30
+    ///     connect_timeout: 10
+    /// ```
+    ///
+    /// The proxy URI can include a port range using the format:
+    /// `http://proxy.example.com:{8080-8090}`
+    ///
+    /// # Arguments
+    /// * `http_config` - YAML configuration containing HTTP settings
+    /// * `user_agent` - User agent string to be used in requests
+    ///
+    /// # Panics
+    /// Panics if required configuration fields are missing (timeout, connect_timeout)
     pub fn from_config(
         http_config: &serde_yaml::Value,
         user_agent: &'a str,
@@ -52,20 +91,19 @@ impl<'a> HttpClientParams<'a> {
     }
 }
 
-/* TODO:
-pub fn parse_proxy_uri(uri: &str) -> String {
-    match RE.find(uri) {
-        Some(matched) => {
-            let caps = RE.captures(matched).unwrap();
-            let start = caps.get(1).map_or("", |m| m.as_str());
-            let end = caps.get(2).map_or("", |m| m.as_str());
-        }
-        Err(_) => {}
-    }
-}
-*/
-
-// Modified build_http_client function
+/// Builds an HTTP client with the specified parameters.
+///
+/// Creates a reqwest::Client configured with:
+/// - TLS settings
+/// - Timeout configurations
+/// - User agent
+/// - Optional proxy support
+///
+/// # Arguments
+/// * `params` - Configuration parameters for the client
+///
+/// # Returns
+/// A Result containing either the configured client or an error
 pub fn build_http_client(
     params: HttpClientParams,
 ) -> Result<reqwest::Client, reqwest::Error> {
@@ -87,8 +125,18 @@ pub fn build_http_client(
     client_builder.build()
 }
 
-/// Fetch url with retries (with sane defaults),
-/// notice it will not download content
+/// Fetches a URL with automatic retries.
+///
+/// Makes a GET request to the specified URL, automatically retrying on failure
+/// using exponential backoff. This method only retrieves headers and status,
+/// not the response body.
+///
+/// # Arguments
+/// * `client` - The HTTP client to use for the request
+/// * `url` - The URL to fetch
+///
+/// # Returns
+/// A Result containing either the response or an error
 pub async fn fetch_url(
     client: reqwest::Client,
     url: &str,
@@ -96,14 +144,21 @@ pub async fn fetch_url(
     let backoff = ExponentialBackoffBuilder::new()
         .with_max_interval(std::time::Duration::from_secs(10))
         .build();
-    backoff::future::retry(backoff, || async {
-        tracing::info!("[{}] retriving url...", url);
-        Ok(client.get(url).send().await?)
-    })
-    .await
+    backoff::future::retry(backoff, || async { Ok(client.get(url).send().await?) })
+        .await
 }
 
-/// Fetch content from url retrying
+/// Fetches content from a URL with automatic retries.
+///
+/// Makes a GET request to the specified URL and retrieves the full response body,
+/// automatically retrying on failure using exponential backoff.
+///
+/// # Arguments
+/// * `client` - The HTTP client to use for the request
+/// * `url` - The URL to fetch
+///
+/// # Returns
+/// A Result containing either a tuple of (StatusCode, response_body) or an error
 pub async fn fetch_url_content(
     client: reqwest::Client,
     url: &str,
@@ -114,7 +169,6 @@ pub async fn fetch_url_content(
         .build();
 
     let fetch_content = || async {
-        tracing::info!("[{}] retrieving url...", url);
         let response = client.get(url).send().await?;
         let status = response.status();
         let text = response.text().await?;
@@ -127,6 +181,39 @@ pub async fn fetch_url_content(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_yaml::Value;
+    use std::collections::HashSet;
+    use std::time::Duration;
+
+    const YAML_CONF_SINGLE_PORT: &str = r#"
+    http:
+        proxy:
+            use: true
+            uri: http://proxy1.example.com:8080
+        timeout: 30
+        connect_timeout: 10
+    "#;
+
+    const YAML_CONF_PORT_RANGE: &str = r#"
+    http:
+        proxy:
+            use: true
+            uri: http://proxy1.example.com:{8080-8082}
+        timeout: 30
+        connect_timeout: 10
+    "#;
+
+    const YAML_CONF_MULTIPLE_PORT_RANGES: &str = r#"
+    http:
+        proxy:
+            use: true
+            uris:
+                - http://proxy1.example.com:{8080-8082}
+                - http://proxy2.example.com:9090
+                - http://proxy3.example.com:{9000-9001}
+        timeout: 30
+        connect_timeout: 10
+    "#;
 
     const YAML_CONF_TEXT: &str = r#"
     http:
@@ -177,5 +264,165 @@ mod tests {
             &config.get("http").unwrap(),
             "hellobot",
         ));
+    }
+
+    #[test]
+    fn test_http_client_single_port() {
+        let config: Value = serde_yaml::from_str(YAML_CONF_SINGLE_PORT).unwrap();
+        let client_params =
+            HttpClientParams::from_config(&config["http"], "test-agent/1.0");
+
+        assert_eq!(client_params.timeout, 30);
+        assert_eq!(client_params.connect_timeout, 10);
+
+        if let Some(provider) = client_params.proxy_provider {
+            let proxy = provider.get_proxy().unwrap();
+            assert_eq!(proxy, "http://proxy1.example.com:8080");
+        } else {
+            panic!("Expected proxy provider to be configured");
+        }
+    }
+
+    #[test]
+    fn test_http_client_port_range() {
+        let config: Value = serde_yaml::from_str(YAML_CONF_PORT_RANGE).unwrap();
+        let client_params =
+            HttpClientParams::from_config(&config["http"], "test-agent/1.0");
+
+        let mut seen_ports = HashSet::new();
+        if let Some(provider) = client_params.proxy_provider {
+            // Test multiple calls to verify different ports are used
+            for _ in 0..10 {
+                let proxy = provider.get_proxy().unwrap();
+                let port = extract_port_from_proxy_url(&proxy);
+                seen_ports.insert(port);
+            }
+        }
+
+        // Should see all three ports from range 8080-8082
+        assert_eq!(seen_ports.len(), 3);
+        assert!(seen_ports.contains(&8080));
+        assert!(seen_ports.contains(&8081));
+        assert!(seen_ports.contains(&8082));
+    }
+
+    #[test]
+    fn test_http_client_multiple_port_ranges() {
+        let config: Value =
+            serde_yaml::from_str(YAML_CONF_MULTIPLE_PORT_RANGES).unwrap();
+        let client_params =
+            HttpClientParams::from_config(&config["http"], "test-agent/1.0");
+
+        let mut seen_proxies = HashSet::new();
+        if let Some(provider) = client_params.proxy_provider {
+            // Test multiple calls to verify different proxies are used
+            for _ in 0..20 {
+                let proxy = provider.get_proxy().unwrap();
+                seen_proxies.insert(proxy);
+            }
+        }
+
+        // Should see:
+        // 3 ports from proxy1 (8080-8082)
+        // 1 from proxy2 (9090)
+        // 2 from proxy3 (9000-9001)
+        assert_eq!(seen_proxies.len(), 6);
+
+        // Verify specific proxy patterns
+        assert!(seen_proxies
+            .iter()
+            .any(|p| p == "http://proxy1.example.com:8080"));
+        assert!(seen_proxies
+            .iter()
+            .any(|p| p == "http://proxy1.example.com:8081"));
+        assert!(seen_proxies
+            .iter()
+            .any(|p| p == "http://proxy1.example.com:8082"));
+        assert!(seen_proxies
+            .iter()
+            .any(|p| p == "http://proxy2.example.com:9090"));
+        assert!(seen_proxies
+            .iter()
+            .any(|p| p == "http://proxy3.example.com:9000"));
+        assert!(seen_proxies
+            .iter()
+            .any(|p| p == "http://proxy3.example.com:9001"));
+    }
+
+    #[test]
+    fn test_http_client_builder_timeouts_are_set() {
+        let config: Value = serde_yaml::from_str(YAML_CONF_PORT_RANGE).unwrap();
+        let client_params =
+            HttpClientParams::from_config(&config["http"], "test-agent/1.0");
+
+        assert_eq!(client_params.timeout, Duration::from_secs(30).as_secs());
+        assert_eq!(
+            client_params.connect_timeout,
+            Duration::from_secs(10).as_secs()
+        );
+    }
+
+    #[test]
+    fn test_proxy_disabled() {
+        let yaml = r#"
+        http:
+            proxy:
+                use: false
+                uri: http://proxy1.example.com:8080
+            timeout: 30
+            connect_timeout: 10
+        "#;
+
+        let config: Value = serde_yaml::from_str(yaml).unwrap();
+        let client_params =
+            HttpClientParams::from_config(&config["http"], "test-agent/1.0");
+
+        assert!(
+            client_params.proxy_provider.is_none(),
+            "Proxy provider should be None when disabled"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "No timeout field in config")]
+    fn test_missing_timeout() {
+        let yaml = r#"
+        http:
+            proxy:
+                use: true
+                uri: http://proxy1.example.com:8080
+            connect_timeout: 10
+        "#;
+
+        let config: Value = serde_yaml::from_str(yaml).unwrap();
+        let _ = HttpClientParams::from_config(&config["http"], "test-agent/1.0");
+    }
+
+    #[test]
+    fn test_invalid_port_range() {
+        let yaml = r#"
+        http:
+            proxy:
+                use: true
+                uri: http://proxy1.example.com:{8082-8080}
+            timeout: 30
+            connect_timeout: 10
+        "#;
+
+        let config: Value = serde_yaml::from_str(yaml).unwrap();
+        let client_params =
+            HttpClientParams::from_config(&config["http"], "test-agent/1.0");
+
+        if let Some(provider) = client_params.proxy_provider {
+            let proxy = provider.get_proxy().unwrap();
+            // Should treat invalid range as literal string
+            assert_eq!(proxy, "http://proxy1.example.com:{8082-8080}");
+        }
+    }
+
+    // Helper function to extract port number from proxy URL
+    fn extract_port_from_proxy_url(url: &str) -> u16 {
+        let parts: Vec<&str> = url.split(':').collect();
+        parts.last().unwrap().parse().unwrap()
     }
 }

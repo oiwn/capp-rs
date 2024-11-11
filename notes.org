@@ -1,5 +1,8 @@
 #+title: Notes
 
+* Major Tasks
+** Split to workspaces
+
 * Tasks
 ** Need some kind of statistics
 ** Figure out if it's possible to implement similar api for capp-rs:
