@@ -1,5 +1,12 @@
 #+title: Notes
 
+* Project structure
+- [X] capp - api to library
+- [ ] app-context - to load configuration and keep some internal key-value state
+
+* Major Tasks
+** DONE Split to workspaces
+
 * Tasks
 ** Need some kind of statistics
 ** Figure out if it's possible to implement similar api for capp-rs:

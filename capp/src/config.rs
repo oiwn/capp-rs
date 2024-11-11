@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn test_load_config() {
-        let config_path = "tests/simple_config.yml";
+        let config_path = "../tests/simple_config.yml";
         let app = Application::from_config(config_path);
 
         assert_eq!(app.config["app"]["threads"].as_u64(), Some(4));
@@ -112,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_get_config_value() {
-        let config_path = "tests/simple_config.yml";
+        let config_path = "../tests/simple_config.yml";
         let app = Application::from_config(config_path);
 
         assert_eq!(
@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_load_lines() {
-        let config_path = "tests/simple_config.yml";
+        let config_path = "../tests/simple_config.yml";
         let mut app = Application::from_config(config_path);
         let uas_file_path = {
             app.get_config_value("app.user_agents_file")
