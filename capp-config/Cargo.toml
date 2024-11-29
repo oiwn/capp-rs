@@ -1,0 +1,15 @@
+[package]
+name = "capp-config"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+serde_yaml = "0.9"
+serde_json = { workspace = true }
+reqwest = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true}
+tracing = { workspace = true }
+
+[features]
+http = ["dep:reqwest", "dep:tokio"]

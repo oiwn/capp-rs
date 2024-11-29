@@ -1,8 +1,8 @@
 use crate::{
-    config::Configurable,
     manager::{Computation, WorkerStats},
     queue::{AbstractTaskQueue, TaskQueue, TaskQueueError},
 };
+use capp_config::config::Configurable;
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{sync::Arc, time::Duration};

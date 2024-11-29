@@ -1,9 +1,17 @@
 [workspace]
 resolver = "2"
 members = [
-    "app-context",
-    "capp"
+    "capp", 
+    # "capp-queue",
+    "capp-config",
 ]
+
+[workspace.package]
+version = "0.5.0"
+edition = "2021"
+license = "MIT"
+authors = ["oiwn"]
+repository = "https://github.com/oiwn/capp-rs"
 
 [workspace.dependencies]
 # Serialization
@@ -20,3 +28,7 @@ tracing-subscriber = "0.3"
 
 # Utils
 # derive_builder = { version = "0.2" }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"] }
+tokio = { version = "1.41", features = ["full"] }

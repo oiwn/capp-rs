@@ -1,12 +1,12 @@
 use super::WorkerId;
 use crate::{
-    config::Configurable,
     manager::{
         worker_wrapper, Computation, WorkerCommand, WorkerOptions,
         WorkerOptionsBuilder,
     },
     queue::TaskQueue,
 };
+use capp_config::config::Configurable;
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
