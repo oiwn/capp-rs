@@ -4,3 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tracing = { workspace = true }
+tokio = { workspace = true, optional = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+uuid = { workspace = true }
+rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
+
+[features]
+redis = ["dep:tokio", "dep:rustis"]

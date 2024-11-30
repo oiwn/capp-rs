@@ -51,9 +51,7 @@ pub mod manager;
 pub mod prelude;
 #[cfg(feature = "http")]
 pub mod proxy;
-pub mod queue;
 pub mod router;
-pub mod task;
 
 // re-export
 pub use async_trait;

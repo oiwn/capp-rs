@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "capp", 
-    # "capp-queue",
+    "capp-queue",
     "capp-config",
 ]
 
@@ -26,9 +26,10 @@ anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
-# Utils
-# derive_builder = { version = "0.2" }
-
 # HTTP client
 reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"] }
 tokio = { version = "1.41", features = ["full"] }
+
+# Utils
+async-trait = { version = "0.1" }
+uuid = { version = "1.11", features = ["v4", "serde"] }

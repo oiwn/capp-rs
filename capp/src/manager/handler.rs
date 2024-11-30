@@ -3,9 +3,9 @@
 //! request handling with associated types for requests, responses, and errors.
 
 use crate::prelude::WorkerId;
-use crate::queue::AbstractTaskQueue;
-use crate::task::Task;
 use async_trait::async_trait;
+use capp_queue::queue::AbstractTaskQueue;
+use capp_queue::task::Task;
 use std::sync::Arc;
 
 /// A trait for handling asynchronous tasks or requests.
