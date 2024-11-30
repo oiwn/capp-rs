@@ -2,17 +2,15 @@
 //! The storage allows tasks to be pushed to and popped from a queue,
 //! and also allows tasks to be set and retrieved by their UUID.
 
-pub mod backend;
-
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
 
-use crate::task::{Task, TaskId};
-pub use backend::InMemoryTaskQueue;
+pub use crate::backend::InMemoryTaskQueue;
 #[cfg(feature = "redis")]
-pub use backend::{RedisRoundRobinTaskQueue, RedisTaskQueue};
+pub use crate::backend::{RedisRoundRobinTaskQueue, RedisTaskQueue};
+use crate::task::{Task, TaskId};
 
 #[derive(Error, Debug)]
 pub enum TaskQueueError {

@@ -6,6 +6,10 @@
 
 * Major Tasks
 ** DONE Split to workspaces
+** fix RoundRobin queue
+** mongodb queue
+** postgres queue
+** benchmarks criterion
 
 * Tasks
 ** Need some kind of statistics

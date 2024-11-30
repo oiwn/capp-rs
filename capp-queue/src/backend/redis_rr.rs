@@ -44,7 +44,7 @@ impl<D> RedisRoundRobinTaskQueue<D> {
 
         // Initialize counters for each tag
         for tag in queue.tags.iter() {
-            let _ = queue.client.set(queue.get_counter_key(tag), 0).await?;
+            queue.client.set(queue.get_counter_key(tag), 0).await?;
         }
 
         Ok(queue)
@@ -180,7 +180,7 @@ where
         let uuid_as_str = task_id.to_string();
         let _ = self
             .client
-            .hdel(&self.get_hashmap_key(), &uuid_as_str)
+            .hdel(self.get_hashmap_key(), &uuid_as_str)
             .await?;
         Ok(())
     }
@@ -191,10 +191,8 @@ where
             .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
 
         let mut pipeline = self.client.create_pipeline();
-        pipeline.rpush(&self.get_dlq_key(), &task_json).forget();
-        pipeline
-            .hdel(&self.get_hashmap_key(), &uuid_as_str)
-            .forget();
+        pipeline.rpush(self.get_dlq_key(), &task_json).forget();
+        pipeline.hdel(self.get_hashmap_key(), &uuid_as_str).forget();
         self.execute_pipeline(pipeline).await
     }
 
@@ -204,7 +202,7 @@ where
 
         self.client
             .hset(
-                &self.get_hashmap_key(),
+                self.get_hashmap_key(),
                 [(&task.task_id.to_string(), &task_json)],
             )
             .await
