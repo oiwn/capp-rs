@@ -38,7 +38,7 @@ uuid.workspace = true
 # TODO: figure out why can't have derive_builder as common dep.
 # derive_builder.workspace = true
 
-capp-config = { path = "../capp-config", features=["http"] }
+capp-config = { path = "../capp-config", features=["http", "router"] }
 capp-queue = { path = "../capp-queue", features=["redis"] }
 
 derive_builder = { version = "0.20" }
@@ -63,5 +63,6 @@ tempfile = "3"
 
 [features]
 http = ["dep:reqwest", "capp-config/http"]
+router = ["capp-config/router"]
 healthcheck = ["dep:reqwest"]
 redis = ["dep:rustis", "capp-queue/redis"]
