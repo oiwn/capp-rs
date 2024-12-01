@@ -59,6 +59,7 @@ rand = "0.8"
 md5 = "0.7"
 url = "2.5"
 base64 = "0.22"
+tempfile = "3"
 
 [features]
 http = ["dep:reqwest", "capp-config/http"]
