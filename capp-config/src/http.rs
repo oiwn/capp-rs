@@ -9,7 +9,7 @@
 //!
 //! # Example
 //! ```no_run
-//! use capp::http::{HttpClientParams, build_http_client};
+//! use capp_config::http::{HttpClientParams, build_http_client};
 //! use serde_yaml::Value;
 //!
 //! let config: Value = serde_yaml::from_str(r#"
@@ -249,7 +249,7 @@ mod tests {
         let config: serde_yaml::Value =
             serde_yaml::from_str(YAML_CONF_TEXT).unwrap();
         let client = build_http_client(HttpClientParams::from_config(
-            &config.get("http").unwrap(),
+            config.get("http").unwrap(),
             "hellobot",
         ));
         assert!(client.is_ok());
@@ -261,7 +261,7 @@ mod tests {
         let config: serde_yaml::Value =
             serde_yaml::from_str(WRONG_YAML_CONF_TEXT).unwrap();
         let _ = build_http_client(HttpClientParams::from_config(
-            &config.get("http").unwrap(),
+            config.get("http").unwrap(),
             "hellobot",
         ));
     }

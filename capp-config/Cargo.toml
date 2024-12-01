@@ -5,11 +5,17 @@ edition = "2021"
 
 [dependencies]
 serde = { workspace = true }
-serde_yaml = "0.9"
 serde_json = { workspace = true }
 reqwest = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true}
 tracing = { workspace = true }
+rand = { workspace = true }
+
+backoff = { version = "0.4", optional = true, features = ["tokio"] }
+regex = "1.11"
+indexmap = "2.6"
+url = "2.5"
+serde_yaml = "0.9"
 
 [features]
-http = ["dep:reqwest", "dep:tokio"]
+http = ["dep:reqwest", "dep:tokio", "dep:backoff"]
