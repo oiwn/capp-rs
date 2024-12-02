@@ -1,7 +1,6 @@
 //! In-memory implementation of TaskStorage trait. The storage allows tasks to be
 //! pushed to and popped from a queue, and also allows tasks to be set and
 //! retrieved by their UUID.
-
 use crate::queue::{TaskQueue, TaskQueueError};
 use crate::task::{Task, TaskId};
 use async_trait::async_trait;
