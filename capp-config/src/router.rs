@@ -14,7 +14,7 @@
 //! # Examples
 //!
 //! ```
-//! use your_crate::router::Router;
+//! use capp_config::router::Router;
 //! use url::Url;
 //!
 //! let mut router = Router::new();
@@ -190,6 +190,7 @@ impl URLClassifier {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

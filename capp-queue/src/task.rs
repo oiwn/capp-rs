@@ -78,10 +78,6 @@ impl<D: Clone> Task<D> {
     }
 }
 
-//*****************************************************************************
-// TaskId with ser/de traits implemented (to convert underlaying Uuid)
-//*****************************************************************************
-
 impl TaskId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
@@ -127,10 +123,6 @@ impl std::fmt::Display for TaskId {
     }
 }
 
-//*****************************************************************************
-// Tests
-//*****************************************************************************
-
 #[cfg(test)]
 mod tests {
     use core::panic;
@@ -146,7 +138,7 @@ mod tests {
     #[test]
     fn task_id_serde() {
         let task = Task::new(TaskData { value: 1 });
-        let task_id = task.task_id.clone();
+        let task_id = task.task_id;
         let serialized_task_value = serde_json::to_value(task).unwrap();
         let serialized_task_json = serialized_task_value.to_string();
         let desrialized_task: Task<TaskData> =

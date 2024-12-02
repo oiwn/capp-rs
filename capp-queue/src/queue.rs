@@ -16,16 +16,12 @@ use crate::task::{Task, TaskId};
 pub enum TaskQueueError {
     #[error("Queue error: {0}")]
     QueueError(String),
-
     #[error("Ser/De error: {0}")]
     SerdeError(String),
-
     #[error("Task not found: {0}")]
     TaskNotFound(TaskId),
-
     #[error("Queue is empty")]
     QueueEmpty,
-
     #[cfg(feature = "redis")]
     #[error("Redis error")]
     RedisError(#[from] rustis::Error),

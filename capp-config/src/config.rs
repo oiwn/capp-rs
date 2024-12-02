@@ -4,35 +4,38 @@ use std::{
     path,
 };
 
+#[derive(thiserror::Error, Debug)]
+pub enum ConfigError {
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("YAML parsing error: {0}")]
+    YamlParse(#[from] serde_yaml::Error),
+    #[error("Line parsing error: {0}")]
+    LineParse(String),
+}
+
 pub trait Configurable {
     fn config(&self) -> &serde_yaml::Value;
 
     // read configuration from yaml config
     fn load_config(
         config_file_path: impl AsRef<path::Path>,
-    ) -> Result<serde_yaml::Value, io::Error> {
+    ) -> Result<serde_yaml::Value, ConfigError> {
         let content: String = fs::read_to_string(config_file_path)?;
-        let config: serde_yaml::Value = serde_yaml::from_str(&content).unwrap();
+        let config: serde_yaml::Value = serde_yaml::from_str(&content)?;
         Ok(config)
     }
 
     /// Load Vec<String> from file with path `file path`
     fn load_text_file_lines(
         file_path: impl AsRef<path::Path>,
-    ) -> Result<Vec<String>, io::Error> {
+    ) -> Result<Vec<String>, ConfigError> {
         let file = fs::File::open(file_path)?;
-        let lines: Vec<String> = io::BufReader::new(file)
+        let lines = io::BufReader::new(file)
             .lines()
-            .map(|l| l.expect("Could not parse line"))
-            .collect();
-
+            .map(|l| l.map_err(|e| ConfigError::LineParse(e.to_string())))
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(lines)
-    }
-
-    fn load_text_file_content(
-        file_path: impl AsRef<path::Path>,
-    ) -> Result<String, io::Error> {
-        fs::read_to_string(file_path)
     }
 
     /// Extract Value from config using dot notation i.e. "app.concurrency"
@@ -74,19 +77,22 @@ pub trait Configurable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::tempdir;
 
-    pub struct Application {
+    pub struct TestApp {
         config: serde_yaml::Value,
         user_agents: Option<Vec<String>>,
     }
 
-    impl Configurable for Application {
+    impl Configurable for TestApp {
         fn config(&self) -> &serde_yaml::Value {
             &self.config
         }
     }
 
-    impl Application {
+    impl TestApp {
         fn from_config(config_file_path: impl AsRef<path::Path>) -> Self {
             let config = Self::load_config(config_file_path);
             Self {
@@ -103,7 +109,7 @@ mod tests {
     #[test]
     fn test_load_config() {
         let config_path = "../tests/simple_config.yml";
-        let app = Application::from_config(config_path);
+        let app = TestApp::from_config(config_path);
 
         assert_eq!(app.config["app"]["threads"].as_u64(), Some(4));
         assert_eq!(app.config()["app"]["max_queue"].as_u64(), Some(500));
@@ -111,9 +117,54 @@ mod tests {
     }
 
     #[test]
+    fn test_load_config_valid_yaml() {
+        let dir = tempdir().unwrap();
+        let config_path = dir.path().join("config.yml");
+        let mut file = File::create(&config_path).unwrap();
+        writeln!(file, "key: value\napp:\n  setting: 42").unwrap();
+
+        let config = TestApp::load_config(&config_path);
+        assert!(config.is_ok());
+        let config = config.unwrap();
+        assert_eq!(config["key"].as_str(), Some("value"));
+        assert_eq!(config["app"]["setting"].as_i64(), Some(42));
+    }
+
+    #[test]
+    fn test_load_config_invalid_yaml() {
+        let dir = tempdir().unwrap();
+        let config_path = dir.path().join("config.yml");
+        let mut file = File::create(&config_path).unwrap();
+        writeln!(file, "invalid: : yaml: content").unwrap();
+
+        let config = TestApp::load_config(&config_path);
+        assert!(matches!(config, Err(ConfigError::YamlParse(_))));
+    }
+
+    #[test]
+    fn test_load_text_file_lines() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("test.txt");
+        let mut file = File::create(&file_path).unwrap();
+        writeln!(file, "line1\nline2\nline3").unwrap();
+
+        let lines = TestApp::load_text_file_lines(&file_path);
+        assert!(lines.is_ok());
+        let lines = lines.unwrap();
+        assert_eq!(lines, vec!["line1", "line2", "line3"]);
+    }
+
+    #[test]
+    fn test_get_config_value_empty_keys() {
+        let config_path = "../tests/simple_config.yml";
+        let app = TestApp::from_config(config_path);
+        assert_eq!(app.get_config_value(""), None);
+    }
+
+    #[test]
     fn test_get_config_value() {
         let config_path = "../tests/simple_config.yml";
-        let app = Application::from_config(config_path);
+        let app = TestApp::from_config(config_path);
 
         assert_eq!(
             app.get_config_value("logging.log_to_redis")
@@ -124,9 +175,31 @@ mod tests {
     }
 
     #[test]
+    fn test_get_config_value_recursive() {
+        let yaml = r#"
+        app:
+          nested:
+            value: 42
+        "#;
+        let config: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let app = TestApp {
+            config,
+            user_agents: None,
+        };
+
+        assert_eq!(
+            app.get_config_value("app.nested.value")
+                .and_then(|v| v.as_i64()),
+            Some(42)
+        );
+        assert_eq!(app.get_config_value("app.missing.value"), None);
+        assert_eq!(app.get_config_value("missing"), None);
+    }
+
+    #[test]
     fn test_load_lines() {
         let config_path = "../tests/simple_config.yml";
-        let mut app = Application::from_config(config_path);
+        let mut app = TestApp::from_config(config_path);
         let uas_file_path = {
             app.get_config_value("app.user_agents_file")
                 .unwrap()

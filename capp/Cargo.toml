@@ -38,28 +38,14 @@ uuid.workspace = true
 # TODO: figure out why can't have derive_builder as common dep.
 # derive_builder.workspace = true
 
-capp-config = { path = "../capp-config", features=["http"] }
+capp-config = { path = "../capp-config", features=["http", "router"] }
 capp-queue = { path = "../capp-queue", features=["redis"] }
 
-# async-trait = { version = "0.1" }
-backoff = { version = "0.4", optional = true, features = ["tokio"] }
 derive_builder = { version = "0.20" }
 reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"], optional = true }
-# serde = { version = "1.0", features = ["derive"] }
-# serde_json = { version = "1.0" }
 serde_yaml = "0.9"
-# thiserror = { version = "1" }
-# tokio = { version = "1.41", features = ["full"] }
-# uuid = { version = "1.11", features = ["v4", "serde"] }
 rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
-# tracing = "0.1"
-# tracing-subscriber = "0.3"
-# anyhow = "1"
 tracing-futures = "0.2"
-indexmap = "2.6"
-url = "2.5"
-regex = "1.11"
-rand = { version = "0.8", optional = true } 
 
 [dev-dependencies]
 capp = { path = ".", features = ["http", "healthcheck", "redis"] }
@@ -73,8 +59,10 @@ rand = "0.8"
 md5 = "0.7"
 url = "2.5"
 base64 = "0.22"
+tempfile = "3"
 
 [features]
-http = ["dep:backoff", "dep:reqwest", "dep:rand", "capp-config/http"]
+http = ["dep:reqwest", "capp-config/http"]
+router = ["capp-config/router"]
 healthcheck = ["dep:reqwest"]
 redis = ["dep:rustis", "capp-queue/redis"]

@@ -44,7 +44,7 @@ impl ProxyConfig {
                 Some(seq) => seq
                     .iter()
                     .filter_map(|v| v.as_str())
-                    .flat_map(|uri| Self::expand_uri(uri))
+                    .flat_map(Self::expand_uri)
                     .collect(),
                 None => {
                     if let Some(uri) = config["uri"].as_str() {

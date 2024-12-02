@@ -1,9 +1,9 @@
-#[cfg(feature = "http")]
-pub use crate::http::*;
 pub use crate::manager::*;
 #[cfg(feature = "http")]
-pub use crate::proxy::*;
-pub use crate::router::*;
+pub use capp_config::http::*;
+#[cfg(feature = "http")]
+pub use capp_config::proxy::*;
+pub use capp_config::router::*;
 pub use capp_config::*;
 pub use capp_queue::queue::*;
 pub use capp_queue::task::*;
