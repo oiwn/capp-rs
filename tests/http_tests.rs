@@ -7,29 +7,6 @@ mod tests {
         build_http_client, fetch_url, fetch_url_content, HttpClientParams,
     };
 
-    // pub async fn start_test_server(addr: SocketAddr) {
-    //     let make_svc = make_service_fn(|_conn| async {
-    //         Ok::<_, hyper::Error>(service_fn(handle_request))
-    //     });
-
-    //     let server = Server::bind(&addr).serve(make_svc);
-    //     println!("Test server running on http://{}", addr);
-
-    //     if let Err(e) = server.await {
-    //         eprintln!("Server error: {}", e);
-    //     }
-    // }
-
-    // async fn handle_request(
-    //     _req: Request<Body>,
-    // ) -> Result<Response<Body>, hyper::Error> {
-    //     let response = Response::builder()
-    //         .status(200)
-    //         .body(Body::from("Hello, World!"))
-    //         .unwrap();
-    //     Ok(response)
-    // }
-
     #[test]
     fn test_http_request() {
         let rt = tokio::runtime::Runtime::new().unwrap();

@@ -3,7 +3,7 @@ use crate::manager::{
     worker_wrapper, Computation, WorkerCommand, WorkerOptions, WorkerOptionsBuilder,
 };
 use capp_config::config::Configurable;
-use capp_queue::queue::TaskQueue;
+use capp_queue::queue::{AbstractTaskQueue, TaskQueue};
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
@@ -39,7 +39,8 @@ pub struct WorkersManagerOptions {
 pub struct WorkersManager<Data, Comp, Ctx> {
     pub ctx: Arc<Ctx>,
     pub computation: Arc<Comp>,
-    pub queue: Arc<dyn TaskQueue<Data> + Send + Sync>,
+    // pub queue: Arc<dyn TaskQueue<Data> + Send + Sync>,
+    pub queue: AbstractTaskQueue<Data>,
     pub options: WorkersManagerOptions,
 }
 
@@ -72,7 +73,8 @@ where
     pub fn new_from_arcs(
         ctx: Arc<Ctx>,
         computation: Arc<Comp>,
-        queue: Arc<dyn TaskQueue<Data> + Send + Sync>,
+        // queue: Arc<dyn TaskQueue<Data> + Send + Sync>,
+        queue: AbstractTaskQueue<Data>,
         options: WorkersManagerOptions,
     ) -> Self {
         Self {
