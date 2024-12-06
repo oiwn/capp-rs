@@ -1,12 +1,12 @@
 #[cfg(test)]
 mod tests {
-    use capp::queue::{RedisTaskQueue, TaskQueue, TaskQueueError};
-    use capp::task::Task;
+    use capp_queue::queue::{RedisTaskQueue, TaskQueue, TaskQueueError};
+    use capp_queue::task::Task;
     use dotenvy::dotenv;
     use rustis::client::Client;
     use rustis::commands::{GenericCommands, HashCommands, ListCommands};
     use serde::{Deserialize, Serialize};
-    use tokio;
+    // use tokio;
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     struct TestData {

@@ -316,7 +316,7 @@ mod tests {
         let mut seen_proxies = HashSet::new();
         if let Some(provider) = client_params.proxy_provider {
             // Test multiple calls to verify different proxies are used
-            for _ in 0..20 {
+            for _ in 0..100 {
                 let proxy = provider.get_proxy().unwrap();
                 seen_proxies.insert(proxy);
             }

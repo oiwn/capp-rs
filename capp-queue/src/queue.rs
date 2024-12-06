@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
-use std::sync::Arc;
+use std::{fmt::Debug, sync::Arc};
 use thiserror::Error;
 
 pub use crate::backend::InMemoryTaskQueue;
