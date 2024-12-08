@@ -13,9 +13,9 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct RedisRoundRobinTaskQueue<D> {
-    client: Client,
-    key_prefix: String,
-    tags: Arc<HashSet<String>>,
+    pub client: Client,
+    pub key_prefix: String,
+    pub tags: Arc<HashSet<String>>,
     _marker: PhantomData<D>,
 }
 
@@ -51,19 +51,19 @@ impl<D> RedisRoundRobinTaskQueue<D> {
     }
 
     // Key generation methods
-    fn get_schedule_key(&self) -> String {
+    pub fn get_schedule_key(&self) -> String {
         format!("{}:schedule", self.key_prefix)
     }
 
-    fn get_hashmap_key(&self) -> String {
+    pub fn get_hashmap_key(&self) -> String {
         format!("{}:tasks:hm", self.key_prefix)
     }
 
-    fn get_list_key(&self, tag: &str) -> String {
+    pub fn get_list_key(&self, tag: &str) -> String {
         format!("{}:{}:ls", self.key_prefix, tag)
     }
 
-    fn get_dlq_key(&self) -> String {
+    pub fn get_dlq_key(&self) -> String {
         format!("{}:dlq", self.key_prefix)
     }
 
