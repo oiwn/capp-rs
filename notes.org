@@ -1,12 +1,7 @@
 #+title: Notes
 
-* Project structure
-- [X] capp - api to library
-- [ ] app-context - to load configuration and keep some internal key-value state
-
 * Major Tasks
-** DONE Split to workspaces
-** router should be feature
+** figure if it can get rid of returning yaml_value in favour of some generic configuration type
 ** fix RoundRobin queue
 ** mongodb queue
 ** postgres queue
