@@ -35,7 +35,21 @@ mod tests {
             .expect("Error while establishing redis connection")
     }
 
+    // Cleanup before each test
+    async fn cleanup_before_test(test_name: &str) {
+        let redis = get_redis_connection().await;
+        let pattern = format!("test-rr-{}*", test_name);
+        // Get all keys matching our test pattern
+        let keys: Vec<String> =
+            redis.keys(&pattern).await.expect("Failed to get keys");
+        if !keys.is_empty() {
+            redis.del(keys).await.expect("Failed to delete keys");
+        }
+    }
+
     async fn setup_queue(test_name: &str) -> RedisRoundRobinTaskQueue<TestData> {
+        // cleanup tests if present
+        cleanup_before_test(test_name).await;
         let redis = get_redis_connection().await;
         let tags = HashSet::from([
             "tag1".to_string(),
@@ -105,7 +119,7 @@ mod tests {
 
         // Verify tasks are stored properly
         let hashmap_len: u64 =
-            queue.client.hlen(&queue.get_hashmap_key()).await.unwrap() as u64;
+            queue.client.hlen(queue.get_hashmap_key()).await.unwrap() as u64;
         assert_eq!(hashmap_len, 6, "All tasks should be in hashmap");
 
         // Pop tasks and verify round-robin behavior
