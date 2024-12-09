@@ -101,13 +101,14 @@ impl<D> RedisRoundRobinTaskQueue<D> {
         Ok(results.first().map(|(tag, _score)| tag.clone()))
     }
 
-    // Update tag's timestamp in schedule
     async fn update_tag_timestamp(&self, tag: &str) -> Result<(), TaskQueueError> {
         let timestamp = self.current_timestamp()?;
+        // Add a small increment to ensure proper ordering
+        let score = timestamp as f64 + 0.001;
         self.client
             .zadd(
                 self.get_schedule_key(),
-                vec![(timestamp as f64, tag)],
+                vec![(score, tag)],
                 ZAddOptions::default(),
             )
             .await?;
@@ -153,8 +154,11 @@ where
         let tag = task.payload.get_tag_value().to_string();
         let list_key = self.get_list_key(&tag);
         let hashmap_key = self.get_hashmap_key();
+        let schedule_key = self.get_schedule_key();
 
         let mut pipeline = self.client.create_pipeline();
+
+        // Add task to list and hashmap
         pipeline
             .lpush(&list_key, &task.task_id.to_string())
             .forget();
@@ -162,42 +166,60 @@ where
             .hset(&hashmap_key, [(&task.task_id.to_string(), &task_json)])
             .forget();
 
+        // Ensure tag exists in schedule with current timestamp if it doesn't exist
+        let timestamp = self.current_timestamp()?;
+        pipeline
+            .zadd(
+                schedule_key,
+                vec![(timestamp as f64, tag)],
+                ZAddOptions::default()
+                    .condition(rustis::commands::ZAddCondition::NX), // Only add if not exists
+            )
+            .forget();
+
         self.execute_pipeline(pipeline).await
     }
 
     async fn pop(&self) -> Result<Task<D>, TaskQueueError> {
-        let tag = self
-            .get_next_tag()
-            .await?
-            .ok_or(TaskQueueError::QueueEmpty)?;
+        // Keep trying until we find a task or exhaust all tags
+        loop {
+            let tag = self
+                .get_next_tag()
+                .await?
+                .ok_or(TaskQueueError::QueueEmpty)?;
 
-        let list_key = self.get_list_key(&tag);
-        let hashmap_key = self.get_hashmap_key();
+            let list_key = self.get_list_key(&tag);
+            let hashmap_key = self.get_hashmap_key();
 
-        // Try to get task from the selected tag's list
-        let task_ids: Vec<String> = self
-            .client
-            .rpop(&list_key, 1)
-            .await
-            .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
+            // Try to get task from the selected tag's list
+            let task_ids: Vec<String> = self
+                .client
+                .rpop(&list_key, 1)
+                .await
+                .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
 
-        if let Some(task_id) = task_ids.first() {
-            // Get task data from hash
-            let task_value: String =
-                self.client.hget(&hashmap_key, task_id).await?;
+            if let Some(task_id) = task_ids.first() {
+                // Get task data from hash
+                let task_value: String =
+                    self.client.hget(&hashmap_key, task_id).await?;
 
-            let task: Task<D> = serde_json::from_str(&task_value)
-                .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
+                let task: Task<D> = serde_json::from_str(&task_value)
+                    .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
 
-            // Update tag's timestamp in schedule
-            self.update_tag_timestamp(&tag).await?;
+                // Update tag's timestamp in schedule
+                self.update_tag_timestamp(&tag).await?;
 
-            Ok(task)
-        } else {
-            // If no tasks in this tag's list, remove it from schedule and try again
-            self.client.zrem(self.get_schedule_key(), tag).await?;
+                return Ok(task);
+            }
 
-            Err(TaskQueueError::QueueEmpty)
+            // No tasks in this tag's list, remove it from schedule and continue
+            self.client.zrem(self.get_schedule_key(), &tag).await?;
+
+            // Check if we still have any tags in schedule
+            let count = self.client.zcard(self.get_schedule_key()).await?;
+            if count == 0 {
+                return Err(TaskQueueError::QueueEmpty);
+            }
         }
     }
 
