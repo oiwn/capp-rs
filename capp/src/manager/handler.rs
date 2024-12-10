@@ -24,6 +24,7 @@ use std::sync::Arc;
 ///
 /// ```no_run
 /// use async_trait::async_trait;
+/// use capp::prelude::TaskHandler;
 ///
 /// struct MyHandler;
 ///
