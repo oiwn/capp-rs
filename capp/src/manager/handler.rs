@@ -1,3 +1,4 @@
+#![cfg_attr(doctest, doc = "")]
 //! This module defines the `TaskHandler` trait, which provides a generic interface
 //! for asynchronous task processing. It allows for flexible implementation of
 //! request handling with associated types for requests, responses, and errors.

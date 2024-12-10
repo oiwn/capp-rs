@@ -26,7 +26,7 @@ pub trait Configurable {
         Ok(config)
     }
 
-    /// Load Vec<String> from file with path `file path`
+    /// Load `Vec<String>`` from file with path `file path`
     fn load_text_file_lines(
         file_path: impl AsRef<path::Path>,
     ) -> Result<Vec<String>, ConfigError> {

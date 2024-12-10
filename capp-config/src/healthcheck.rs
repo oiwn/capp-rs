@@ -8,9 +8,9 @@ use tokio::time::{timeout, Duration};
 /// There are a few hosts that are commonly used to check it
 /// because they are typically reliable and have high uptime. i
 /// Examples:
-///     - Google's primary domain: https://www.google.com
-///     - Cloudflare's DNS resolver: https://1.1.1.1
-///     - Quad9's DNS resolver: https://9.9.9.9
+///     - Google's primary domain: <https://www.google.com>
+///     - Cloudflare's DNS resolver: <https://1.1.1.1>
+///     - Quad9's DNS resolver: <https://9.9.9.9>
 pub async fn internet(http_url: &str) -> bool {
     let client = Client::new();
     let request_future = client.get(http_url).send();
