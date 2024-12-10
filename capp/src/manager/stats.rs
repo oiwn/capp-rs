@@ -62,6 +62,7 @@ impl<'a> SharedStats<'a> {
     }
 }
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a> Default for SharedStats<'a> {
     fn default() -> Self {
         Self::new()
