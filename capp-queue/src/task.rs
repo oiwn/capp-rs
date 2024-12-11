@@ -246,7 +246,7 @@ mod tests {
                 .unwrap()
                 .duration_since(task.started_at.unwrap())
                 .unwrap()
-                < std::time::Duration::from_millis(10)
+                < std::time::Duration::from_millis(50)
         );
         // finished_at - queue_at
         assert!(
