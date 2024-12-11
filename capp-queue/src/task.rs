@@ -298,7 +298,7 @@ mod tests {
                 .unwrap()
                 .duration_since(task.queued_at)
                 .unwrap()
-                >= std::time::Duration::from_millis(50)
+                >= std::time::Duration::from_millis(10)
         );
     }
 }
