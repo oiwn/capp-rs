@@ -45,6 +45,7 @@ derive_builder = { version = "0.20" }
 reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"], optional = true }
 serde_yaml = "0.9"
 rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
+# mongodb = { version = "3", features = ["tokio-runtime"], optional = true }
 tracing-futures = "0.2"
 
 [dev-dependencies]
@@ -66,3 +67,4 @@ http = ["dep:reqwest", "capp-config/http"]
 router = ["capp-config/router"]
 healthcheck = ["dep:reqwest"]
 redis = ["dep:rustis", "capp-queue/redis"]
+# mongodb = ["dep:mongodb", "capp-queue/mongodb"]
