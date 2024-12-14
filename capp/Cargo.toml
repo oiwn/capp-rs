@@ -38,18 +38,18 @@ uuid.workspace = true
 # TODO: figure out why can't have derive_builder as common dep.
 # derive_builder.workspace = true
 
-capp-config = { path = "../capp-config", features=["http", "router"] }
-capp-queue = { path = "../capp-queue", features=["redis"] }
+capp-config = { path = "../capp-config" }
+capp-queue = { path = "../capp-queue" }
 
 derive_builder = { version = "0.20" }
 reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"], optional = true }
 serde_yaml = "0.9"
-rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
+# rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
 # mongodb = { version = "3", features = ["tokio-runtime"], optional = true }
 tracing-futures = "0.2"
 
 [dev-dependencies]
-capp = { path = ".", features = ["http", "healthcheck", "redis"] }
+capp = { path = ".", features = ["http", "router", "healthcheck", "redis", "mongodb"] }
 hyper = { version = "1.5", features = ["server", "http1"] }
 http-body-util = "0.1"
 bytes = "1.6"
@@ -66,5 +66,5 @@ tempfile = "3"
 http = ["dep:reqwest", "capp-config/http"]
 router = ["capp-config/router"]
 healthcheck = ["dep:reqwest"]
-redis = ["dep:rustis", "capp-queue/redis"]
-# mongodb = ["dep:mongodb", "capp-queue/mongodb"]
+redis = ["capp-queue/redis"]
+mongodb = ["capp-queue/mongodb"]

@@ -8,6 +8,8 @@ use std::{fmt::Debug, sync::Arc};
 use thiserror::Error;
 
 pub use crate::backend::InMemoryTaskQueue;
+#[cfg(feature = "mongodb")]
+pub use crate::backend::MongoTaskQueue;
 #[cfg(feature = "redis")]
 pub use crate::backend::{RedisRoundRobinTaskQueue, RedisTaskQueue};
 use crate::task::{Task, TaskId};
