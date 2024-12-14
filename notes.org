@@ -2,10 +2,11 @@
 
 * Major Tasks
 ** figure if it can get rid of returning yaml_value in favour of some generic configuration type
-** fix RoundRobin queue
-** mongodb queue
-** postgres queue
-** benchmarks criterion
+** DONE fix RoundRobin queue
+i think it's done
+** TODO mongodb queue
+** TODO postgres queue
+** TODO benchmarks criterion
 
 * Tasks
 ** Need some kind of statistics

@@ -13,7 +13,7 @@ rand = { workspace = true }
 thiserror = { workspace = true }
 
 backoff = { version = "0.4", optional = true, features = ["tokio"] }
-regex = { version = "1.11", optional = true }
+regex = { version = "1.11" }
 indexmap = { version = "2.6", optional = true }
 url = { version = "2.5", optional = true }
 serde_yaml = "0.9"
@@ -23,4 +23,4 @@ tempfile = "3"
 
 [features]
 http = ["dep:reqwest", "dep:tokio", "dep:backoff"]
-router = ["dep:regex", "dep:indexmap", "dep:url"]
+router = ["dep:indexmap", "dep:url"]

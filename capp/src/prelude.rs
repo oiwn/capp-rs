@@ -3,6 +3,7 @@ pub use crate::manager::*;
 pub use capp_config::http::*;
 #[cfg(feature = "http")]
 pub use capp_config::proxy::*;
+#[cfg(feature = "router")]
 pub use capp_config::router::*;
 pub use capp_config::*;
 pub use capp_queue::queue::*;
