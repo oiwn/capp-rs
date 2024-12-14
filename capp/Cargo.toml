@@ -44,8 +44,8 @@ capp-queue = { path = "../capp-queue" }
 derive_builder = { version = "0.20" }
 reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"], optional = true }
 serde_yaml = "0.9"
-# rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
-# mongodb = { version = "3", features = ["tokio-runtime"], optional = true }
+rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
+mongodb = { version = "3", optional = true }
 tracing-futures = "0.2"
 
 [dev-dependencies]
@@ -66,5 +66,5 @@ tempfile = "3"
 http = ["dep:reqwest", "capp-config/http"]
 router = ["capp-config/router"]
 healthcheck = ["dep:reqwest"]
-redis = ["capp-queue/redis"]
-mongodb = ["capp-queue/mongodb"]
+redis = ["capp-queue/redis", "dep:rustis"]
+mongodb = ["capp-queue/mongodb", "dep:mongodb"]
