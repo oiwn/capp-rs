@@ -49,6 +49,8 @@ pub mod prelude;
 pub use async_trait;
 #[cfg(feature = "http")]
 pub use derive_builder;
+#[cfg(feature = "mongodb")]
+pub use mongodb;
 #[cfg(feature = "http")]
 pub use reqwest;
 #[cfg(feature = "redis")]
