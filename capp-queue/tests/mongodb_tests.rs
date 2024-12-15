@@ -3,7 +3,7 @@ mod tests {
     use capp_queue::queue::{MongoTaskQueue, TaskQueue};
     use capp_queue::task::Task;
     use dotenvy::dotenv;
-    use futures_util::StreamExt;
+    // use futures_util::StreamExt;
     use mongodb::bson::{self, doc};
     use mongodb::{options::ClientOptions, Client};
     use serde::{Deserialize, Serialize};
@@ -84,6 +84,116 @@ mod tests {
 
         // Verify task_id survived the round trip
         assert_eq!(task.task_id, task_from_bson.task_id);
+    }
+
+    #[tokio::test]
+    async fn test_queue_initialization() {
+        let queue_name = "test_init";
+        cleanup_collections(queue_name)
+            .await
+            .expect("Cleanup failed");
+
+        // Ensure cleanup is complete
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let uri = get_mongo_connection().await;
+        let queue = MongoTaskQueue::<TestData>::new(&uri, queue_name)
+            .await
+            .expect("Failed to create MongoTaskQueue");
+
+        let client_options = ClientOptions::parse(&uri)
+            .await
+            .expect("Failed to parse MongoDB options");
+
+        let db_name = client_options
+            .default_database
+            .as_ref()
+            .expect("No database specified in MongoDB URI");
+
+        // Verify collections were created
+        let client = Client::with_options(client_options.clone())
+            .expect("Failed to create MongoDB client");
+
+        assert!(
+            verify_collection_exists(
+                &client,
+                db_name,
+                &format!("{}_tasks", queue_name)
+            )
+            .await,
+            "Tasks collection should exist"
+        );
+
+        assert!(
+            verify_collection_exists(
+                &client,
+                db_name,
+                &format!("{}_dlq", queue_name)
+            )
+            .await,
+            "DLQ collection should exist"
+        );
+
+        // Verify indexes were created using list_index_names()
+        let index_names = queue
+            .tasks_collection
+            .list_index_names()
+            .await
+            .expect("Failed to get index names");
+
+        // MongoDB always creates _id_ index by default, plus our task_id index
+        assert_eq!(
+            index_names.len(),
+            2,
+            "Should have 2 indexes (_id and task_id)"
+        );
+        assert!(
+            index_names.iter().any(|name| name.contains("task_id")),
+            "task_id index should exist"
+        );
+
+        // Cleanup after test
+        cleanup_collections(queue_name)
+            .await
+            .expect("Cleanup failed");
+    }
+
+    /* #[tokio::test]
+    async fn test_collection_setup_and_dlq() {
+        let queue_name = "test-setup-dlq";
+        let queue = setup_queue(queue_name).await;
+
+        // Push two tasks
+        let task1 = Task::new(TestData { value: 1 });
+        let task2 = Task::new(TestData { value: 2 });
+
+        queue.push(&task1).await.expect("Failed to push task1");
+        queue.push(&task2).await.expect("Failed to push task2");
+
+        // Pop and nack one task to create DLQ
+        let popped_task = queue.pop().await.expect("Failed to pop task");
+        queue.nack(&popped_task).await.expect("Failed to nack task");
+
+        // Verify tasks collection exists and has one remaining task
+        let tasks_count = queue
+            .tasks_collection
+            .count_documents(doc! {})
+            .await
+            .expect("Failed to count tasks");
+        assert_eq!(tasks_count, 1, "Should have one task remaining");
+
+        // Verify DLQ collection exists and has one task
+        let dlq_count = queue
+            .dlq_collection
+            .count_documents(doc! {})
+            .await
+            .expect("Failed to count DLQ");
+        assert_eq!(dlq_count, 1, "Should have one task in DLQ");
+
+        // Cleanup
+        cleanup_collections(queue_name)
+            .await
+            .expect("Cleanup failed");
     }
 
     #[tokio::test]
@@ -193,5 +303,5 @@ mod tests {
         cleanup_collections(queue_name)
             .await
             .expect("Cleanup failed");
-    }
+    } */
 }

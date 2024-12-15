@@ -50,48 +50,14 @@ where
             .options(IndexOptions::builder().unique(true).build())
             .build();
 
-        tasks_collection.create_index(index_model).await?;
+        tasks_collection.create_index(index_model.clone()).await?;
+        dlq_collection.create_index(index_model).await?;
 
         Ok(Self {
             client,
             tasks_collection,
             dlq_collection,
         })
-    }
-}
-
-impl<D> MongoTaskQueue<D>
-where
-    D: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
-{
-    // Helper method to execute the nack transaction
-    async fn execute_nack_transaction(
-        &self,
-        task: &Task<D>,
-        session: &mut ClientSession,
-    ) -> mongodb::error::Result<()> {
-        // Move to DLQ
-        self.dlq_collection
-            .insert_one(task)
-            .session(&mut *session)
-            .await?;
-
-        // Remove from main queue
-        self.tasks_collection
-            .delete_one(doc! { "task_id": task.task_id.to_string() })
-            .session(&mut *session)
-            .await?;
-
-        // Commit with retry logic for unknown commit results
-        loop {
-            let result = session.commit_transaction().await;
-            if let Err(ref error) = result {
-                if error.contains_label(UNKNOWN_TRANSACTION_COMMIT_RESULT) {
-                    continue;
-                }
-            }
-            return result;
-        }
     }
 }
 
@@ -151,5 +117,40 @@ where
             .await?; // Convert to MongodbError
 
         Ok(())
+    }
+}
+
+impl<D> MongoTaskQueue<D>
+where
+    D: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
+{
+    // Helper method to execute the nack transaction
+    async fn execute_nack_transaction(
+        &self,
+        task: &Task<D>,
+        session: &mut ClientSession,
+    ) -> mongodb::error::Result<()> {
+        // Move to DLQ
+        self.dlq_collection
+            .insert_one(task)
+            .session(&mut *session)
+            .await?;
+
+        // Remove from main queue
+        self.tasks_collection
+            .delete_one(doc! { "task_id": task.task_id.to_string() })
+            .session(&mut *session)
+            .await?;
+
+        // Commit with retry logic for unknown commit results
+        loop {
+            let result = session.commit_transaction().await;
+            if let Err(ref error) = result {
+                if error.contains_label(UNKNOWN_TRANSACTION_COMMIT_RESULT) {
+                    continue;
+                }
+            }
+            return result;
+        }
     }
 }
