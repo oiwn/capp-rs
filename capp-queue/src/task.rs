@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 use uuid::Uuid;
-
+#[cfg(feature = "mongodb")]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TaskStatus {
     Queued,
@@ -120,6 +120,20 @@ impl<'de> serde::Deserialize<'de> for TaskId {
 impl std::fmt::Display for TaskId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "TaskId({})", self.0)
+    }
+}
+
+#[cfg(feature = "mongodb")]
+impl From<TaskId> for mongodb::bson::Uuid {
+    fn from(id: TaskId) -> Self {
+        mongodb::bson::Uuid::from_bytes(*id.get().as_bytes())
+    }
+}
+
+#[cfg(feature = "mongodb")]
+impl From<mongodb::bson::Uuid> for TaskId {
+    fn from(uuid: mongodb::bson::Uuid) -> Self {
+        TaskId(uuid::Uuid::from_bytes(uuid.bytes()))
     }
 }
 

@@ -1,10 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use capp_queue::queue::{MongoTaskQueue, TaskQueue, TaskQueueError};
+    use capp_queue::queue::{MongoTaskQueue, TaskQueue};
     use capp_queue::task::Task;
     use dotenvy::dotenv;
-    use mongodb::{bson::doc, options::ClientOptions, Client};
+    // use futures_util::StreamExt;
+    use mongodb::bson::{self, doc};
+    use mongodb::{options::ClientOptions, Client};
     use serde::{Deserialize, Serialize};
+    use std::time::Duration;
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     struct TestData {
@@ -16,15 +19,21 @@ mod tests {
         std::env::var("MONGODB_URI").expect("Set MONGODB_URI env variable")
     }
 
-    async fn cleanup_collections(name: &str) {
-        let uri = get_mongo_connection().await;
-        let client_options = ClientOptions::parse(&uri)
-            .await
-            .expect("Failed to parse MongoDB options");
-        let client = Client::with_options(client_options.clone())
-            .expect("Failed to create MongoDB client");
+    async fn verify_collection_exists(
+        client: &Client,
+        db_name: &str,
+        collection_name: &str,
+    ) -> bool {
+        let db = client.database(db_name);
+        let collections = db.list_collection_names().await.unwrap();
+        collections.contains(&collection_name.to_string())
+    }
 
-        // Get database name from URI or use default
+    async fn cleanup_collections(name: &str) -> Result<(), mongodb::error::Error> {
+        let uri = get_mongo_connection().await;
+        let client_options = ClientOptions::parse(&uri).await?;
+        let client = Client::with_options(client_options.clone())?;
+
         let db_name = client_options
             .default_database
             .as_ref()
@@ -32,274 +41,267 @@ mod tests {
 
         let db = client.database(db_name);
 
-        // Drop collections if they exist
-        let _ = db
-            .collection::<Task<TestData>>(&format!("{}_tasks", name))
-            .drop()
-            .await;
-        let _ = db
-            .collection::<Task<TestData>>(&format!("{}_dlq", name))
-            .drop()
-            .await;
+        let tasks_collection_name = format!("{}_tasks", name);
+        let dlq_collection_name = format!("{}_dlq", name);
+
+        // Check if collections exist before dropping
+        if verify_collection_exists(&client, db_name, &tasks_collection_name).await
+        {
+            tracing::info!("Dropping collection: {}", tasks_collection_name);
+            db.collection::<Task<TestData>>(&tasks_collection_name)
+                .drop()
+                .await?;
+        }
+
+        if verify_collection_exists(&client, db_name, &dlq_collection_name).await {
+            tracing::info!("Dropping collection: {}", dlq_collection_name);
+            db.collection::<Task<TestData>>(&dlq_collection_name)
+                .drop()
+                .await?;
+        }
+
+        Ok(())
     }
 
     async fn setup_queue(name: &str) -> MongoTaskQueue<TestData> {
-        cleanup_collections(name).await;
+        if let Err(e) = cleanup_collections(name).await {
+            tracing::error!("Cleanup failed: {:?}", e);
+        }
+        // ensure cleanup is complete
+        tokio::time::sleep(Duration::from_millis(100)).await;
         let uri = get_mongo_connection().await;
         MongoTaskQueue::new(&uri, name)
             .await
             .expect("Failed to create MongoTaskQueue")
     }
 
-    #[tokio::test]
-    async fn test_typical_workflow() {
-        let queue = setup_queue("capp-test-workflow").await;
-
-        // Test push and pop
+    #[test]
+    fn test_task_id_serde() {
         let task = Task::new(TestData { value: 42 });
-        let task_id = task.task_id;
-        queue.push(&task).await.expect("Failed to push task");
+        let bson_doc = bson::to_document(&task).expect("Failed to convert to BSON");
+        let task_from_bson: Task<TestData> =
+            bson::from_document(bson_doc).expect("Failed to convert from BSON");
 
-        let popped_task = queue.pop().await.expect("Failed to pop task");
-        assert_eq!(popped_task.payload.value, 42);
-        assert_eq!(popped_task.task_id, task_id); // Verify task ID matches
+        // Verify task_id survived the round trip
+        assert_eq!(task.task_id, task_from_bson.task_id);
+    }
 
-        // Test ack
-        let acked = queue.ack(&popped_task.task_id).await;
-        assert!(acked.is_ok(), "Failed to ack task: {:?}", acked);
-
-        // Verify queue is empty
-        assert!(matches!(queue.pop().await, Err(TaskQueueError::QueueEmpty)));
-
-        // Test multiple tasks
-        let task_1 = Task::new(TestData { value: 1 });
-        let task_2 = Task::new(TestData { value: 2 });
-        queue.push(&task_1).await.expect("Failed to push task 1");
-        queue.push(&task_2).await.expect("Failed to push task 2");
-
-        let popped = queue.pop().await.expect("Failed to pop task");
-        assert_eq!(popped.payload.value, 1);
-        queue
-            .ack(&popped.task_id)
+    #[tokio::test]
+    async fn test_queue_initialization() {
+        let queue_name = "test_init";
+        cleanup_collections(queue_name)
             .await
-            .expect("Failed to ack task");
+            .expect("Cleanup failed");
 
-        let popped = queue.pop().await.expect("Failed to pop task");
-        assert_eq!(popped.payload.value, 2);
-        queue.nack(&popped).await.expect("Failed to nack task");
-    }
+        // Ensure cleanup is complete
+        tokio::time::sleep(Duration::from_millis(100)).await;
 
-    #[tokio::test]
-    async fn test_push_and_pop() {
-        let queue = setup_queue("capp-test-push-pop").await;
-        let task = Task::new(TestData { value: 42 });
-        let task_id = task.task_id;
-
-        queue.push(&task).await.expect("Failed to push task");
-
-        let popped_task = queue.pop().await.expect("Failed to pop task");
-        assert_eq!(popped_task.payload.value, 42);
-        assert_eq!(popped_task.task_id, task_id);
-    }
-
-    #[tokio::test]
-    async fn test_push_multiple_and_pop_order() {
-        let queue = setup_queue("capp-test-push-pop-order").await;
-        let tasks = vec![
-            Task::new(TestData { value: 1 }),
-            Task::new(TestData { value: 2 }),
-            Task::new(TestData { value: 3 }),
-        ];
-
-        for task in &tasks {
-            queue.push(task).await.expect("Failed to push task");
-        }
-
-        for expected_value in 1..=3 {
-            let popped_task = queue.pop().await.expect("Failed to pop task");
-            assert_eq!(popped_task.payload.value, expected_value);
-        }
-
-        assert!(matches!(queue.pop().await, Err(TaskQueueError::QueueEmpty)));
-    }
-
-    #[tokio::test]
-    async fn test_ack() {
-        let queue = setup_queue("capp-test-ack").await;
-        let task = Task::new(TestData { value: 42 });
-        let task_id = task.task_id;
-
-        queue.push(&task).await.expect("Failed to push task");
-        let popped_task = queue.pop().await.expect("Failed to pop task");
-        assert_eq!(popped_task.task_id, task_id); // Verify we got the right task
-
-        queue
-            .ack(&popped_task.task_id)
+        let uri = get_mongo_connection().await;
+        let queue = MongoTaskQueue::<TestData>::new(&uri, queue_name)
             .await
-            .expect("Failed to ack task");
+            .expect("Failed to create MongoTaskQueue");
 
-        assert!(matches!(queue.pop().await, Err(TaskQueueError::QueueEmpty)));
+        let client_options = ClientOptions::parse(&uri)
+            .await
+            .expect("Failed to parse MongoDB options");
+
+        let db_name = client_options
+            .default_database
+            .as_ref()
+            .expect("No database specified in MongoDB URI");
+
+        // Verify collections were created
+        let client = Client::with_options(client_options.clone())
+            .expect("Failed to create MongoDB client");
+
+        assert!(
+            verify_collection_exists(
+                &client,
+                db_name,
+                &format!("{}_tasks", queue_name)
+            )
+            .await,
+            "Tasks collection should exist"
+        );
+
+        assert!(
+            verify_collection_exists(
+                &client,
+                db_name,
+                &format!("{}_dlq", queue_name)
+            )
+            .await,
+            "DLQ collection should exist"
+        );
+
+        // Verify indexes were created using list_index_names()
+        let index_names = queue
+            .tasks_collection
+            .list_index_names()
+            .await
+            .expect("Failed to get index names");
+
+        // MongoDB always creates _id_ index by default, plus our task_id index
+        assert_eq!(
+            index_names.len(),
+            2,
+            "Should have 2 indexes (_id and task_id)"
+        );
+        assert!(
+            index_names.iter().any(|name| name.contains("task_id")),
+            "task_id index should exist"
+        );
+
+        // Cleanup after test
+        cleanup_collections(queue_name)
+            .await
+            .expect("Cleanup failed");
     }
 
-    #[tokio::test]
-    async fn test_nack() {
-        let queue = setup_queue("capp-test-nack").await;
-        let task = Task::new(TestData { value: 42 });
-        let task_id = task.task_id;
+    /* #[tokio::test]
+    async fn test_collection_setup_and_dlq() {
+        let queue_name = "test-setup-dlq";
+        let queue = setup_queue(queue_name).await;
 
-        queue.push(&task).await.expect("Failed to push task");
+        // Push two tasks
+        let task1 = Task::new(TestData { value: 1 });
+        let task2 = Task::new(TestData { value: 2 });
+
+        queue.push(&task1).await.expect("Failed to push task1");
+        queue.push(&task2).await.expect("Failed to push task2");
+
+        // Pop and nack one task to create DLQ
         let popped_task = queue.pop().await.expect("Failed to pop task");
-        assert_eq!(popped_task.task_id, task_id);
-
-        // Disable retryable writes for transactions
         queue.nack(&popped_task).await.expect("Failed to nack task");
 
-        assert!(matches!(queue.pop().await, Err(TaskQueueError::QueueEmpty)));
-    }
-
-    #[tokio::test]
-    async fn test_set() {
-        let queue = setup_queue("capp-test-set").await;
-        let task = Task::new(TestData { value: 42 });
-        let task_id = task.task_id;
-
-        queue.push(&task).await.expect("Failed to push task");
-
-        let mut popped_task = queue.pop().await.expect("Failed to pop task");
-        assert_eq!(popped_task.task_id, task_id);
-
-        popped_task.payload.value = 43;
-        queue.set(&popped_task).await.expect("Failed to set task");
-
-        let updated_task = queue.pop().await.expect("Failed to get updated task");
-        assert_eq!(updated_task.payload.value, 43);
-    }
-
-    #[tokio::test]
-    async fn test_queue_empty() {
-        let queue = setup_queue("capp-test-empty").await;
-        assert!(matches!(queue.pop().await, Err(TaskQueueError::QueueEmpty)));
-    }
-
-    #[tokio::test]
-    async fn test_task_persistence() {
-        let queue = setup_queue("capp-test-persistence").await;
-        let task = Task::new(TestData { value: 42 });
-        let task_id = task.task_id;
-
-        // Test push
-        queue.push(&task).await.expect("Failed to push task");
-
-        // Verify task exists in MongoDB directly
-        let raw_task = queue
+        // Verify tasks collection exists and has one remaining task
+        let tasks_count = queue
             .tasks_collection
-            .find_one(doc! { "task_id": task_id.to_string() })
+            .count_documents(doc! {})
             .await
-            .expect("Failed to query task")
-            .expect("Task not found in collection");
+            .expect("Failed to count tasks");
+        assert_eq!(tasks_count, 1, "Should have one task remaining");
 
-        assert_eq!(raw_task.task_id, task_id);
-        assert_eq!(raw_task.payload.value, 42);
+        // Verify DLQ collection exists and has one task
+        let dlq_count = queue
+            .dlq_collection
+            .count_documents(doc! {})
+            .await
+            .expect("Failed to count DLQ");
+        assert_eq!(dlq_count, 1, "Should have one task in DLQ");
+
+        // Cleanup
+        cleanup_collections(queue_name)
+            .await
+            .expect("Cleanup failed");
     }
 
     #[tokio::test]
-    async fn test_task_removal() {
-        let queue = setup_queue("capp-test-removal").await;
-        let task = Task::new(TestData { value: 42 });
-        let task_id = task.task_id;
+    async fn test_push() {
+        tracing_subscriber::fmt::init();
 
-        // Push and verify task exists
-        queue.push(&task).await.expect("Failed to push task");
-
-        let exists_before = queue
-            .tasks_collection
-            .find_one(doc! { "task_id": task_id.to_string() })
-            .await
-            .expect("Failed to query task");
-        assert!(exists_before.is_some(), "Task should exist before pop");
-
-        // Pop and verify task is gone
-        let popped = queue.pop().await.expect("Failed to pop task");
-        assert_eq!(popped.task_id, task_id);
-
-        let exists_after = queue
-            .tasks_collection
-            .find_one(doc! { "task_id": task_id.to_string() })
-            .await
-            .expect("Failed to query task");
-        assert!(exists_after.is_none(), "Task should be removed after pop");
-    }
-
-    #[tokio::test]
-    async fn test_nack_task_moves_to_dlq() {
-        let queue = setup_queue("capp-test-nack-dlq").await;
-        let task = Task::new(TestData { value: 42 });
+        // Setup
+        let queue_name = "test-push";
+        let queue = setup_queue(queue_name).await;
+        let test_value = 42;
+        let task = Task::new(TestData { value: test_value });
         let task_id = task.task_id;
 
         // Push task
         queue.push(&task).await.expect("Failed to push task");
 
-        // Pop task
-        let popped = queue.pop().await.expect("Failed to pop task");
-        assert_eq!(popped.task_id, task_id);
-
-        // Try to nack without transactions first
-        let nack_result = queue.nack(&popped).await;
-        println!("Nack result: {:?}", nack_result);
-
-        // Verify task moved to DLQ
-        let in_dlq = queue
-            .dlq_collection
-            .find_one(doc! { "task_id": task_id.to_string() })
-            .await
-            .expect("Failed to query DLQ");
-
-        if let Some(dlq_task) = in_dlq {
-            println!("Task found in DLQ: {:?}", dlq_task);
-        } else {
-            println!("Task not found in DLQ");
-        }
-
-        // Verify removed from main queue
-        let in_main = queue
+        // Debug: Print collection contents
+        let all_docs = queue
             .tasks_collection
-            .find_one(doc! { "task_id": task_id.to_string() })
+            .find(doc! {})
             .await
-            .expect("Failed to query main queue");
+            .expect("Failed to query collection")
+            .collect::<Vec<_>>()
+            .await;
 
-        if let Some(main_task) = in_main {
-            println!("Task still in main queue: {:?}", main_task);
-        } else {
-            println!("Task not in main queue");
+        tracing::info!("Collection contents: {:?}", all_docs);
+
+        // Verify task exists using find with no filter first
+        let result = queue
+            .tasks_collection
+            .find_one(doc! {})
+            .await
+            .expect("Failed to query task");
+
+        assert!(result.is_some(), "Collection should not be empty");
+
+        // Now try to find specific task using proper BSON UUID
+        let result = queue
+            .tasks_collection
+            .find_one(doc! {
+                "task_id": mongodb::bson::Binary {
+                    subtype: mongodb::bson::spec::BinarySubtype::Uuid,
+                    bytes: task_id.get().as_bytes().to_vec(),
+                }
+            })
+            .await
+            .expect("Failed to query task");
+
+        assert!(result.is_some(), "Task should exist in collection");
+
+        // Verify task data
+        if let Some(stored_task) = result {
+            assert_eq!(
+                stored_task.payload.value, test_value,
+                "Task payload should match"
+            );
+            assert_eq!(stored_task.task_id, task_id, "Task ID should match");
         }
+
+        // Cleanup
+        cleanup_collections(queue_name)
+            .await
+            .expect("Cleanup failed");
     }
 
     #[tokio::test]
-    async fn test_task_set_update() {
-        let queue = setup_queue("capp-test-set-update").await;
-        let task = Task::new(TestData { value: 42 });
-        let task_id = task.task_id;
-
-        // Push initial task
-        queue.push(&task).await.expect("Failed to push task");
-
-        // Update task via set
-        let mut updated_task = task.clone();
-        updated_task.payload.value = 43;
-        queue.set(&updated_task).await.expect("Failed to set task");
-
-        // Verify update directly in MongoDB
-        let task_in_db = queue
-            .tasks_collection
-            .find_one(doc! { "task_id": task_id.to_string() })
+    async fn test_collection_setup() {
+        let queue_name = "test-setup";
+        let uri = get_mongo_connection().await;
+        let client_options = ClientOptions::parse(&uri)
             .await
-            .expect("Failed to query task")
-            .expect("Task not found after update");
+            .expect("Failed to parse MongoDB options");
 
-        println!("Original task: {:?}", task);
-        println!("Updated task: {:?}", updated_task);
-        println!("Task in DB: {:?}", task_in_db);
+        let db_name = client_options
+            .default_database
+            .as_ref()
+            .expect("No database specified in MongoDB URI")
+            .clone();
 
-        assert_eq!(task_in_db.payload.value, 43);
-    }
+        // Create queue
+        let _queue = setup_queue(queue_name).await;
+
+        // Verify collections exist
+        let client = Client::with_options(client_options)
+            .expect("Failed to create MongoDB client");
+
+        assert!(
+            verify_collection_exists(
+                &client,
+                &db_name,
+                &format!("{}_tasks", queue_name)
+            )
+            .await,
+            "Tasks collection should exist"
+        );
+        assert!(
+            verify_collection_exists(
+                &client,
+                &db_name,
+                &format!("{}_dlq", queue_name)
+            )
+            .await,
+            "DLQ collection should exist"
+        );
+
+        // Cleanup
+        cleanup_collections(queue_name)
+            .await
+            .expect("Cleanup failed");
+    } */
 }

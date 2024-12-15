@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 tokio = { workspace = true, optional = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
@@ -13,10 +14,12 @@ async-trait = { workspace = true }
 uuid = { workspace = true }
 rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
 mongodb = { version = "3", optional = true }
+futures = { version = "0.3", optional = true }
+futures-util = { version = "0.3", optional = true }
 
 [dev-dependencies]
 dotenvy = "0.15"
 
 [features]
 redis = ["dep:tokio", "dep:rustis"]
-mongodb = ["dep:tokio", "dep:mongodb"]
+mongodb = ["dep:tokio", "dep:futures", "dep:futures-util", "dep:mongodb"]

@@ -28,14 +28,17 @@ where
         connection_string: &str,
         queue_name: &str,
     ) -> Result<Self, TaskQueueError> {
-        let client_options = ClientOptions::parse(connection_string)
-            .await
-            .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
+        let client_options = ClientOptions::parse(connection_string).await?;
 
-        let client = Client::with_options(client_options)
-            .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
+        let client = Client::with_options(client_options.clone())?;
 
-        let db = client.database("task_queue");
+        // Get database name from URI or use default
+        let db_name = client_options
+            .default_database
+            .as_ref()
+            .expect("No database specified in MongoDB URI");
+
+        let db = client.database(db_name);
         let tasks_collection =
             db.collection::<Task<D>>(&format!("{}_tasks", queue_name));
         let dlq_collection =
@@ -47,16 +50,73 @@ where
             .options(IndexOptions::builder().unique(true).build())
             .build();
 
-        tasks_collection
-            .create_index(index_model)
-            .await
-            .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
+        tasks_collection.create_index(index_model.clone()).await?;
+        dlq_collection.create_index(index_model).await?;
 
         Ok(Self {
             client,
             tasks_collection,
             dlq_collection,
         })
+    }
+}
+
+#[async_trait]
+impl<D> TaskQueue<D> for MongoTaskQueue<D>
+where
+    D: std::fmt::Debug
+        + Clone
+        + Serialize
+        + DeserializeOwned
+        + Send
+        + Sync
+        + 'static,
+{
+    async fn push(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
+        self.tasks_collection.insert_one(task).await?;
+        Ok(())
+    }
+
+    async fn pop(&self) -> Result<Task<D>, TaskQueueError> {
+        match self.tasks_collection.find_one_and_delete(doc! {}).await? {
+            Some(task) => Ok(task),
+            None => Err(TaskQueueError::QueueEmpty),
+        }
+    }
+
+    async fn ack(&self, task_id: &TaskId) -> Result<(), TaskQueueError> {
+        let result = self
+            .tasks_collection
+            .delete_one(doc! { "task_id": task_id.to_string() })
+            .await?;
+        if result.deleted_count == 0 {
+            return Err(TaskQueueError::TaskNotFound(*task_id));
+        }
+        Ok(())
+    }
+    async fn nack(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
+        let mut session = self.client.start_session().await?; // Convert to MongodbError
+
+        session.start_transaction().await?; // Convert to MongodbError
+
+        while let Err(error) =
+            self.execute_nack_transaction(task, &mut session).await
+        {
+            if !error.contains_label(TRANSIENT_TRANSACTION_ERROR) {
+                return Err(TaskQueueError::MongodbError(error));
+            }
+            session.start_transaction().await?; // Convert to MongodbError
+        }
+
+        Ok(())
+    }
+
+    async fn set(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
+        self.tasks_collection
+            .replace_one(doc! { "task_id": task.task_id.to_string() }, task)
+            .await?; // Convert to MongodbError
+
+        Ok(())
     }
 }
 
@@ -92,91 +152,5 @@ where
             }
             return result;
         }
-    }
-}
-
-#[async_trait]
-impl<D> TaskQueue<D> for MongoTaskQueue<D>
-where
-    D: std::fmt::Debug
-        + Clone
-        + Serialize
-        + DeserializeOwned
-        + Send
-        + Sync
-        + 'static,
-{
-    async fn push(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
-        self.tasks_collection
-            .insert_one(task)
-            .await
-            .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
-
-        Ok(())
-    }
-
-    async fn pop(&self) -> Result<Task<D>, TaskQueueError> {
-        match self
-            .tasks_collection
-            .find_one_and_delete(doc! {})
-            .await
-            .map_err(|e| TaskQueueError::QueueError(e.to_string()))?
-        {
-            Some(task) => Ok(task),
-            None => Err(TaskQueueError::QueueEmpty),
-        }
-    }
-
-    async fn ack(&self, task_id: &TaskId) -> Result<(), TaskQueueError> {
-        let result = self
-            .tasks_collection
-            .delete_one(doc! { "task_id": task_id.to_string() })
-            .await
-            .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
-
-        if result.deleted_count == 0 {
-            return Err(TaskQueueError::TaskNotFound(*task_id));
-        }
-
-        Ok(())
-    }
-
-    async fn nack(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
-        let mut session = self
-            .client
-            .start_session()
-            .await
-            .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
-
-        // Configure transaction options with majority read/write concerns
-        session
-            .start_transaction()
-            .await
-            .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
-
-        // Execute transaction with retry logic for transient errors
-        while let Err(error) =
-            self.execute_nack_transaction(task, &mut session).await
-        {
-            if !error.contains_label(TRANSIENT_TRANSACTION_ERROR) {
-                return Err(TaskQueueError::QueueError(error.to_string()));
-            }
-            // Retry transaction on transient errors
-            session
-                .start_transaction()
-                .await
-                .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
-        }
-
-        Ok(())
-    }
-
-    async fn set(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
-        self.tasks_collection
-            .replace_one(doc! { "task_id": task.task_id.to_string() }, task)
-            .await
-            .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
-
-        Ok(())
     }
 }

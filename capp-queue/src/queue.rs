@@ -27,6 +27,9 @@ pub enum TaskQueueError {
     #[cfg(feature = "redis")]
     #[error("Redis error")]
     RedisError(#[from] rustis::Error),
+    #[cfg(feature = "mongodb")]
+    #[error("Mongodb Error")]
+    MongodbError(#[from] mongodb::error::Error),
 }
 
 #[async_trait]
