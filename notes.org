@@ -4,6 +4,7 @@
 ** figure if it can get rid of returning yaml_value in favour of some generic configuration type
 ** DONE fix RoundRobin queue
 i think it's done
+** Redis backend should return RedisError, now custom ones.
 ** TODO mongodb queue
 ** TODO postgres queue
 ** TODO benchmarks criterion
