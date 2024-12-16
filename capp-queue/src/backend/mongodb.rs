@@ -94,6 +94,7 @@ where
         }
         Ok(())
     }
+
     async fn nack(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
         let mut session = self.client.start_session().await?; // Convert to MongodbError
 
@@ -112,10 +113,18 @@ where
     }
 
     async fn set(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
-        self.tasks_collection
-            .replace_one(doc! { "task_id": task.task_id.to_string() }, task)
-            .await?; // Convert to MongodbError
+        let result = self
+            .tasks_collection
+            .replace_one(
+                // Use toString() since that's how it's stored in MongoDB
+                doc! { "task_id": task.task_id.to_string() },
+                task,
+            )
+            .await?;
 
+        if result.matched_count == 0 {
+            return Err(TaskQueueError::TaskNotFound(task.task_id));
+        }
         Ok(())
     }
 }
