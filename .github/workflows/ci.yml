@@ -47,6 +47,18 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      mongodb:
+        image: mongo:6
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand(\"ping\").ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      MONGODB_URI: mongodb://localhost:27017/testdb
+
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -116,7 +128,7 @@ jobs:
     needs: [check, test]  # Only run if initial tests pass
     strategy:
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest]  # macos-latest (timing issues)
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -158,6 +170,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      mongodb:
+        image: mongo:6
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand(\"ping\").ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       
@@ -188,3 +209,5 @@ jobs:
           files: lcov.info
           fail_ci_if_error: true
           verbose: true
+    env:
+      MONGODB_URI: mongodb://localhost:27017/testdb

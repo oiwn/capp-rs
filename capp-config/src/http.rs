@@ -292,7 +292,7 @@ mod tests {
         let mut seen_ports = HashSet::new();
         if let Some(provider) = client_params.proxy_provider {
             // Test multiple calls to verify different ports are used
-            for _ in 0..10 {
+            for _ in 0..100 {
                 let proxy = provider.get_proxy().unwrap();
                 let port = extract_port_from_proxy_url(&proxy);
                 seen_ports.insert(port);
