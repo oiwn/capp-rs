@@ -6,7 +6,6 @@ mod tests {
     use rustis::client::Client;
     use rustis::commands::{GenericCommands, HashCommands, ListCommands};
     use serde::{Deserialize, Serialize};
-    // use tokio;
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     struct TestData {
