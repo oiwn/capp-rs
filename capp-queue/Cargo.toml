@@ -19,6 +19,7 @@ futures-util = { version = "0.3", optional = true }
 
 [dev-dependencies]
 dotenvy = "0.15"
+tokio = { version = "1.41", features = ["full", "test-util"] }
 
 [features]
 redis = ["dep:tokio", "dep:rustis"]

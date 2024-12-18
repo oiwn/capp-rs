@@ -5,8 +5,7 @@ use rustis::commands::{HashCommands, ListCommands};
 use serde::{de::DeserializeOwned, Serialize};
 use std::marker::PhantomData;
 
-use crate::queue::{TaskQueue, TaskQueueError};
-use crate::task::{Task, TaskId};
+use crate::{Task, TaskId, TaskQueue, TaskQueueError};
 
 pub struct RedisTaskQueue<D> {
     pub client: Client,

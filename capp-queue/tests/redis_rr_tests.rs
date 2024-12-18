@@ -1,9 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use capp_queue::queue::{
-        HasTagKey, RedisRoundRobinTaskQueue, TaskQueue, TaskQueueError,
+    use capp_queue::{
+        HasTagKey, RedisRoundRobinTaskQueue, Task, TaskQueue, TaskQueueError,
     };
-    use capp_queue::task::Task;
     use dotenvy::dotenv;
     use rustis::client::Client;
     use rustis::commands::{

@@ -1,5 +1,4 @@
-use crate::queue::{HasTagKey, TaskQueue, TaskQueueError};
-use crate::task::{Task, TaskId};
+use crate::{HasTagKey, Task, TaskId, TaskQueue, TaskQueueError};
 use async_trait::async_trait;
 use rustis::client::{BatchPreparedCommand, Client, Pipeline};
 use rustis::commands::{

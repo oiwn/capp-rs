@@ -1,3 +1,4 @@
+use crate::{Task, TaskId, TaskQueue, TaskQueueError};
 use async_trait::async_trait;
 use mongodb::{
     bson::doc,
@@ -7,9 +8,6 @@ use mongodb::{
     Client, ClientSession, Collection, IndexModel,
 };
 use serde::{de::DeserializeOwned, Serialize};
-
-use crate::queue::{TaskQueue, TaskQueueError};
-use crate::task::{Task, TaskId};
 
 pub struct MongoTaskQueue<D: Clone>
 where
@@ -116,8 +114,7 @@ where
         let result = self
             .tasks_collection
             .replace_one(
-                // Use toString() since that's how it's stored in MongoDB
-                doc! { "task_id": task.task_id.to_string() },
+                doc! { "task_id": task.task_id.to_string() }, // Let BSON serialization handle it
                 task,
             )
             .await?;

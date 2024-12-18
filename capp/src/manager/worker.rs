@@ -1,6 +1,6 @@
 use crate::manager::{Computation, WorkerStats};
 use capp_config::config::Configurable;
-use capp_queue::queue::{AbstractTaskQueue, TaskQueue, TaskQueueError};
+use capp_queue::{AbstractTaskQueue, TaskQueue, TaskQueueError};
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{sync::Arc, time::Duration};

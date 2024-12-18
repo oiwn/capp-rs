@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use capp_queue::queue::{RedisTaskQueue, TaskQueue, TaskQueueError};
-    use capp_queue::task::Task;
+    use capp_queue::{RedisTaskQueue, Task, TaskQueue, TaskQueueError};
     use dotenvy::dotenv;
     use rustis::client::Client;
     use rustis::commands::{GenericCommands, HashCommands, ListCommands};
