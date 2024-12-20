@@ -2,7 +2,8 @@
 #[cfg(test)]
 mod tests {
     use capp_queue::{
-        HasTagKey, RedisRoundRobinTaskQueue, Task, TaskQueue, TaskQueueError,
+        HasTagKey, JsonSerializer, RedisRoundRobinTaskQueue, Task, TaskQueue,
+        TaskQueueError,
     };
     use dotenvy::dotenv;
     use rustis::client::Client;
@@ -47,7 +48,9 @@ mod tests {
         }
     }
 
-    async fn setup_queue(test_name: &str) -> RedisRoundRobinTaskQueue<TestData> {
+    async fn setup_queue(
+        test_name: &str,
+    ) -> RedisRoundRobinTaskQueue<TestData, JsonSerializer> {
         // cleanup tests if present
         cleanup_before_test(test_name).await;
         let redis = get_redis_connection().await;
@@ -62,7 +65,9 @@ mod tests {
             .expect("Failed to create RedisRoundRobinTaskQueue")
     }
 
-    async fn cleanup_queue(queue: &RedisRoundRobinTaskQueue<TestData>) {
+    async fn cleanup_queue(
+        queue: &RedisRoundRobinTaskQueue<TestData, JsonSerializer>,
+    ) {
         let mut keys = vec![
             queue.get_hashmap_key(),
             queue.get_schedule_key(),
