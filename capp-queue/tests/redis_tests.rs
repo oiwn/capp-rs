@@ -1,7 +1,9 @@
+#[cfg(feature = "redis")]
 #[cfg(test)]
 mod tests {
-    use capp_queue::queue::{RedisTaskQueue, TaskQueue, TaskQueueError};
-    use capp_queue::task::Task;
+    use capp_queue::{
+        JsonSerializer, RedisTaskQueue, Task, TaskQueue, TaskQueueError,
+    };
     use dotenvy::dotenv;
     use rustis::client::Client;
     use rustis::commands::{GenericCommands, HashCommands, ListCommands};
@@ -20,14 +22,14 @@ mod tests {
             .expect("Error while establishing redis connection")
     }
 
-    async fn setup_queue(name: &str) -> RedisTaskQueue<TestData> {
+    async fn setup_queue(name: &str) -> RedisTaskQueue<TestData, JsonSerializer> {
         let redis = get_redis_connection().await;
         RedisTaskQueue::new(redis, name)
             .await
             .expect("Failed to create RedisTaskQueue")
     }
 
-    async fn cleanup_queue(queue: &RedisTaskQueue<TestData>) {
+    async fn cleanup_queue(queue: &RedisTaskQueue<TestData, JsonSerializer>) {
         queue
             .client
             .del([&queue.list_key, &queue.hashmap_key, &queue.dlq_key])
@@ -38,7 +40,7 @@ mod tests {
     #[tokio::test]
     async fn test_typical_workflow() {
         let redis = get_redis_connection().await;
-        let queue: RedisTaskQueue<TestData> =
+        let queue: RedisTaskQueue<TestData, JsonSerializer> =
             RedisTaskQueue::new(redis, "capp-test-workflow")
                 .await
                 .expect("Failed to create RedisTaskQueue");

@@ -1,9 +1,11 @@
+#[cfg(feature = "mongodb")]
 #[cfg(test)]
 mod tests {
-    use capp_queue::queue::{MongoTaskQueue, TaskQueue};
-    use capp_queue::task::Task;
+    use capp_queue::{
+        backend::mongodb::BsonSerializer, MongoTaskQueue, Task, TaskId, TaskQueue,
+        TaskQueueError, TaskSerializer, TaskStatus,
+    };
     use dotenvy::dotenv;
-    // use futures_util::StreamExt;
     use mongodb::bson::{self, doc};
     use mongodb::{options::ClientOptions, Client};
     use serde::{Deserialize, Serialize};
@@ -63,7 +65,7 @@ mod tests {
         Ok(())
     }
 
-    async fn setup_queue(name: &str) -> MongoTaskQueue<TestData> {
+    async fn setup_queue(name: &str) -> MongoTaskQueue<TestData, BsonSerializer> {
         if let Err(e) = cleanup_collections(name).await {
             tracing::error!("Cleanup failed: {:?}", e);
         }
@@ -74,181 +76,229 @@ mod tests {
             .expect("Failed to create MongoTaskQueue")
     }
 
-    #[test]
-    fn test_task_id_serde() {
-        let task = Task::new(TestData { value: 42 });
-        let bson_doc = bson::to_document(&task).expect("Failed to convert to BSON");
-        let task_from_bson: Task<TestData> =
-            bson::from_document(bson_doc).expect("Failed to convert from BSON");
-        // Verify task_id survived the round trip
-        assert_eq!(task.task_id, task_from_bson.task_id);
-    }
-
     #[tokio::test]
-    async fn test_queue_initialization() {
-        let queue_name = "test_init";
-        cleanup_collections(queue_name)
-            .await
-            .expect("Cleanup failed");
-
-        // Ensure cleanup is complete
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
+    async fn test_push() {
+        // Setup test queue
+        let queue_name = "test_push";
+        let task = Task::new(TestData { value: 1 });
         let uri = get_mongo_connection().await;
-        let queue = MongoTaskQueue::<TestData>::new(&uri, queue_name)
-            .await
-            .expect("Failed to create MongoTaskQueue");
+        let queue =
+            MongoTaskQueue::<TestData, BsonSerializer>::new(&uri, queue_name)
+                .await
+                .expect("Failed to create MongoTaskQueue");
 
-        let client_options = ClientOptions::parse(&uri)
-            .await
-            .expect("Failed to parse MongoDB options");
+        // Push task
+        queue.push(&task).await.expect("Failed to push task");
 
-        let db_name = client_options
-            .default_database
-            .as_ref()
-            .expect("No database specified in MongoDB URI");
-
-        // Verify collections were created
-        let client = Client::with_options(client_options.clone())
-            .expect("Failed to create MongoDB client");
-
-        assert!(
-            verify_collection_exists(
-                &client,
-                db_name,
-                &format!("{}_tasks", queue_name)
-            )
-            .await,
-            "Tasks collection should exist"
-        );
-
-        assert!(
-            verify_collection_exists(
-                &client,
-                db_name,
-                &format!("{}_dlq", queue_name)
-            )
-            .await,
-            "DLQ collection should exist"
-        );
-
-        // Verify indexes were created using list_index_names()
-        let index_names = queue
+        // Verify task was stored correctly
+        let doc = queue
             .tasks_collection
-            .list_index_names()
+            .find_one(doc! { "_id": task.task_id.get().to_string() })
             .await
-            .expect("Failed to get index names");
+            .expect("Failed to query")
+            .expect("Document not found");
 
-        // MongoDB always creates _id_ index by default, plus our task_id index
-        assert_eq!(
-            index_names.len(),
-            2,
-            "Should have 2 indexes (_id and task_id)"
-        );
+        // Verify document structure
+        assert!(doc.contains_key("_id"), "Document should have _id field");
         assert!(
-            index_names.iter().any(|name| name.contains("task_id")),
-            "task_id index should exist"
+            !doc.contains_key("task_id"),
+            "Document should not have task_id field"
         );
-
-        // Cleanup after test
-        cleanup_collections(queue_name)
-            .await
-            .expect("Cleanup failed");
     }
 
     #[tokio::test]
-    async fn test_push_and_verify_format() {
-        let queue_name = "test_push_format";
-        let queue = setup_queue(queue_name).await;
+    async fn test_push_and_pop() {
+        let queue_name = "test_push_pop";
+        let uri = get_mongo_connection().await;
+        let queue =
+            MongoTaskQueue::<TestData, BsonSerializer>::new(&uri, queue_name)
+                .await
+                .expect("Failed to create MongoTaskQueue");
 
-        // Create and push a task
+        let task = Task::new(TestData { value: 42 });
+        let original_id = task.task_id;
+
+        // Push task
+        queue.push(&task).await.expect("Failed to push task");
+
+        // Pop and verify
+        let popped_task = queue.pop().await.expect("Failed to pop task");
+        assert_eq!(popped_task.task_id, original_id);
+        assert_eq!(popped_task.payload.value, 42);
+
+        // Verify queue is empty
+        match queue.pop().await {
+            Err(TaskQueueError::QueueEmpty) => {}
+            _ => panic!("Queue should be empty"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_pop_status_handling() {
+        let queue_name = "test_pop_status";
+        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(
+            &get_mongo_connection().await,
+            queue_name,
+        )
+        .await
+        .expect("Failed to create MongoTaskQueue");
+
+        // Push a task
         let task = Task::new(TestData { value: 42 });
         let task_id = task.task_id;
         queue.push(&task).await.expect("Failed to push task");
 
-        // Get raw document and inspect the BSON format
-        let raw_doc = queue
+        // Pop the task
+        let popped_task = queue.pop().await.expect("Failed to pop task");
+        assert_eq!(popped_task.task_id, task_id);
+        assert_eq!(popped_task.status, TaskStatus::InProgress);
+
+        // Verify task still exists in DB with updated status
+        let doc = queue
             .tasks_collection
-            .find_one(doc! {})
+            .find_one(doc! { "_id": task_id.get().to_string() })
             .await
             .expect("Failed to query")
-            .expect("Document should exist");
+            .expect("Document should still exist");
 
-        // Convert to BSON document to inspect actual format
-        let bson_doc = mongodb::bson::to_document(&raw_doc)
-            .expect("Failed to convert to BSON");
-        println!("Raw BSON document in MongoDB: {:#?}", bson_doc);
+        let bytes = bson::to_vec(&doc).expect("Failed to serialize BSON");
+        let stored_task: Task<TestData> = BsonSerializer::deserialize_task(&bytes)
+            .expect("Failed to deserialize task");
 
-        // Get the task_id field and print its specific type and value
-        if let Some(task_id_bson) = bson_doc.get("task_id") {
-            println!("task_id type: {:?}", task_id_bson.element_type());
-            println!("task_id value: {:?}", task_id_bson);
+        assert_eq!(stored_task.status, TaskStatus::InProgress);
+
+        // Try to pop again - should be empty since task is InProgress
+        match queue.pop().await {
+            Err(TaskQueueError::QueueEmpty) => {}
+            other => panic!("Expected QueueEmpty error, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_push_pop_order() {
+        let queue_name = "test_push_pop_order";
+        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(
+            &get_mongo_connection().await,
+            queue_name,
+        )
+        .await
+        .expect("Failed to create MongoTaskQueue");
+
+        // Push multiple tasks in sequence
+        let tasks = vec![
+            Task::new(TestData { value: 1 }),
+            Task::new(TestData { value: 2 }),
+            Task::new(TestData { value: 3 }),
+        ];
+
+        for task in &tasks {
+            queue.push(task).await.expect("Failed to push task");
         }
 
-        // Print the UUID we're searching with
-        println!("Original UUID bytes: {:?}", task_id.get().as_bytes());
+        // Pop tasks and verify order
+        for expected_value in 1..=3 {
+            let popped_task = queue.pop().await.expect("Failed to pop task");
+            assert_eq!(
+                popped_task.payload.value, expected_value,
+                "Tasks should be popped in FIFO order. Expected value {}, got {}",
+                expected_value, popped_task.payload.value
+            );
+        }
 
-        // Try finding with direct BSON query
-        let found = queue
-            .tasks_collection
-            .find_one(bson_doc)
-            .await
-            .expect("Query failed");
-        println!("Found with exact BSON document: {:?}", found.is_some());
-
-        // Cleanup
-        cleanup_collections(queue_name)
-            .await
-            .expect("Cleanup failed");
+        // Verify queue is empty
+        match queue.pop().await {
+            Err(TaskQueueError::QueueEmpty) => {}
+            _ => panic!("Queue should be empty"),
+        }
     }
 
     #[tokio::test]
-    async fn test_task_id_mongodb_format() {
-        let queue_name = "test-id-format";
-        let queue = setup_queue(queue_name).await;
+    async fn test_ack() {
+        let queue_name = "test_ack";
+        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(
+            &get_mongo_connection().await,
+            queue_name,
+        )
+        .await
+        .expect("Failed to create MongoTaskQueue");
 
-        // Create and push a test task
+        // Push and pop a task
         let task = Task::new(TestData { value: 42 });
         let task_id = task.task_id;
+
+        queue.push(&task).await.expect("Failed to push task");
+        let popped_task = queue.pop().await.expect("Failed to pop task");
+
+        // Ack the task
+        queue
+            .ack(&popped_task.task_id)
+            .await
+            .expect("Failed to ack task");
+
+        // Verify task is gone by trying to find it
+        let doc = queue
+            .tasks_collection
+            .find_one(doc! { "_id": task_id.get().to_string() })
+            .await
+            .expect("Failed to query");
+
+        assert!(doc.is_none(), "Task should be removed after ack");
+
+        // Try to ack non-existent task
+        let non_existent_id = TaskId::new();
+        match queue.ack(&non_existent_id).await {
+            Err(TaskQueueError::TaskNotFound(_)) => {}
+            other => panic!("Expected TaskNotFound error, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_set() {
+        let queue_name = "test_set";
+        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(
+            &get_mongo_connection().await,
+            queue_name,
+        )
+        .await
+        .expect("Failed to create MongoTaskQueue");
+
+        // Create and push initial task
+        let mut task = Task::new(TestData { value: 42 });
         queue.push(&task).await.expect("Failed to push task");
 
-        // Get the raw BSON document to examine how it's actually stored
-        let raw_doc = queue
+        // Modify task state
+        task.set_in_progress();
+        task.payload.value = 43;
+
+        // Update task in database
+        queue.set(&task).await.expect("Failed to set task");
+
+        // Verify changes were saved
+        let doc = queue
             .tasks_collection
-            .find_one(doc! {})
+            .find_one(doc! { "_id": task.task_id.get().to_string() })
             .await
             .expect("Failed to query")
-            .expect("Document should exist");
+            .expect("Document not found");
 
-        // Get the raw document as BSON to inspect it
-        let bson_doc = mongodb::bson::to_document(&raw_doc)
-            .expect("Failed to convert to BSON");
-        println!("Raw BSON document in MongoDB: {:#?}", bson_doc);
+        let bytes = bson::to_vec(&doc).expect("Failed to serialize BSON");
+        let updated_task: Task<TestData> = BsonSerializer::deserialize_task(&bytes)
+            .expect("Failed to deserialize task");
 
-        // Specifically examine the task_id field
-        let task_id_field =
-            bson_doc.get("task_id").expect("task_id field should exist");
-        println!("task_id type: {:?}", task_id_field.element_type());
-        println!("task_id value: {:#?}", task_id_field);
-        println!("Original UUID bytes: {:?}", task_id.get().as_bytes());
+        assert_eq!(updated_task.payload.value, 43);
+        assert_eq!(updated_task.status, TaskStatus::InProgress);
 
-        // Try to find document with exact BSON match
-        let found = queue
-            .tasks_collection
-            .find_one(doc! { "task_id": task_id.to_string() })
-            .await
-            .expect("Failed to query")
-            .is_some();
-        println!("Found with exact BSON document: {}", found);
-
-        // Clean up
-        cleanup_collections(queue_name)
-            .await
-            .expect("Cleanup failed");
+        // Test setting non-existent task
+        let non_existent_task = Task::new(TestData { value: 99 });
+        match queue.set(&non_existent_task).await {
+            Err(TaskQueueError::TaskNotFound(_)) => {}
+            other => panic!("Expected TaskNotFound error, got {:?}", other),
+        }
     }
 
     #[tokio::test]
     async fn test_inspect_task_storage() {
+        println!("Test inspect task storage");
         let queue_name = "test_inspect";
         let queue = setup_queue(queue_name).await;
 
@@ -286,7 +336,50 @@ mod tests {
             .await
             .expect("Query failed");
         println!("Found with exact BSON document: {:?}", found.is_some());
+    }
 
-        // No cleanup - leave the data in MongoDB for manual inspection
+    #[tokio::test]
+    async fn test_nack() {
+        let queue_name = "test_nack";
+        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(
+            &get_mongo_connection().await,
+            queue_name,
+        )
+        .await
+        .expect("Failed to create MongoTaskQueue");
+
+        // Push and pop a task
+        let task = Task::new(TestData { value: 42 });
+        let task_id = task.task_id;
+
+        queue.push(&task).await.expect("Failed to push task");
+        let popped_task = queue.pop().await.expect("Failed to pop task");
+
+        // Nack the task
+        queue.nack(&popped_task).await.expect("Failed to nack task");
+
+        // Verify task is gone from main queue
+        let main_doc = queue
+            .tasks_collection
+            .find_one(doc! { "_id": task_id.get().to_string() })
+            .await
+            .expect("Failed to query main queue");
+        assert!(main_doc.is_none(), "Task should be removed from main queue");
+
+        // Verify task is in DLQ with correct status
+        let dlq_doc = queue
+            .dlq_collection
+            .find_one(doc! { "_id": task_id.get().to_string() })
+            .await
+            .expect("Failed to query DLQ")
+            .expect("Task should be in DLQ");
+
+        let bytes = bson::to_vec(&dlq_doc).expect("Failed to serialize BSON");
+        let dlq_task: Task<TestData> = BsonSerializer::deserialize_task(&bytes)
+            .expect("Failed to deserialize task");
+
+        assert_eq!(dlq_task.task_id, task_id);
+        assert_eq!(dlq_task.status, TaskStatus::DeadLetter);
+        assert!(dlq_task.error_msg.is_some());
     }
 }

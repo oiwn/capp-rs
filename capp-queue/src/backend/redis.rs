@@ -1,22 +1,27 @@
-//! Provides implementation of trait to store task into redis
 use async_trait::async_trait;
 use rustis::client::{BatchPreparedCommand, Client, Pipeline};
 use rustis::commands::{HashCommands, ListCommands};
 use serde::{de::DeserializeOwned, Serialize};
 use std::marker::PhantomData;
 
-use crate::queue::{TaskQueue, TaskQueueError};
-use crate::task::{Task, TaskId};
+use crate::{Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer};
 
-pub struct RedisTaskQueue<D> {
+pub struct RedisTaskQueue<D, S>
+where
+    S: TaskSerializer,
+{
     pub client: Client,
     pub list_key: String,
     pub hashmap_key: String,
     pub dlq_key: String,
-    _marker: PhantomData<D>,
+    _marker: PhantomData<(D, S)>,
 }
 
-impl<D> RedisTaskQueue<D> {
+impl<D, S> RedisTaskQueue<D, S>
+where
+    D: Send + Sync + 'static,
+    S: TaskSerializer + Send + Sync,
+{
     pub async fn new(
         client: Client,
         queue_name: &str,
@@ -34,21 +39,16 @@ impl<D> RedisTaskQueue<D> {
         &self,
         pipeline: Pipeline<'_>,
     ) -> Result<(), TaskQueueError> {
-        // NOTE: this strange construction .map(|_: ()| ())
-        // This change explicitly specifies that we're expecting a () (unit type) as the successful
-        // result of execute(). By doing this, we're no longer relying on the never type fallback,
-        // which resolves the warning.
         pipeline
             .execute()
             .await
             .map(|_: ()| ())
-            .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
-        Ok(())
+            .map_err(|e| TaskQueueError::QueueError(e.to_string()))
     }
 }
 
 #[async_trait]
-impl<D> TaskQueue<D> for RedisTaskQueue<D>
+impl<D, S> TaskQueue<D> for RedisTaskQueue<D, S>
 where
     D: std::fmt::Debug
         + Clone
@@ -57,18 +57,21 @@ where
         + Send
         + Sync
         + 'static,
+    S: TaskSerializer + Send + Sync,
 {
     async fn push(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
-        let task_json = serde_json::to_string(task)
-            .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
+        let task_bytes = S::serialize_task(task)?;
+        let task_str = String::from_utf8(task_bytes)
+            .map_err(|e| TaskQueueError::Serialization(e.to_string()))?;
 
         let mut pipeline = self.client.create_pipeline();
         pipeline
             .rpush(&self.list_key, &task.task_id.to_string())
             .forget();
         pipeline
-            .hset(&self.hashmap_key, [(&task.task_id.to_string(), &task_json)])
+            .hset(&self.hashmap_key, [(&task.task_id.to_string(), &task_str)])
             .forget();
+
         self.execute_pipeline(pipeline).await
     }
 
@@ -79,44 +82,64 @@ where
             .await
             .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
 
-        if !task_ids.is_empty() {
-            let task_id = task_ids.first().unwrap();
-            let task_value: String =
-                self.client.hget(&self.hashmap_key, task_id).await?;
+        if let Some(task_id) = task_ids.first() {
+            let task_str: String = self
+                .client
+                .hget(&self.hashmap_key, task_id)
+                .await
+                .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
 
-            let task: Task<D> = serde_json::from_str(&task_value)
-                .map_err(|err| TaskQueueError::SerdeError(err.to_string()))?;
-            return Ok(task);
+            let task_bytes = task_str.as_bytes();
+            S::deserialize_task(task_bytes)
+        } else {
+            Err(TaskQueueError::QueueEmpty)
         }
-
-        Err(TaskQueueError::QueueEmpty)
     }
 
     async fn ack(&self, task_id: &TaskId) -> Result<(), TaskQueueError> {
-        let uuid_as_str = task_id.to_string();
-        let _ = self.client.hdel(&self.hashmap_key, &uuid_as_str).await?;
+        self.client
+            .hdel(&self.hashmap_key, &task_id.to_string())
+            .await
+            .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
         Ok(())
     }
 
     async fn nack(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
-        let uuid_as_str = task.task_id.to_string();
-        let task_json = serde_json::to_string(task)
-            .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
+        let task_bytes = S::serialize_task(task)?;
+        let task_str = String::from_utf8(task_bytes)
+            .map_err(|e| TaskQueueError::Serialization(e.to_string()))?;
 
         let mut pipeline = self.client.create_pipeline();
-        pipeline.rpush(&self.dlq_key, &task_json).forget();
-        pipeline.hdel(&self.hashmap_key, &uuid_as_str).forget();
+        pipeline.rpush(&self.dlq_key, &task_str).forget();
+        pipeline
+            .hdel(&self.hashmap_key, &task.task_id.to_string())
+            .forget();
+
         self.execute_pipeline(pipeline).await
     }
 
     async fn set(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
-        let task_json = serde_json::to_string(task)
-            .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
+        let task_bytes = S::serialize_task(task)?;
+        let task_str = String::from_utf8(task_bytes)
+            .map_err(|e| TaskQueueError::Serialization(e.to_string()))?;
 
         self.client
-            .hset(&self.hashmap_key, [(&task.task_id.to_string(), &task_json)])
+            .hset(&self.hashmap_key, [(&task.task_id.to_string(), &task_str)])
             .await
             .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
         Ok(())
+    }
+}
+
+impl<D, S> std::fmt::Debug for RedisTaskQueue<D, S>
+where
+    S: TaskSerializer,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RedisTaskQueue")
+            .field("list_key", &self.list_key)
+            .field("hashmap_key", &self.hashmap_key)
+            .field("dlq_key", &self.dlq_key)
+            .finish()
     }
 }

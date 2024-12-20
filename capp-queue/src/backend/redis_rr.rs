@@ -1,5 +1,4 @@
-use crate::queue::{HasTagKey, TaskQueue, TaskQueueError};
-use crate::task::{Task, TaskId};
+use crate::{HasTagKey, Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer};
 use async_trait::async_trait;
 use rustis::client::{BatchPreparedCommand, Client, Pipeline};
 use rustis::commands::{
@@ -12,14 +11,21 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub struct RedisRoundRobinTaskQueue<D> {
+pub struct RedisRoundRobinTaskQueue<D, S>
+where
+    S: TaskSerializer,
+{
     pub client: Client,
     pub key_prefix: String,
     pub tags: Arc<HashSet<String>>,
-    _marker: PhantomData<D>,
+    _marker: PhantomData<(D, S)>,
 }
 
-impl<D> RedisRoundRobinTaskQueue<D> {
+impl<D, S> RedisRoundRobinTaskQueue<D, S>
+where
+    D: Send + Sync + 'static + HasTagKey,
+    S: TaskSerializer + Send + Sync,
+{
     pub async fn new(
         client: Client,
         key_prefix: &str,
@@ -136,7 +142,7 @@ impl<D> RedisRoundRobinTaskQueue<D> {
 }
 
 #[async_trait]
-impl<D> TaskQueue<D> for RedisRoundRobinTaskQueue<D>
+impl<D, S> TaskQueue<D> for RedisRoundRobinTaskQueue<D, S>
 where
     D: std::fmt::Debug
         + Clone
@@ -146,10 +152,12 @@ where
         + Sync
         + 'static
         + HasTagKey,
+    S: TaskSerializer + Send + Sync,
 {
     async fn push(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
-        let task_json = serde_json::to_string(task)
-            .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
+        let task_bytes = S::serialize_task(task)?;
+        let task_str = String::from_utf8(task_bytes)
+            .map_err(|e| TaskQueueError::Serialization(e.to_string()))?;
 
         let tag = task.payload.get_tag_value().to_string();
         let list_key = self.get_list_key(&tag);
@@ -163,7 +171,7 @@ where
             .lpush(&list_key, &task.task_id.to_string())
             .forget();
         pipeline
-            .hset(&hashmap_key, [(&task.task_id.to_string(), &task_json)])
+            .hset(&hashmap_key, [(&task.task_id.to_string(), &task_str)])
             .forget();
 
         // Ensure tag exists in schedule with current timestamp if it doesn't exist
@@ -173,7 +181,7 @@ where
                 schedule_key,
                 vec![(timestamp as f64, tag)],
                 ZAddOptions::default()
-                    .condition(rustis::commands::ZAddCondition::NX), // Only add if not exists
+                    .condition(rustis::commands::ZAddCondition::NX),
             )
             .forget();
 
@@ -200,11 +208,13 @@ where
 
             if let Some(task_id) = task_ids.first() {
                 // Get task data from hash
-                let task_value: String =
-                    self.client.hget(&hashmap_key, task_id).await?;
+                let task_str: String = self
+                    .client
+                    .hget(&hashmap_key, task_id)
+                    .await
+                    .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
 
-                let task: Task<D> = serde_json::from_str(&task_value)
-                    .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
+                let task = S::deserialize_task(task_str.as_bytes())?;
 
                 // Update tag's timestamp in schedule
                 self.update_tag_timestamp(&tag).await?;
@@ -224,34 +234,36 @@ where
     }
 
     async fn ack(&self, task_id: &TaskId) -> Result<(), TaskQueueError> {
-        let uuid_as_str = task_id.to_string();
-        let _ = self
-            .client
-            .hdel(self.get_hashmap_key(), &uuid_as_str)
-            .await?;
+        self.client
+            .hdel(self.get_hashmap_key(), &task_id.to_string())
+            .await
+            .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
         Ok(())
     }
 
     async fn nack(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
-        let uuid_as_str = task.task_id.to_string();
-        let task_json = serde_json::to_string(task)
-            .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
+        let task_bytes = S::serialize_task(task)?;
+        let task_str = String::from_utf8(task_bytes)
+            .map_err(|e| TaskQueueError::Serialization(e.to_string()))?;
 
         let mut pipeline = self.client.create_pipeline();
-        pipeline.rpush(self.get_dlq_key(), &task_json).forget();
-        pipeline.hdel(self.get_hashmap_key(), &uuid_as_str).forget();
+        pipeline.rpush(self.get_dlq_key(), &task_str).forget();
+        pipeline
+            .hdel(self.get_hashmap_key(), &task.task_id.to_string())
+            .forget();
 
         self.execute_pipeline(pipeline).await
     }
 
     async fn set(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
-        let task_json = serde_json::to_string(task)
-            .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
+        let task_bytes = S::serialize_task(task)?;
+        let task_str = String::from_utf8(task_bytes)
+            .map_err(|e| TaskQueueError::Serialization(e.to_string()))?;
 
         self.client
             .hset(
                 self.get_hashmap_key(),
-                [(&task.task_id.to_string(), &task_json)],
+                [(&task.task_id.to_string(), &task_str)],
             )
             .await
             .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
@@ -259,7 +271,10 @@ where
     }
 }
 
-impl<D> std::fmt::Debug for RedisRoundRobinTaskQueue<D> {
+impl<D, S> std::fmt::Debug for RedisRoundRobinTaskQueue<D, S>
+where
+    S: TaskSerializer,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RedisRoundRobinTaskQueue")
             .field("key_prefix", &self.key_prefix)

@@ -1,9 +1,8 @@
-// use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 use uuid::Uuid;
-#[cfg(feature = "mongodb")]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum TaskStatus {
     Queued,
     InProgress,
@@ -122,37 +121,6 @@ impl std::fmt::Display for TaskId {
         write!(f, "TaskId({})", self.0)
     }
 }
-
-/* #[cfg(feature = "mongodb")]
-impl From<TaskId> for mongodb::bson::Binary {
-    fn from(id: TaskId) -> Self {
-        mongodb::bson::Binary {
-            subtype: mongodb::bson::spec::BinarySubtype::Uuid,
-            bytes: id.get().as_bytes().to_vec(),
-        }
-    }
-}
-
-#[cfg(feature = "mongodb")]
-impl From<mongodb::bson::Binary> for TaskId {
-    fn from(binary: mongodb::bson::Binary) -> Self {
-        TaskId(uuid::Uuid::from_bytes(binary.bytes.try_into().unwrap()))
-    }
-}
-
-#[cfg(feature = "mongodb")]
-impl From<TaskId> for mongodb::bson::Uuid {
-    fn from(id: TaskId) -> Self {
-        mongodb::bson::Uuid::from_bytes(*id.get().as_bytes())
-    }
-}
-
-#[cfg(feature = "mongodb")]
-impl From<mongodb::bson::Uuid> for TaskId {
-    fn from(uuid: mongodb::bson::Uuid) -> Self {
-        TaskId(uuid::Uuid::from_bytes(uuid.bytes()))
-    }
-} */
 
 #[cfg(test)]
 mod tests {

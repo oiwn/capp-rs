@@ -1,8 +1,8 @@
 //! In-memory implementation of TaskStorage trait. The storage allows tasks to be
 //! pushed to and popped from a queue, and also allows tasks to be set and
 //! retrieved by their UUID.
-use crate::queue::{TaskQueue, TaskQueueError};
 use crate::task::{Task, TaskId};
+use crate::{TaskQueue, TaskQueueError, TaskSerializer};
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -10,14 +10,20 @@ use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 use std::sync::Mutex;
 
-pub struct InMemoryTaskQueue<D> {
-    pub hashmap: Mutex<HashMap<TaskId, String>>,
+pub struct InMemoryTaskQueue<D, S>
+where
+    S: TaskSerializer,
+{
+    pub hashmap: Mutex<HashMap<TaskId, Vec<u8>>>,
     pub list: Mutex<VecDeque<TaskId>>,
-    pub dlq: Mutex<HashMap<TaskId, String>>,
-    _marker: PhantomData<D>,
+    pub dlq: Mutex<HashMap<TaskId, Vec<u8>>>,
+    _marker: PhantomData<(D, S)>,
 }
 
-impl<D> InMemoryTaskQueue<D> {
+impl<D, S> InMemoryTaskQueue<D, S>
+where
+    S: TaskSerializer,
+{
     pub fn new() -> Self {
         Self {
             hashmap: Mutex::new(HashMap::new()),
@@ -28,14 +34,17 @@ impl<D> InMemoryTaskQueue<D> {
     }
 }
 
-impl<D> Default for InMemoryTaskQueue<D> {
+impl<D, S> Default for InMemoryTaskQueue<D, S>
+where
+    S: TaskSerializer,
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[async_trait]
-impl<D> TaskQueue<D> for InMemoryTaskQueue<D>
+impl<D, S> TaskQueue<D> for InMemoryTaskQueue<D, S>
 where
     D: std::fmt::Debug
         + Clone
@@ -44,6 +53,7 @@ where
         + Send
         + Sync
         + 'static,
+    S: TaskSerializer + Send + Sync,
 {
     async fn push(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
         let mut list = self
@@ -55,9 +65,8 @@ where
             .lock()
             .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
 
-        let task_value = serde_json::to_string(task)
-            .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
-        hashmap.insert(task.task_id, task_value);
+        let task_bytes = S::serialize_task(task)?;
+        hashmap.insert(task.task_id, task_bytes);
         list.push_back(task.task_id);
         Ok(())
     }
@@ -73,12 +82,10 @@ where
             .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
 
         if let Some(task_id) = list.pop_front() {
-            let task_value = hashmap
+            let task_bytes = hashmap
                 .get(&task_id)
                 .ok_or(TaskQueueError::TaskNotFound(task_id))?;
-            let task: Task<D> = serde_json::from_str(task_value)
-                .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
-            Ok(task)
+            S::deserialize_task(task_bytes)
         } else {
             Err(TaskQueueError::QueueEmpty)
         }
@@ -100,9 +107,8 @@ where
             .dlq
             .lock()
             .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
-        let task_value = serde_json::to_string(task)
-            .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
-        dlq.insert(task.task_id, task_value);
+        let task_bytes = S::serialize_task(task)?;
+        dlq.insert(task.task_id, task_bytes);
 
         let mut hashmap = self
             .hashmap
@@ -111,7 +117,6 @@ where
         hashmap
             .remove(&task.task_id)
             .ok_or(TaskQueueError::TaskNotFound(task.task_id))?;
-
         Ok(())
     }
 
@@ -120,29 +125,33 @@ where
             .hashmap
             .lock()
             .map_err(|e| TaskQueueError::QueueError(e.to_string()))?;
-        let task_value = serde_json::to_string(task)
-            .map_err(|e| TaskQueueError::SerdeError(e.to_string()))?;
-        hashmap.insert(task.task_id, task_value);
+        let task_bytes = S::serialize_task(task)?;
+        hashmap.insert(task.task_id, task_bytes);
         Ok(())
     }
 }
 
-impl<D> std::fmt::Debug for InMemoryTaskQueue<D> {
+impl<D, S> std::fmt::Debug for InMemoryTaskQueue<D, S>
+where
+    S: TaskSerializer,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let hashmap = self.hashmap.lock().unwrap();
         let list = self.list.lock().unwrap();
         let dlq = self.dlq.lock().unwrap();
 
         f.debug_struct("InMemoryTaskQueue")
-            .field("hashmap", &*hashmap)
+            .field("hashmap_size", &hashmap.len())
             .field("list", &*list)
-            .field("dlq", &*dlq)
+            .field("dlq_size", &dlq.len())
             .finish()
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::JsonSerializer;
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -152,7 +161,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_push_and_pop() {
-        let queue = InMemoryTaskQueue::<TestData>::new();
+        let queue = InMemoryTaskQueue::<TestData, JsonSerializer>::new();
         let task = Task::new(TestData { value: 42 });
 
         queue.push(&task).await.unwrap();
@@ -163,7 +172,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_queue_empty() {
-        let queue = InMemoryTaskQueue::<TestData>::new();
+        let queue = InMemoryTaskQueue::<TestData, JsonSerializer>::new();
 
         match queue.pop().await {
             Err(TaskQueueError::QueueEmpty) => (),
@@ -173,7 +182,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ack() {
-        let queue = InMemoryTaskQueue::<TestData>::new();
+        let queue = InMemoryTaskQueue::<TestData, JsonSerializer>::new();
         let task = Task::new(TestData { value: 42 });
 
         queue.push(&task).await.unwrap();
@@ -186,7 +195,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_nack() {
-        let queue = InMemoryTaskQueue::<TestData>::new();
+        let queue = InMemoryTaskQueue::<TestData, JsonSerializer>::new();
         let task = Task::new(TestData { value: 42 });
 
         queue.push(&task).await.unwrap();
@@ -203,7 +212,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_set() {
-        let queue = InMemoryTaskQueue::<TestData>::new();
+        let queue = InMemoryTaskQueue::<TestData, JsonSerializer>::new();
         let mut task = Task::new(TestData { value: 42 });
 
         queue.push(&task).await.unwrap();
@@ -218,7 +227,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_multiple_tasks() {
-        let queue = InMemoryTaskQueue::<TestData>::new();
+        let queue = InMemoryTaskQueue::<TestData, JsonSerializer>::new();
         let tasks = vec![
             Task::new(TestData { value: 1 }),
             Task::new(TestData { value: 2 }),
@@ -240,7 +249,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_task_not_found() {
-        let queue = InMemoryTaskQueue::<TestData>::new();
+        let queue = InMemoryTaskQueue::<TestData, JsonSerializer>::new();
         let non_existent_task_id = TaskId::new();
 
         match queue.ack(&non_existent_task_id).await {

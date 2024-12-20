@@ -1,9 +1,10 @@
+#[cfg(feature = "redis")]
 #[cfg(test)]
 mod tests {
-    use capp_queue::queue::{
-        HasTagKey, RedisRoundRobinTaskQueue, TaskQueue, TaskQueueError,
+    use capp_queue::{
+        HasTagKey, JsonSerializer, RedisRoundRobinTaskQueue, Task, TaskQueue,
+        TaskQueueError,
     };
-    use capp_queue::task::Task;
     use dotenvy::dotenv;
     use rustis::client::Client;
     use rustis::commands::{
@@ -47,7 +48,9 @@ mod tests {
         }
     }
 
-    async fn setup_queue(test_name: &str) -> RedisRoundRobinTaskQueue<TestData> {
+    async fn setup_queue(
+        test_name: &str,
+    ) -> RedisRoundRobinTaskQueue<TestData, JsonSerializer> {
         // cleanup tests if present
         cleanup_before_test(test_name).await;
         let redis = get_redis_connection().await;
@@ -62,7 +65,9 @@ mod tests {
             .expect("Failed to create RedisRoundRobinTaskQueue")
     }
 
-    async fn cleanup_queue(queue: &RedisRoundRobinTaskQueue<TestData>) {
+    async fn cleanup_queue(
+        queue: &RedisRoundRobinTaskQueue<TestData, JsonSerializer>,
+    ) {
         let mut keys = vec![
             queue.get_hashmap_key(),
             queue.get_schedule_key(),
@@ -251,7 +256,7 @@ mod tests {
             .expect("Failed to ack task");
         let task_exists: bool = queue
             .client
-            .hexists(&queue.get_hashmap_key(), popped_task.task_id.to_string())
+            .hexists(queue.get_hashmap_key(), popped_task.task_id.to_string())
             .await
             .expect("Failed to check task existence");
         assert!(!task_exists, "Task should be removed after ack");
@@ -268,7 +273,7 @@ mod tests {
         // Verify task is in DLQ
         let dlq_len: u64 = queue
             .client
-            .llen(&queue.get_dlq_key())
+            .llen(queue.get_dlq_key())
             .await
             .expect("Failed to get DLQ length") as u64;
         assert_eq!(dlq_len, 1, "Task should be in DLQ");
@@ -302,7 +307,7 @@ mod tests {
         // Verify all tasks were pushed
         let list_len: u64 = queue
             .client
-            .llen(&queue.get_list_key("tag1"))
+            .llen(queue.get_list_key("tag1"))
             .await
             .expect("Failed to get list length") as u64;
         assert_eq!(list_len, 10, "All tasks should be pushed");
@@ -337,7 +342,7 @@ mod tests {
         // Verify data exists
         let hashmap_len: u64 = queue
             .client
-            .hlen(&queue.get_hashmap_key())
+            .hlen(queue.get_hashmap_key())
             .await
             .expect("Failed to get hashmap length")
             as u64;
@@ -349,7 +354,7 @@ mod tests {
         // Verify all data is removed
         let hashmap_len: u64 = queue
             .client
-            .hlen(&queue.get_hashmap_key())
+            .hlen(queue.get_hashmap_key())
             .await
             .expect("Failed to get hashmap length")
             as u64;
@@ -357,7 +362,7 @@ mod tests {
 
         let schedule_len: u64 = queue
             .client
-            .zcard(&queue.get_schedule_key())
+            .zcard(queue.get_schedule_key())
             .await
             .expect("Failed to get schedule length")
             as u64;
