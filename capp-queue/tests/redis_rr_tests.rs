@@ -1,3 +1,4 @@
+#[cfg(feature = "redis")]
 #[cfg(test)]
 mod tests {
     use capp_queue::{
