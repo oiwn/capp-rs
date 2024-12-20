@@ -34,6 +34,15 @@ where
     }
 }
 
+impl<D, S> Default for InMemoryTaskQueue<D, S>
+where
+    S: TaskSerializer,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl<D, S> TaskQueue<D> for InMemoryTaskQueue<D, S>
 where

@@ -2,13 +2,13 @@ use super::{Task, TaskQueueError};
 use serde::{de::DeserializeOwned, Serialize};
 
 pub trait TaskSerializer: Send + Sync {
-    fn serialize_task<T: Clone>(task: &Task<T>) -> Result<Vec<u8>, TaskQueueError>
+    fn serialize_task<T>(task: &Task<T>) -> Result<Vec<u8>, TaskQueueError>
     where
-        T: Serialize + DeserializeOwned;
+        T: Clone + Serialize + DeserializeOwned;
 
-    fn deserialize_task<T: Clone>(data: &[u8]) -> Result<Task<T>, TaskQueueError>
+    fn deserialize_task<T>(data: &[u8]) -> Result<Task<T>, TaskQueueError>
     where
-        T: Serialize + DeserializeOwned;
+        T: Clone + Serialize + DeserializeOwned;
 }
 
 #[derive(Debug, Clone, Copy)]
