@@ -6,6 +6,8 @@ pub mod task;
 pub use crate::backend::InMemoryTaskQueue;
 #[cfg(feature = "mongodb")]
 pub use crate::backend::MongoTaskQueue;
+#[cfg(feature = "postgres")]
+pub use crate::backend::PostgresTaskQueue;
 #[cfg(feature = "redis")]
 pub use crate::backend::{RedisRoundRobinTaskQueue, RedisTaskQueue};
 pub use crate::queue::{AbstractTaskQueue, HasTagKey, TaskQueue};
@@ -34,4 +36,7 @@ pub enum TaskQueueError {
     #[cfg(feature = "mongodb")]
     #[error("Mongodb Error")]
     MongodbError(#[from] mongodb::error::Error),
+    #[cfg(feature = "postgres")]
+    #[error("Postgres Error")]
+    PostgresError(#[from] sqlx::Error),
 }
