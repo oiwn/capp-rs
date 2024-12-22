@@ -198,17 +198,16 @@ mod tests {
         // Verify changes were saved correctly using regular query
         let row = sqlx::query(
             r#"
-        SELECT payload, status 
-        FROM tasks 
-        WHERE id = $1
-        "#,
+            SELECT payload, status::text as status
+            FROM tasks 
+            WHERE id = $1
+            "#,
         )
         .bind(task.task_id.get())
         .fetch_one(&queue.pool)
         .await
         .expect("Failed to fetch task");
 
-        // Get payload and status from row
         let payload: serde_json::Value = row.get("payload");
         let status: String = row.get("status");
 
