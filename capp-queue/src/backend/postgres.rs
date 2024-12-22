@@ -2,8 +2,31 @@ use crate::{Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer, TaskStatus}
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 use sqlx::types::chrono::{DateTime, Utc};
-use sqlx::{PgPool, Pool, Postgres};
+use sqlx::PgPool;
 use std::marker::PhantomData;
+
+#[derive(sqlx::Type)]
+#[sqlx(type_name = "task_status", rename_all = "PascalCase")]
+pub enum PostgresTaskStatus {
+    Queued,
+    InProgress,
+    Completed,
+    Failed,
+    DeadLetter,
+}
+
+// Add conversion between our TaskStatus and PostgresTaskStatus
+impl From<TaskStatus> for PostgresTaskStatus {
+    fn from(status: TaskStatus) -> Self {
+        match status {
+            TaskStatus::Queued => PostgresTaskStatus::Queued,
+            TaskStatus::InProgress => PostgresTaskStatus::InProgress,
+            TaskStatus::Completed => PostgresTaskStatus::Completed,
+            TaskStatus::Failed => PostgresTaskStatus::Failed,
+            TaskStatus::DeadLetter => PostgresTaskStatus::DeadLetter,
+        }
+    }
+}
 
 pub struct PostgresTaskQueue<D, S>
 where
@@ -193,18 +216,11 @@ where
             .await
             .map_err(TaskQueueError::PostgresError)?;
 
-        // Serialize task data to JSON
         let task_bytes = S::serialize_task(task)?;
         let payload: serde_json::Value = serde_json::from_slice(&task_bytes)
             .map_err(|e| TaskQueueError::Serialization(e.to_string()))?;
 
-        let status = match task.status {
-            TaskStatus::Queued => "Queued",
-            TaskStatus::InProgress => "InProgress",
-            TaskStatus::Completed => "Completed",
-            TaskStatus::Failed => "Failed",
-            TaskStatus::DeadLetter => "DeadLetter",
-        };
+        let status: PostgresTaskStatus = task.status.clone().into();
 
         let result = sqlx::query(
             r#"
@@ -219,7 +235,7 @@ where
         "#,
         )
         .bind(payload)
-        .bind(status)
+        .bind(status) // Now we're binding a proper Postgres enum type
         .bind(task.started_at.map(|t| DateTime::<Utc>::from(t)))
         .bind(task.finished_at.map(|t| DateTime::<Utc>::from(t)))
         .bind(task.retries as i32)
