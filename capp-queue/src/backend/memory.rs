@@ -153,6 +153,7 @@ mod tests {
     use super::*;
     use crate::JsonSerializer;
     use serde::{Deserialize, Serialize};
+    use tokio;
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     struct TestData {
