@@ -47,8 +47,10 @@ pub mod prelude;
 
 // re-export
 pub use async_trait;
+pub use capp_config;
 #[cfg(feature = "http")]
-pub use derive_builder;
+pub use capp_config::backoff;
+pub use capp_queue;
 #[cfg(feature = "mongodb")]
 pub use mongodb;
 #[cfg(feature = "http")]
