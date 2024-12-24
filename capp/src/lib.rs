@@ -47,10 +47,10 @@ pub mod prelude;
 
 // re-export
 pub use async_trait;
-pub use capp_config;
+pub use capp_config as config;
 #[cfg(feature = "http")]
 pub use capp_config::backoff;
-pub use capp_queue;
+pub use capp_queue as queue;
 #[cfg(feature = "mongodb")]
 pub use mongodb;
 #[cfg(feature = "http")]
