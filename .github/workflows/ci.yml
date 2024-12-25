@@ -2,14 +2,15 @@ name: Continuous Integration
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
   workflow_dispatch:  # Manual trigger
 
 env:
   CARGO_TERM_COLOR: always
   REDIS_URI: redis://localhost:6379
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/testdb
 
 jobs:
   check:
@@ -46,7 +47,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
       mongodb:
         image: mongo:6
         ports:
@@ -56,8 +56,22 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       MONGODB_URI: mongodb://localhost:27017/testdb
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/testdb
 
     steps:
       - uses: actions/checkout@v4
@@ -179,6 +193,19 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       
@@ -195,6 +222,12 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install SQLx CLI
+        run: cargo install sqlx-cli --no-default-features --features postgres
+        
+      - name: Run SQLx Migrations
+        run: sqlx migrate run
           
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
@@ -211,3 +244,4 @@ jobs:
           verbose: true
     env:
       MONGODB_URI: mongodb://localhost:27017/testdb
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/testdb
