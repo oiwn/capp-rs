@@ -30,6 +30,8 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run unit tests only
+        env:
+          SQLX_OFFLINE: true
         run: cargo test --lib --workspace --no-default-features
 
   coverage:
