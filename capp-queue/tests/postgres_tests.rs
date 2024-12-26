@@ -1,4 +1,4 @@
-#[cfg(test)]
+#[cfg(all(test, unix, feature = "postgres"))]
 mod tests {
     use capp_queue::{
         JsonSerializer, PostgresTaskQueue, Task, TaskQueue, TaskQueueError,
