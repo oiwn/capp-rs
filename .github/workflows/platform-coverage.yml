@@ -70,6 +70,11 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+    env:
+      REDIS_URI: redis://localhost:6379
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/testdb
+      MONGODB_URI: mongodb://localhost:27017/testdb
+      
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
