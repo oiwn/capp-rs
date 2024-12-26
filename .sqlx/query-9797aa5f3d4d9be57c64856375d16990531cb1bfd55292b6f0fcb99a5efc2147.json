@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    UPDATE tasks \n                    SET status = 'InProgress', started_at = $1\n                    WHERE id = $2\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9797aa5f3d4d9be57c64856375d16990531cb1bfd55292b6f0fcb99a5efc2147"
+}

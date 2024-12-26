@@ -44,7 +44,7 @@ where
     pub async fn new(connection_string: &str) -> Result<Self, TaskQueueError> {
         let pool = PgPool::connect(connection_string)
             .await
-            .map_err(|e| TaskQueueError::PostgresError(e))?;
+            .map_err(TaskQueueError::PostgresError)?;
 
         Ok(Self {
             pool,
@@ -236,8 +236,8 @@ where
         )
         .bind(payload)
         .bind(status) // Now we're binding a proper Postgres enum type
-        .bind(task.started_at.map(|t| DateTime::<Utc>::from(t)))
-        .bind(task.finished_at.map(|t| DateTime::<Utc>::from(t)))
+        .bind(task.started_at.map(DateTime::<Utc>::from))
+        .bind(task.finished_at.map(DateTime::<Utc>::from))
         .bind(task.retries as i32)
         .bind(&task.error_msg)
         .bind(task.task_id.get())
