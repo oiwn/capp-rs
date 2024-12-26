@@ -63,6 +63,12 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres
+        
+      - name: Run database migrations
+        run: cargo sqlx migrate run
           
       - name: Cargo check
         run: cargo check --all-features --workspace
