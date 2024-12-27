@@ -2,7 +2,7 @@ use super::WorkerId;
 use crate::manager::{
     worker_wrapper, Computation, WorkerCommand, WorkerOptions, WorkerOptionsBuilder,
 };
-use capp_config::config::Configurable;
+use capp_config::Configurable;
 use capp_queue::queue::{AbstractTaskQueue, TaskQueue};
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
