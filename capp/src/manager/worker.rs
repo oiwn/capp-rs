@@ -1,5 +1,5 @@
 use crate::manager::{Computation, WorkerStats};
-use capp_config::config::Configurable;
+use capp_config::Configurable;
 use capp_queue::{AbstractTaskQueue, TaskQueue, TaskQueueError};
 use derive_builder::Builder;
 use serde::{de::DeserializeOwned, Serialize};
