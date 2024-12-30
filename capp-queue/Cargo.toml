@@ -22,8 +22,28 @@ sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "json", "uui
 dotenvy = "0.15"
 tokio = { version = "1.42", features = ["full", "test-util"] }
 serial_test = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+fake = { version = "3.0.1", features = ["derive", "url"] }
+
 
 [features]
 redis = ["dep:rustis"]
 mongodb = ["dep:futures", "dep:futures-util", "dep:mongodb"]
 postgres = ["dep:sqlx"]
+
+
+[[bench]]
+name = "inmemory_bench"
+harness = false
+
+[[bench]]
+name = "redis_bench"
+harness = false
+
+[[bench]]
+name = "mongo_bench"
+harness = false
+
+[[bench]]
+name = "postgres_bench"
+harness = false
