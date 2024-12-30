@@ -299,7 +299,7 @@ pub async fn worker_wrapper_old<Data, Comp, Ctx>(
             run_result = worker.run(), if !should_stop => {
                 match commands.try_recv() {
                     Ok(WorkerCommand::Shutdown) => {
-                        tracing::error!("Shutdown received");
+                        tracing::warn!("Shutdown received");
                         should_stop = true;
                     }
                     Err(TryRecvError::Disconnected) => break 'worker,
