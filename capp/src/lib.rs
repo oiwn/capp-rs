@@ -44,6 +44,8 @@
 //! - `task`: Definitions and utilities for working with tasks.
 pub mod manager;
 pub mod prelude;
+#[cfg(feature = "http")]
+pub use config::http;
 
 // re-export
 pub use async_trait;
