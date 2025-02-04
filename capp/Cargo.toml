@@ -56,7 +56,7 @@ http-body-util = "0.1"
 bytes = "1.6"
 pin-project-lite = "0.2"
 dotenvy = "0.15"
-scraper = "0.21"
+scraper = "0.22"
 rand = "0.8"
 md5 = "0.7"
 url = "2.5"
@@ -70,3 +70,13 @@ healthcheck = ["dep:reqwest"]
 redis = ["capp-queue/redis", "dep:rustis"]
 mongodb = ["capp-queue/mongodb", "dep:mongodb"]
 postgres = ["capp-queue/postgres", "dep:sqlx"]
+
+[[example]]
+name = "basic"
+path = "../examples/basic.rs"
+
+# [[example]]
+# name = "hackernews"
+# path = "../examples/hackernews/main.rs"
+
+

@@ -1,13 +1,15 @@
 #+title: Notes
 
 * Major Tasks
+** Shared State (to run like a server with REST?)
+** tui interface
 ** consider to use https://crates.io/crates/config instead of current configuration?
 ** figure if it can get rid of returning yaml_value in favour of some generic configuration type
 ** DONE fix RoundRobin queue
 i think it's done
 ** Redis backend should return RedisError, now custom ones.
-** TODO mongodb queue
-** TODO postgres queue
+** DONE mongodb queue
+** DONE postgres queue
 ** TODO benchmarks criterion
 
 * Tasks
