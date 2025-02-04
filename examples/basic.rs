@@ -5,8 +5,9 @@ use capp::prelude::{
 use capp::{
     config::Configurable,
     manager::{WorkersManager, WorkersManagerOptionsBuilder},
-    queue::{AbstractTaskQueue, InMemoryTaskQueue, TaskQueue},
-    task::Task,
+    queue::{
+        AbstractTaskQueue, InMemoryTaskQueue, JsonSerializer, Task, TaskQueue,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::{path, sync::Arc};
@@ -76,7 +77,8 @@ impl Computation<TaskData, Context> for DivisionComputation {
 /// total tasks = 9
 /// number of failed tasks = 4
 async fn make_storage() -> impl TaskQueue<TaskData> + Send + Sync {
-    let storage = InMemoryTaskQueue::new();
+    let storage: InMemoryTaskQueue<TaskData, JsonSerializer> =
+        InMemoryTaskQueue::new();
 
     for i in 1..=5 {
         let task: Task<TaskData> = Task::new(TaskData {

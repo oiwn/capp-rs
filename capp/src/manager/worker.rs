@@ -8,6 +8,7 @@ use tokio::sync::{
     broadcast,
     mpsc::{self, error::TryRecvError},
 };
+use tracing::{debug, error, info, info_span, warn};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkerId(usize);
@@ -82,11 +83,7 @@ where
         // Implement limiting amount of tasks per worker
         if let Some(limit) = self.options.task_limit {
             if self.stats.tasks_processed >= limit {
-                tracing::info!(
-                    "[{}] task_limit reached: {}",
-                    self.worker_id,
-                    limit
-                );
+                warn!("[{}] task_limit reached: {}", self.worker_id, limit);
                 return Ok(false);
             }
         };
@@ -110,11 +107,9 @@ where
                         task.set_succeed();
                         self.queue.set(&task).await.unwrap();
                         self.queue.ack(&task.task_id).await.unwrap();
-                        tracing::info!(
+                        info!(
                             "[{}] Task {} succeed: {:?}",
-                            self.worker_id,
-                            &task.task_id,
-                            &task.payload
+                            self.worker_id, &task.task_id, &task.payload
                         );
 
                         // record stats on success
@@ -125,22 +120,16 @@ where
                         task.set_retry(&err.to_string());
                         if task.retries < self.options.max_retries {
                             self.queue.push(&task).await.unwrap();
-                            tracing::error!(
+                            error!(
                                 "[{}] Task {} failed, retrying ({}): {:?}",
-                                self.worker_id,
-                                &task.task_id,
-                                &task.retries,
-                                &err
+                                self.worker_id, &task.task_id, &task.retries, &err
                             );
                         } else {
                             task.set_dlq("Max retries");
                             self.queue.nack(&task).await.unwrap();
-                            tracing::error!(
+                            error!(
                                 "[{}] Task {} failed, max reties ({}): {:?}",
-                                self.worker_id,
-                                &task.task_id,
-                                &task.retries,
-                                &err
+                                self.worker_id, &task.task_id, &task.retries, &err
                             );
                         }
 
@@ -150,7 +139,7 @@ where
                 }
             }
             Err(TaskQueueError::QueueEmpty) => {
-                tracing::warn!("[{}] No tasks found, waiting...", self.worker_id);
+                warn!("[{}] No tasks found, waiting...", self.worker_id);
                 // wait for a while till try to fetch task
                 tokio::time::sleep(self.options.no_task_found_delay).await;
             }
@@ -220,13 +209,13 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
     'worker: loop {
         tokio::select! {
             _ = terminate.recv() => {
-                tracing::info!("Terminating immediately");
+                info!("Terminating immediately");
                 return;
             },
             run_result = worker.run(), if !should_stop => {
                 match commands.try_recv() {
                     Ok(WorkerCommand::Shutdown) => {
-                        tracing::error!("[{}] Shutdown received", worker_id);
+                        error!("[{}] Shutdown received", worker_id);
                         should_stop = true;
                     }
                     Err(TryRecvError::Disconnected) => break 'worker,
@@ -245,15 +234,12 @@ pub async fn worker_wrapper<Data, Comp, Ctx>(
 
         // If a stop command was received, finish any ongoing work and then exit.
         if should_stop {
-            tracing::info!(
-                "[{}] Completing current task before stopping.",
-                worker_id
-            );
+            info!("[{}] Completing current task before stopping.", worker_id);
             break;
         }
     }
 
-    tracing::info!("completed");
+    info!("completed");
 }
 
 /// This wrapper used to create new Worker setup internal logging
@@ -287,7 +273,7 @@ pub async fn worker_wrapper_old<Data, Comp, Ctx>(
     let mut should_stop = false;
 
     // setup spans
-    let span = tracing::info_span!("worker", _id = %worker_id);
+    let span = info_span!("worker", _id = %worker_id);
     let _enter = span.enter();
 
     'worker: loop {
