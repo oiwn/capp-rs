@@ -1,6 +1,7 @@
 #+title: Notes
 
 * Major Tasks
+** consider to use https://crates.io/crates/config instead of current configuration?
 ** figure if it can get rid of returning yaml_value in favour of some generic configuration type
 ** DONE fix RoundRobin queue
 i think it's done
