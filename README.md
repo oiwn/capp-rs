@@ -1,4 +1,4 @@
-![Crates.io Downloads (recent)](https://img.shields.io/crates/dr/capp-rs)
+![Crates.io Downloads (recent)](https://img.shields.io/crates/dr/capp)
 ![GitHub License](https://img.shields.io/github/license/oiwn/capp-rs)
 [![codecov](https://codecov.io/gh/oiwn/capp-rs/graph/badge.svg?token=36RWDWOO0J)](https://codecov.io/gh/oiwn/capp-rs)
 [![dependency status](https://deps.rs/repo/github/oiwn/capp-rs/status.svg)](https://deps.rs/repo/github/oiwn/capp-rs)
@@ -115,4 +115,4 @@ MIT
 
 ## Contributing
 
-Contributions welcome! Please read our contributing guidelines and submit PRs.
+Contributions welcome! Please read non-existent guidelines and submit PRs.
