@@ -18,7 +18,6 @@ where
     async fn pop(&self) -> Result<Task<Data>, TaskQueueError>;
     async fn ack(&self, task_id: &TaskId) -> Result<(), TaskQueueError>;
     async fn nack(&self, task: &Task<Data>) -> Result<(), TaskQueueError>;
-    // NOTE: probably need to move into different trait
     async fn set(&self, task: &Task<Data>) -> Result<(), TaskQueueError>;
 }
 

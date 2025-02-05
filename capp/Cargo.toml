@@ -47,10 +47,9 @@ serde_yaml = "0.9"
 rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
 mongodb = { version = "3", optional = true }
 sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "json", "uuid", "chrono" ], optional = true }
-tracing-futures = "0.2"
 
 [dev-dependencies]
-capp = { path = ".", features = ["http", "router", "healthcheck", "mongodb", "redis", "postgres"] }
+capp = { path = ".", features = ["http", "router", "healthcheck", "mongodb", "redis"] }
 hyper = { version = "1.5", features = ["server", "http1"] }
 http-body-util = "0.1"
 bytes = "1.6"
