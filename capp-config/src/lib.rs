@@ -10,3 +10,5 @@ pub mod router;
 pub use backoff;
 
 pub use config::{ConfigError, Configurable};
+#[cfg(feature = "router")]
+pub use url;
