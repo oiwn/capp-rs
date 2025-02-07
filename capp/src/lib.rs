@@ -53,6 +53,8 @@ pub use capp_config as config;
 #[cfg(feature = "http")]
 pub use capp_config::backoff;
 pub use capp_queue as queue;
+#[cfg(feature = "router")]
+pub use config::url;
 #[cfg(feature = "mongodb")]
 pub use mongodb;
 #[cfg(feature = "http")]
@@ -65,6 +67,4 @@ pub use serde_yaml;
 pub use thiserror;
 pub use tracing;
 pub use tracing_subscriber;
-#[cfg(feature = "router")]
-pub use url;
 pub use uuid;
