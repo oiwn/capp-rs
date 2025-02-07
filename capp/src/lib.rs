@@ -65,4 +65,6 @@ pub use serde_yaml;
 pub use thiserror;
 pub use tracing;
 pub use tracing_subscriber;
+#[cfg(feature = "router")]
+pub use url;
 pub use uuid;
