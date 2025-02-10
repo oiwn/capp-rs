@@ -3,7 +3,7 @@ mod common;
 use capp_queue::{backend::mongodb::BsonSerializer, MongoTaskQueue, TaskQueue};
 use criterion::{criterion_group, criterion_main, Criterion};
 use dotenvy::dotenv;
-// use mongodb::{options::ClientOptions, Client};
+use mongodb::{options::ClientOptions, Client};
 use tokio::runtime::Runtime;
 
 use capp_queue::task::Task;
@@ -19,7 +19,17 @@ async fn get_mongo_connection() -> String {
 
 async fn setup_queue() -> MongoTaskQueue<BenchTaskData, BsonSerializer> {
     let uri = get_mongo_connection().await;
-    let queue = MongoTaskQueue::new(&uri, QUEUE_NAME)
+    let client_options = ClientOptions::parse(&uri)
+        .await
+        .expect("Failed to parse options");
+    let client = Client::with_options(client_options.clone())
+        .expect("Failed to create client");
+    let db_name = client_options
+        .default_database
+        .as_ref()
+        .expect("No database specified");
+    let database = client.database(db_name);
+    let queue = MongoTaskQueue::new(database, QUEUE_NAME)
         .await
         .expect("Failed to create MongoTaskQueue");
 

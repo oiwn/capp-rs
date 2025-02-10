@@ -2,8 +2,9 @@ use crate::{Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer};
 use async_trait::async_trait;
 use mongodb::{
     bson::{self, doc},
-    options::ClientOptions,
-    Client, Collection,
+    // options::ClientOptions,
+    Client,
+    Collection,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use std::marker::PhantomData;
@@ -23,7 +24,7 @@ where
     D: Send + Sync + 'static,
     S: TaskSerializer + Send + Sync,
 {
-    pub async fn new(
+    /* pub async fn new(
         connection_string: &str,
         queue_name: &str,
     ) -> Result<Self, TaskQueueError> {
@@ -45,6 +46,23 @@ where
 
         Ok(Self {
             client,
+            tasks_collection,
+            dlq_collection,
+            _marker: PhantomData,
+        })
+    } */
+
+    pub async fn new(
+        database: mongodb::Database,
+        queue_name: &str,
+    ) -> Result<Self, TaskQueueError> {
+        // Collections store raw BSON documents now
+        let tasks_collection =
+            database.collection(&format!("{}_tasks", queue_name));
+        let dlq_collection = database.collection(&format!("{}_dlq", queue_name));
+
+        Ok(Self {
+            client: database.client().clone(),
             tasks_collection,
             dlq_collection,
             _marker: PhantomData,

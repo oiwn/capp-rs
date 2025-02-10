@@ -24,6 +24,7 @@ tokio = { version = "1.42", features = ["full", "test-util"] }
 serial_test = "3"
 criterion = { version = "0.5", features = ["html_reports"] }
 fake = { version = "3.0.1", features = ["derive", "url"] }
+mongodb = { version = "3" }
 
 
 [features]
@@ -44,6 +45,6 @@ harness = false
 name = "mongo_bench"
 harness = false
 
-[[bench]]
-name = "postgres_bench"
-harness = false
+# [[bench]]
+# name = "postgres_bench"
+# harness = false
