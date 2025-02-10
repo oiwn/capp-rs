@@ -7,7 +7,7 @@ mod tests {
     };
     use dotenvy::dotenv;
     use mongodb::bson::{self, doc};
-    use mongodb::{options::ClientOptions, Client};
+    use mongodb::{options::ClientOptions, Client, Database};
     use serde::{Deserialize, Serialize};
     use std::time::Duration;
 
@@ -16,46 +16,45 @@ mod tests {
         value: u32,
     }
 
-    async fn get_mongo_connection() -> String {
+    async fn get_mongodb() -> Database {
         dotenv().ok();
-        std::env::var("MONGODB_URI").expect("Set MONGODB_URI env variable")
+        let uri =
+            std::env::var("MONGODB_URI").expect("Set MONGODB_URI env variable");
+        let client_options = ClientOptions::parse(&uri)
+            .await
+            .expect("Failed to parse options");
+        let client = Client::with_options(client_options.clone())
+            .expect("Failed to create client");
+        let db_name = client_options
+            .default_database
+            .as_ref()
+            .expect("No database specified");
+        let database = client.database(db_name);
+        database
     }
 
     async fn verify_collection_exists(
-        client: &Client,
-        db_name: &str,
+        db: &Database,
         collection_name: &str,
     ) -> bool {
-        let db = client.database(db_name);
         let collections = db.list_collection_names().await.unwrap();
         collections.contains(&collection_name.to_string())
     }
 
     async fn cleanup_collections(name: &str) -> Result<(), mongodb::error::Error> {
-        let uri = get_mongo_connection().await;
-        let client_options = ClientOptions::parse(&uri).await?;
-        let client = Client::with_options(client_options.clone())?;
-
-        let db_name = client_options
-            .default_database
-            .as_ref()
-            .expect("No database specified in MongoDB URI");
-
-        let db = client.database(db_name);
-
+        let db = get_mongodb().await;
         let tasks_collection_name = format!("{}_tasks", name);
         let dlq_collection_name = format!("{}_dlq", name);
 
         // Check if collections exist before dropping
-        if verify_collection_exists(&client, db_name, &tasks_collection_name).await
-        {
+        if verify_collection_exists(&db, &tasks_collection_name).await {
             tracing::info!("Dropping collection: {}", tasks_collection_name);
             db.collection::<Task<TestData>>(&tasks_collection_name)
                 .drop()
                 .await?;
         }
 
-        if verify_collection_exists(&client, db_name, &dlq_collection_name).await {
+        if verify_collection_exists(&db, &dlq_collection_name).await {
             tracing::info!("Dropping collection: {}", dlq_collection_name);
             db.collection::<Task<TestData>>(&dlq_collection_name)
                 .drop()
@@ -70,8 +69,10 @@ mod tests {
             tracing::error!("Cleanup failed: {:?}", e);
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
-        let uri = get_mongo_connection().await;
-        MongoTaskQueue::new(&uri, name)
+
+        let db = get_mongodb().await;
+
+        MongoTaskQueue::new(db, name)
             .await
             .expect("Failed to create MongoTaskQueue")
     }
@@ -81,11 +82,12 @@ mod tests {
         // Setup test queue
         let queue_name = "test_push";
         let task = Task::new(TestData { value: 1 });
-        let uri = get_mongo_connection().await;
-        let queue =
-            MongoTaskQueue::<TestData, BsonSerializer>::new(&uri, queue_name)
-                .await
-                .expect("Failed to create MongoTaskQueue");
+
+        // Get connection string and create database instance
+        let db = get_mongodb().await;
+        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(db, queue_name)
+            .await
+            .expect("Failed to create MongoTaskQueue");
 
         // Push task
         queue.push(&task).await.expect("Failed to push task");
@@ -109,11 +111,11 @@ mod tests {
     #[tokio::test]
     async fn test_push_and_pop() {
         let queue_name = "test_push_pop";
-        let uri = get_mongo_connection().await;
-        let queue =
-            MongoTaskQueue::<TestData, BsonSerializer>::new(&uri, queue_name)
-                .await
-                .expect("Failed to create MongoTaskQueue");
+        let db = get_mongodb().await;
+
+        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(db, queue_name)
+            .await
+            .expect("Failed to create MongoTaskQueue");
 
         let task = Task::new(TestData { value: 42 });
         let original_id = task.task_id;
@@ -136,12 +138,10 @@ mod tests {
     #[tokio::test]
     async fn test_pop_status_handling() {
         let queue_name = "test_pop_status";
-        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(
-            &get_mongo_connection().await,
-            queue_name,
-        )
-        .await
-        .expect("Failed to create MongoTaskQueue");
+        let db = get_mongodb().await;
+        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(db, queue_name)
+            .await
+            .expect("Failed to create MongoTaskQueue");
 
         // Push a task
         let task = Task::new(TestData { value: 42 });
@@ -177,12 +177,10 @@ mod tests {
     #[tokio::test]
     async fn test_push_pop_order() {
         let queue_name = "test_push_pop_order";
-        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(
-            &get_mongo_connection().await,
-            queue_name,
-        )
-        .await
-        .expect("Failed to create MongoTaskQueue");
+        let db = get_mongodb().await;
+        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(db, queue_name)
+            .await
+            .expect("Failed to create MongoTaskQueue");
 
         // Push multiple tasks in sequence
         let tasks = vec![
@@ -215,12 +213,10 @@ mod tests {
     #[tokio::test]
     async fn test_ack() {
         let queue_name = "test_ack";
-        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(
-            &get_mongo_connection().await,
-            queue_name,
-        )
-        .await
-        .expect("Failed to create MongoTaskQueue");
+        let db = get_mongodb().await;
+        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(db, queue_name)
+            .await
+            .expect("Failed to create MongoTaskQueue");
 
         // Push and pop a task
         let task = Task::new(TestData { value: 42 });
@@ -255,12 +251,10 @@ mod tests {
     #[tokio::test]
     async fn test_set() {
         let queue_name = "test_set";
-        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(
-            &get_mongo_connection().await,
-            queue_name,
-        )
-        .await
-        .expect("Failed to create MongoTaskQueue");
+        let db = get_mongodb().await;
+        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(db, queue_name)
+            .await
+            .expect("Failed to create MongoTaskQueue");
 
         // Create and push initial task
         let mut task = Task::new(TestData { value: 42 });
@@ -341,12 +335,10 @@ mod tests {
     #[tokio::test]
     async fn test_nack() {
         let queue_name = "test_nack";
-        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(
-            &get_mongo_connection().await,
-            queue_name,
-        )
-        .await
-        .expect("Failed to create MongoTaskQueue");
+        let db = get_mongodb().await;
+        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(db, queue_name)
+            .await
+            .expect("Failed to create MongoTaskQueue");
 
         // Push and pop a task
         let task = Task::new(TestData { value: 42 });
