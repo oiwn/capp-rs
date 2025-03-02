@@ -1,10 +1,10 @@
 mod common;
 
 use capp_queue::{InMemoryTaskQueue, JsonSerializer, Task, TaskQueue};
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use tokio::runtime::Runtime;
 
-use common::data::{generate_test_data, BenchTaskData};
+use common::data::{BenchTaskData, generate_test_data};
 
 const TASK_COUNT: usize = 1000;
 

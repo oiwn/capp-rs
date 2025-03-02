@@ -8,3 +8,7 @@ lines:
 
 connect-redis:
 	docker exec -it redis-stack redis-cli --askpass
+
+connect-mongodb:
+    docker exec -it mongodb mongosh
+

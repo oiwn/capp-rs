@@ -1,5 +1,5 @@
 use super::{Task, TaskQueueError};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 // Marker traits for backend compatibility
 pub trait InMemoryCompatible {}

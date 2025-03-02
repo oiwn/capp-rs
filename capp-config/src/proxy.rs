@@ -217,15 +217,21 @@ mod tests {
         let proxy_config = ProxyConfig::from_config(&config["proxy"]).unwrap();
 
         assert_eq!(proxy_config.uris.len(), 3);
-        assert!(proxy_config
-            .uris
-            .contains(&"http://proxy1.example.com:8080".to_string()));
-        assert!(proxy_config
-            .uris
-            .contains(&"http://proxy1.example.com:8081".to_string()));
-        assert!(proxy_config
-            .uris
-            .contains(&"http://proxy1.example.com:8082".to_string()));
+        assert!(
+            proxy_config
+                .uris
+                .contains(&"http://proxy1.example.com:8080".to_string())
+        );
+        assert!(
+            proxy_config
+                .uris
+                .contains(&"http://proxy1.example.com:8081".to_string())
+        );
+        assert!(
+            proxy_config
+                .uris
+                .contains(&"http://proxy1.example.com:8082".to_string())
+        );
     }
 
     #[test]
@@ -243,9 +249,11 @@ mod tests {
         let proxy_config = ProxyConfig::from_config(&config["proxy"]).unwrap();
 
         assert_eq!(proxy_config.uris.len(), 6); // 3 from first range + 1 single + 2 from last range
-        assert!(proxy_config
-            .uris
-            .contains(&"http://proxy2.example.com:8090".to_string()));
+        assert!(
+            proxy_config
+                .uris
+                .contains(&"http://proxy2.example.com:8090".to_string())
+        );
     }
 
     #[test]

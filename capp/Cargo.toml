@@ -1,7 +1,7 @@
 [package]
 name = "capp"
-version = "0.4.6"
-edition = "2021"
+version = "0.4.7"
+edition = "2024"
 license = "MIT"
 authors = ["oiwn"]
 description = "Common things i use to build Rust CLI tools for web crawlers."
@@ -41,6 +41,7 @@ uuid.workspace = true
 capp-config = { path = "../capp-config" }
 capp-queue = { path = "../capp-queue" }
 capp-router = { path = "../capp-router", optional = true }
+capp-cache = { path = "../capp-cache", optional = true }
 
 derive_builder = { version = "0.20" }
 reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"], optional = true }
@@ -52,14 +53,14 @@ mongodb = { version = "3", optional = true }
 sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "json", "uuid", "chrono" ], optional = true }
 
 [dev-dependencies]
-capp = { path = ".", features = ["http", "router", "healthcheck", "mongodb", "redis"] }
+capp = { path = ".", features = ["http", "router", "healthcheck", "mongodb", "redis", "cache"] }
 hyper = { version = "1.5", features = ["server", "http1"] }
 http-body-util = "0.1"
 bytes = "1.6"
 pin-project-lite = "0.2"
 dotenvy = "0.15"
-scraper = "0.22"
-rand = "0.8"
+scraper = "0.23"
+rand = "0.9"
 md5 = "0.7"
 url = "2.5"
 base64 = "0.22"
@@ -68,6 +69,7 @@ base64 = "0.22"
 http = ["dep:reqwest", "capp-config/http"]
 router = ["capp-router"]
 healthcheck = ["dep:reqwest"]
+cache = ["capp-cache"]
 redis = ["capp-queue/redis", "dep:rustis"]
 mongodb = ["capp-queue/mongodb", "dep:mongodb"]
 postgres = ["capp-queue/postgres", "dep:sqlx"]

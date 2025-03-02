@@ -1,6 +1,6 @@
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 // const GOOGLE: &str = "http://www.google.com";
 

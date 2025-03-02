@@ -4,8 +4,8 @@
 use crate::task::{Task, TaskId};
 use crate::{TaskQueue, TaskQueueError, TaskSerializer};
 use async_trait::async_trait;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 use std::sync::Mutex;

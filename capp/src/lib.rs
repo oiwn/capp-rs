@@ -44,21 +44,22 @@
 //! - `task`: Definitions and utilities for working with tasks.
 pub mod manager;
 pub mod prelude;
-#[cfg(feature = "http")]
-pub use config::http;
-
-// re-export
-pub use async_trait;
+#[cfg(feature = "cache")]
+pub use capp_cache as cache;
 pub use capp_config as config;
 #[cfg(feature = "http")]
 pub use capp_config::backoff;
 pub use capp_queue as queue;
+#[cfg(feature = "http")]
+pub use config::http;
 #[cfg(feature = "mongodb")]
 pub use mongodb;
 #[cfg(feature = "http")]
 pub use reqwest;
 #[cfg(feature = "redis")]
 pub use rustis;
+// re-export
+pub use async_trait;
 pub use serde;
 pub use serde_json;
 pub use serde_yaml;

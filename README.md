@@ -23,10 +23,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-capp = "0.4.5"
+capp = "0.4"
 
 # Optional features
-capp = { version = "0.4.5", features = ["redis", "mongodb", "postgres"] }
+capp = { version = "0.4", features = ["redis", "mongodb", "postgres"] }
 ```
 
 ## Usage

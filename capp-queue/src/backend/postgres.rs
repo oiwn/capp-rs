@@ -1,8 +1,8 @@
 use crate::{Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer, TaskStatus};
 use async_trait::async_trait;
-use serde::{de::DeserializeOwned, Serialize};
-use sqlx::types::chrono::{DateTime, Utc};
+use serde::{Serialize, de::DeserializeOwned};
 use sqlx::PgPool;
+use sqlx::types::chrono::{DateTime, Utc};
 use std::marker::PhantomData;
 
 #[derive(sqlx::Type)]
