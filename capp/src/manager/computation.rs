@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use capp_queue::queue::AbstractTaskQueue;
 use capp_queue::task::Task;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::sync::Arc;
 use thiserror::Error;
 

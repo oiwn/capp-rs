@@ -3,7 +3,7 @@
 //! and also allows tasks to be set and retrieved by their UUID.
 
 use async_trait::async_trait;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::{fmt::Debug, sync::Arc};
 
 use super::TaskQueueError;

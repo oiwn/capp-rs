@@ -3,7 +3,7 @@ use crate::manager::{Computation, WorkerStats};
 use capp_config::Configurable;
 use capp_queue::{AbstractTaskQueue, Task, TaskQueue, TaskQueueError};
 use derive_builder::Builder;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::{
     broadcast,

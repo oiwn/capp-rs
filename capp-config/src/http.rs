@@ -329,24 +329,36 @@ mod tests {
         assert_eq!(seen_proxies.len(), 6);
 
         // Verify specific proxy patterns
-        assert!(seen_proxies
-            .iter()
-            .any(|p| p == "http://proxy1.example.com:8080"));
-        assert!(seen_proxies
-            .iter()
-            .any(|p| p == "http://proxy1.example.com:8081"));
-        assert!(seen_proxies
-            .iter()
-            .any(|p| p == "http://proxy1.example.com:8082"));
-        assert!(seen_proxies
-            .iter()
-            .any(|p| p == "http://proxy2.example.com:9090"));
-        assert!(seen_proxies
-            .iter()
-            .any(|p| p == "http://proxy3.example.com:9000"));
-        assert!(seen_proxies
-            .iter()
-            .any(|p| p == "http://proxy3.example.com:9001"));
+        assert!(
+            seen_proxies
+                .iter()
+                .any(|p| p == "http://proxy1.example.com:8080")
+        );
+        assert!(
+            seen_proxies
+                .iter()
+                .any(|p| p == "http://proxy1.example.com:8081")
+        );
+        assert!(
+            seen_proxies
+                .iter()
+                .any(|p| p == "http://proxy1.example.com:8082")
+        );
+        assert!(
+            seen_proxies
+                .iter()
+                .any(|p| p == "http://proxy2.example.com:9090")
+        );
+        assert!(
+            seen_proxies
+                .iter()
+                .any(|p| p == "http://proxy3.example.com:9000")
+        );
+        assert!(
+            seen_proxies
+                .iter()
+                .any(|p| p == "http://proxy3.example.com:9001")
+        );
     }
 
     #[test]

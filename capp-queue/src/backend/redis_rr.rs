@@ -5,7 +5,7 @@ use rustis::commands::{
     GenericCommands, HashCommands, ListCommands, SortedSetCommands, ZAddOptions,
     ZRangeOptions,
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::sync::Arc;

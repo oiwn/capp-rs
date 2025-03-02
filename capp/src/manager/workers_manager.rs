@@ -1,16 +1,16 @@
 use super::WorkerId;
 use crate::manager::{
-    worker_wrapper, Computation, WorkerCommand, WorkerOptions, WorkerOptionsBuilder,
+    Computation, WorkerCommand, WorkerOptions, WorkerOptionsBuilder, worker_wrapper,
 };
 use capp_config::Configurable;
 use capp_queue::queue::{AbstractTaskQueue, TaskQueue};
 use derive_builder::Builder;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
     },
 };
 use tokio::{
@@ -163,8 +163,8 @@ where
                     0 => {
                         // First Ctrl+C: Attempt to gracefully stop all workers.
                         tracing::warn!(
-                        "Ctrl+C received, sending stop command to all workers..."
-                    );
+                            "Ctrl+C received, sending stop command to all workers..."
+                        );
                         let senders: Vec<_> = {
                             let lock = command_senders.lock().unwrap();
                             lock.values().cloned().collect()

@@ -1,14 +1,14 @@
 mod common;
 
 use capp_queue::{JsonSerializer, RedisTaskQueue, TaskQueue};
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use dotenvy::dotenv;
 use rustis::client::Client;
 use rustis::commands::GenericCommands;
 use tokio::runtime::Runtime;
 
 use capp_queue::task::Task;
-use common::data::{generate_test_data, BenchTaskData};
+use common::data::{BenchTaskData, generate_test_data};
 
 const TASK_COUNT: usize = 1000;
 

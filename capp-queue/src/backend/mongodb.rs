@@ -2,10 +2,10 @@ use crate::serializers::MongoCompatible;
 use crate::{Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer};
 use async_trait::async_trait;
 use mongodb::{
-    bson::{self, doc},
     Client, Collection,
+    bson::{self, doc},
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::marker::PhantomData;
 
 pub struct MongoTaskQueue<D, S>
@@ -145,8 +145,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::task::Task;
     use crate::BsonSerializer;
+    use crate::task::Task;
     use mongodb::bson;
     use serde::{Deserialize, Serialize};
 
