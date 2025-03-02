@@ -1,3 +1,4 @@
+use crate::serializers::MongoCompatible;
 use crate::{Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer};
 use async_trait::async_trait;
 use mongodb::{
@@ -9,7 +10,7 @@ use std::marker::PhantomData;
 
 pub struct MongoTaskQueue<D, S>
 where
-    S: TaskSerializer,
+    S: TaskSerializer + MongoCompatible,
 {
     pub client: Client,
     pub tasks_collection: Collection<bson::Document>,
@@ -20,7 +21,7 @@ where
 impl<D, S> MongoTaskQueue<D, S>
 where
     D: Send + Sync + 'static,
-    S: TaskSerializer + Send + Sync,
+    S: TaskSerializer + MongoCompatible + Send + Sync,
 {
     pub async fn new(
         database: mongodb::Database,
@@ -50,7 +51,7 @@ where
         + Send
         + Sync
         + 'static,
-    S: TaskSerializer + Send + Sync,
+    S: TaskSerializer + MongoCompatible + Send + Sync,
 {
     async fn push(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
         // Serialize task to BSON bytes

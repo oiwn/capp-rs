@@ -1,9 +1,10 @@
-use rand::rng;
-use rand::seq::IndexedRandom;
+use rand::{rng, seq::IndexedRandom};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::sync::{LazyLock, Mutex};
+use std::{
+    fmt,
+    sync::{LazyLock, Mutex},
+};
 
 // Add Debug to the trait bounds
 pub trait ProxyProvider: Send + Sync + fmt::Debug {
