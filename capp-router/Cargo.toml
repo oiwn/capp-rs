@@ -8,6 +8,6 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+regex = { workspace = true }
 url = { version = "2.5" }
 indexmap = { version = "2.6" }
-regex = { version = "1.11" }
