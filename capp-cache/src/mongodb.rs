@@ -2,9 +2,9 @@ use crate::{CacheEntry, CacheEntryState, CacheError, HttpCache};
 use async_trait::async_trait;
 use chrono::Utc;
 use mongodb::{
-    bson::{self, doc, Bson},
-    options::IndexOptions,
     Collection, Database, IndexModel,
+    bson::{self, Bson, doc},
+    options::IndexOptions,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
@@ -27,7 +27,7 @@ pub struct MongoHttpCache<T>
 where
     T: Send + Sync + Serialize + for<'de> Deserialize<'de>,
 {
-    collection: Collection<CacheEntry<T>>,
+    pub collection: Collection<CacheEntry<T>>,
 }
 
 impl<T> MongoHttpCache<T>
@@ -101,7 +101,6 @@ where
         value: T,
         status_code: u16,
         state: CacheEntryState,
-        ttl: Option<u64>,
     ) -> Result<(), CacheError> {
         let entry = CacheEntry {
             key: key.to_string(),
@@ -112,7 +111,6 @@ where
             last_accessed: Utc::now(),
             error_count: 0,
             last_error: None,
-            ttl,
         };
 
         // Convert to document for update
@@ -128,6 +126,37 @@ where
     }
 
     async fn update_state(
+        &self,
+        key: &str,
+        state: CacheEntryState,
+    ) -> Result<(), CacheError> {
+        // Explicitly convert state to BSON
+        let state_bson = Bson::from(state);
+
+        // Create a current timestamp that will be properly serialized
+        let current_time = Utc::now();
+
+        let result = self
+            .collection
+            .update_one(
+                doc! { "key": key },
+                doc! {
+                    "$set": {
+                        "state": state_bson,
+                        "last_accessed": current_time
+                    }
+                },
+            )
+            .await?;
+
+        if result.matched_count == 0 {
+            return Err(CacheError::NotFound(key.to_string()));
+        }
+
+        Ok(())
+    }
+
+    /* async fn update_state(
         &self,
         key: &str,
         state: CacheEntryState,
@@ -150,7 +179,7 @@ where
         }
 
         Ok(())
-    }
+    } */
 
     async fn remove(&self, key: &str) -> Result<(), CacheError> {
         let result = self.collection.delete_one(doc! { "key": key }).await?;

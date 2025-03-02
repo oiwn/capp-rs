@@ -18,7 +18,6 @@ where
         value: T,
         status_code: u16,
         state: CacheEntryState,
-        ttl: Option<u64>,
     ) -> Result<(), CacheError>;
 
     /// Update entry state

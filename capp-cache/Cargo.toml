@@ -16,3 +16,6 @@ serde = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
 bson = { version = "2.13", features = ["chrono-0_4"] }
 mongodb = { version = "3" }
+
+[dev-dependencies]
+dotenvy = "0.15"

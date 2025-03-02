@@ -7,7 +7,7 @@ mod tests {
     };
     use dotenvy::dotenv;
     use mongodb::bson::{self, doc};
-    use mongodb::{options::ClientOptions, Client, Database};
+    use mongodb::{Client, Database, options::ClientOptions};
     use serde::{Deserialize, Serialize};
     use std::time::Duration;
 
