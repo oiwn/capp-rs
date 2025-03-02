@@ -2,8 +2,8 @@
 #[cfg(test)]
 mod tests {
     use capp_queue::{
-        backend::mongodb::BsonSerializer, MongoTaskQueue, Task, TaskId, TaskQueue,
-        TaskQueueError, TaskSerializer, TaskStatus,
+        BsonSerializer, MongoTaskQueue, Task, TaskId, TaskQueue, TaskQueueError,
+        TaskSerializer, TaskStatus,
     };
     use dotenvy::dotenv;
     use mongodb::bson::{self, doc};
@@ -29,8 +29,7 @@ mod tests {
             .default_database
             .as_ref()
             .expect("No database specified");
-        let database = client.database(db_name);
-        database
+        client.database(db_name)
     }
 
     async fn verify_collection_exists(

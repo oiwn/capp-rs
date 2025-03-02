@@ -1,0 +1,13 @@
+[package]
+name = "capp-router"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+regex = { workspace = true }
+url = { version = "2.5" }
+indexmap = { version = "2.6" }

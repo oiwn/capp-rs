@@ -1,5 +1,5 @@
-use rand::seq::SliceRandom;
-use rand::thread_rng;
+use rand::rng;
+use rand::seq::IndexedRandom;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -85,7 +85,7 @@ impl ProxyProvider for RandomProxyProvider {
         }
 
         // Create a new thread_rng for each call
-        let mut rng = thread_rng();
+        let mut rng = rng();
         self.config.uris.choose(&mut rng).cloned()
     }
 }
