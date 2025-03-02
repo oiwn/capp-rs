@@ -1,6 +1,22 @@
 use super::{Task, TaskQueueError};
 use serde::{de::DeserializeOwned, Serialize};
 
+// Marker traits for backend compatibility
+pub trait InMemoryCompatible {}
+pub trait RedisCompatible {}
+pub trait MongoCompatible {}
+pub trait PostgresCompatible {}
+
+// Mark which backends JsonSerializer is compatible with
+impl InMemoryCompatible for JsonSerializer {}
+impl RedisCompatible for JsonSerializer {}
+impl PostgresCompatible for JsonSerializer {}
+
+#[cfg(feature = "mongodb")]
+impl MongoCompatible for BsonSerializer {}
+#[cfg(feature = "mongodb")]
+impl InMemoryCompatible for BsonSerializer {}
+
 pub trait TaskSerializer: Send + Sync {
     fn serialize_task<T>(task: &Task<T>) -> Result<Vec<u8>, TaskQueueError>
     where
