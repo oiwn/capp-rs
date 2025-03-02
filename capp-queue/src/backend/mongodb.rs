@@ -1,6 +1,4 @@
-use crate::{
-    BsonSerializer, Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer,
-};
+use crate::{Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer};
 use async_trait::async_trait;
 use mongodb::{
     bson::{self, doc},
@@ -147,6 +145,7 @@ where
 mod tests {
     use super::*;
     use crate::task::Task;
+    use crate::BsonSerializer;
     use mongodb::bson;
     use serde::{Deserialize, Serialize};
 

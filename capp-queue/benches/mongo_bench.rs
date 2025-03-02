@@ -1,6 +1,6 @@
 mod common;
 
-use capp_queue::{backend::mongodb::BsonSerializer, MongoTaskQueue, TaskQueue};
+use capp_queue::{BsonSerializer, MongoTaskQueue, TaskQueue};
 use criterion::{criterion_group, criterion_main, Criterion};
 use dotenvy::dotenv;
 use mongodb::{options::ClientOptions, Client};
