@@ -8,3 +8,11 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+tokio = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
+bson = { version = "2.13", features = ["chrono-0_4"] }
+mongodb = { version = "3" }
