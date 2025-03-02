@@ -11,6 +11,8 @@ pub use crate::backend::PostgresTaskQueue;
 #[cfg(feature = "redis")]
 pub use crate::backend::{RedisRoundRobinTaskQueue, RedisTaskQueue};
 pub use crate::queue::{AbstractTaskQueue, HasTagKey, TaskQueue};
+#[cfg(feature = "mongodb")]
+pub use crate::serializers::BsonSerializer;
 pub use crate::serializers::{JsonSerializer, TaskSerializer};
 pub use crate::task::{Task, TaskId, TaskStatus};
 

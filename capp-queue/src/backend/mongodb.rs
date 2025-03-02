@@ -1,10 +1,10 @@
-use crate::{Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer};
+use crate::{
+    BsonSerializer, Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer,
+};
 use async_trait::async_trait;
 use mongodb::{
     bson::{self, doc},
-    // options::ClientOptions,
-    Client,
-    Collection,
+    Client, Collection,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use std::marker::PhantomData;
@@ -24,34 +24,6 @@ where
     D: Send + Sync + 'static,
     S: TaskSerializer + Send + Sync,
 {
-    /* pub async fn new(
-        connection_string: &str,
-        queue_name: &str,
-    ) -> Result<Self, TaskQueueError> {
-        let client_options = ClientOptions::parse(connection_string).await?;
-        let client = Client::with_options(client_options.clone())?;
-
-        let db_name = client_options
-            .default_database
-            .as_ref()
-            .expect("No database specified in MongoDB URI");
-
-        let db = client.database(db_name);
-
-        // Collections store raw BSON documents now
-        let tasks_collection = db.collection(&format!("{}_tasks", queue_name));
-        let dlq_collection = db.collection(&format!("{}_dlq", queue_name));
-
-        // No need for task_id index since we use MongoDB's _id
-
-        Ok(Self {
-            client,
-            tasks_collection,
-            dlq_collection,
-            _marker: PhantomData,
-        })
-    } */
-
     pub async fn new(
         database: mongodb::Database,
         queue_name: &str,
@@ -168,45 +140,6 @@ where
             return Err(TaskQueueError::TaskNotFound(task.task_id));
         }
         Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct BsonSerializer;
-
-impl TaskSerializer for BsonSerializer {
-    fn serialize_task<T>(task: &Task<T>) -> Result<Vec<u8>, TaskQueueError>
-    where
-        T: Serialize + DeserializeOwned + Clone,
-    {
-        // Convert to BSON document first
-        let mut doc = bson::to_document(task)
-            .map_err(|e| TaskQueueError::Serialization(e.to_string()))?;
-
-        // Move task_id to _id
-        if let Some(task_id) = doc.remove("task_id") {
-            doc.insert("_id", task_id);
-        }
-
-        // Serialize complete BSON document to bytes
-        bson::to_vec(&doc).map_err(|e| TaskQueueError::Serialization(e.to_string()))
-    }
-
-    fn deserialize_task<T>(data: &[u8]) -> Result<Task<T>, TaskQueueError>
-    where
-        T: Serialize + DeserializeOwned + Clone,
-    {
-        // First get BSON document from bytes
-        let mut doc: bson::Document = bson::from_slice(data)
-            .map_err(|e| TaskQueueError::Deserialization(e.to_string()))?;
-
-        if let Some(id) = doc.remove("_id") {
-            doc.insert("task_id", id);
-        }
-
-        // Convert complete document back to Task
-        bson::from_document(doc)
-            .map_err(|e| TaskQueueError::Deserialization(e.to_string()))
     }
 }
 

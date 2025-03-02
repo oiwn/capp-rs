@@ -40,6 +40,7 @@ uuid.workspace = true
 
 capp-config = { path = "../capp-config" }
 capp-queue = { path = "../capp-queue" }
+capp-router = { path = "../capp-router", optional = true }
 
 derive_builder = { version = "0.20" }
 reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"], optional = true }
@@ -63,7 +64,7 @@ base64 = "0.22"
 
 [features]
 http = ["dep:reqwest", "capp-config/http"]
-router = ["capp-config/router"]
+router = ["capp-router"]
 healthcheck = ["dep:reqwest"]
 redis = ["capp-queue/redis", "dep:rustis"]
 mongodb = ["capp-queue/mongodb", "dep:mongodb"]

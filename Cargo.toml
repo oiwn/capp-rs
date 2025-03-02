@@ -4,6 +4,8 @@ members = [
     "capp", 
     "capp-queue",
     "capp-config",
+    "capp-router",
+    "capp-cache",
 ]
 
 [workspace.package]
