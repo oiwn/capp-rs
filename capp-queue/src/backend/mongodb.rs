@@ -132,7 +132,7 @@ where
         // Update using _id
         let result = self
             .tasks_collection
-            .replace_one(doc! { "_id": task.task_id.get().to_string() }, doc)
+            .replace_one(doc! { "_id": task.task_id.as_string() }, doc)
             .await?;
 
         if result.matched_count == 0 {
