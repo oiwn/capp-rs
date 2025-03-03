@@ -1,26 +1,95 @@
 use crate::serializers::MongoCompatible;
-use crate::{Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer};
+use crate::{Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer, TaskStatus};
 use async_trait::async_trait;
+use bson::doc;
+use chrono::{DateTime, Utc};
 use mongodb::{
     Client, Collection,
-    bson::{self, doc},
+    options::{FindOneAndUpdateOptions, ReturnDocument},
 };
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::marker::PhantomData;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MongoTask<D: Clone> {
+    #[serde(rename = "_id")]
+    pub task_id: String,
+    pub payload: D,
+    pub status: TaskStatus,
+    #[serde(with = "bson::serde_helpers::chrono_datetime_as_bson_datetime")]
+    pub queued_at: DateTime<Utc>,
+    #[serde(
+        serialize_with = "mongo_datetime::serialize",
+        deserialize_with = "mongo_datetime::deserialize"
+    )]
+    pub started_at: Option<DateTime<Utc>>,
+    #[serde(
+        serialize_with = "mongo_datetime::serialize",
+        deserialize_with = "mongo_datetime::deserialize"
+    )]
+    pub finished_at: Option<DateTime<Utc>>,
+    pub retries: u32,
+    pub error_msg: Option<String>,
+}
+
+impl<D: Clone> From<Task<D>> for MongoTask<D> {
+    fn from(task: Task<D>) -> Self {
+        Self {
+            task_id: task.task_id.get().to_string(),
+            payload: task.payload,
+            status: task.status,
+            queued_at: task.queued_at.into(),
+            started_at: task.started_at.map(|t| t.into()),
+            finished_at: task.finished_at.map(|t| t.into()),
+            retries: task.retries,
+            error_msg: task.error_msg,
+        }
+    }
+}
+
+impl<D: Clone> From<MongoTask<D>> for Task<D> {
+    fn from(mongo_task: MongoTask<D>) -> Self {
+        Self {
+            task_id: TaskId::from_string(&mongo_task.task_id),
+            payload: mongo_task.payload,
+            status: mongo_task.status,
+            queued_at: mongo_task.queued_at.into(),
+            started_at: mongo_task.started_at.map(|t| t.into()),
+            finished_at: mongo_task.finished_at.map(|t| t.into()),
+            retries: mongo_task.retries,
+            error_msg: mongo_task.error_msg,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct MongoTaskQueue<D, S>
 where
+    D: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
     S: TaskSerializer + MongoCompatible,
 {
     pub client: Client,
-    pub tasks_collection: Collection<bson::Document>,
-    pub dlq_collection: Collection<bson::Document>,
+    pub tasks_collection: Collection<MongoTask<D>>,
+    pub dlq_collection: Collection<MongoTask<D>>,
     _marker: PhantomData<(D, S)>,
+}
+
+// In serializers.rs or mongodb.rs, add a conversion trait
+impl From<TaskStatus> for String {
+    fn from(status: TaskStatus) -> Self {
+        match status {
+            TaskStatus::Queued => "Queued".to_string(),
+            TaskStatus::InProgress => "InProgress".to_string(),
+            TaskStatus::Completed => "Completed".to_string(),
+            TaskStatus::Failed => "Failed".to_string(),
+            TaskStatus::DeadLetter => "DeadLetter".to_string(),
+        }
+    }
 }
 
 impl<D, S> MongoTaskQueue<D, S>
 where
-    D: Send + Sync + 'static,
+    D: Clone + Serialize + DeserializeOwned + Send + Sync + 'static,
     S: TaskSerializer + MongoCompatible + Send + Sync,
 {
     pub async fn new(
@@ -54,38 +123,40 @@ where
     S: TaskSerializer + MongoCompatible + Send + Sync,
 {
     async fn push(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
-        // Serialize task to BSON bytes
-        let bytes = S::serialize_task(task)?;
+        let mongo_task = MongoTask::from(task.clone());
 
-        // Convert bytes to BSON Document
-        let doc = bson::from_slice::<bson::Document>(&bytes)
-            .map_err(|e| TaskQueueError::Serialization(e.to_string()))?;
+        self.tasks_collection
+            .insert_one(mongo_task)
+            .await
+            .map_err(TaskQueueError::from)?;
 
-        // Insert document into collection
-        self.tasks_collection.insert_one(doc).await?;
         Ok(())
     }
 
     async fn pop(&self) -> Result<Task<D>, TaskQueueError> {
-        // Find task with Queued status
-        match self
+        let filter = doc! { "status": String::from(TaskStatus::Queued) };
+        let update = doc! {
+            "$set": {
+                "status": String::from(TaskStatus::InProgress),
+                "started_at": bson::DateTime::now(),
+            }
+        };
+
+        let options = FindOneAndUpdateOptions::builder()
+            .return_document(Some(ReturnDocument::After))
+            .build();
+
+        // Use find_one_and_update to atomically find and update a task
+        let result = self
             .tasks_collection
-            .find_one(doc! { "status": "Queued" })
-            .await?
-        {
+            .find_one_and_update(filter, update)
+            .with_options(options)
+            .sort(doc! { "queued_at": 1 }) // Ensure FIFO
+            .await?;
+
+        match result {
             Some(doc) => {
-                // Convert to Task
-                let bytes = bson::to_vec(&doc)
-                    .map_err(|e| TaskQueueError::Serialization(e.to_string()))?;
-
-                let mut task: Task<D> = S::deserialize_task(&bytes)?;
-
-                // Update status
-                task.set_in_progress();
-
-                // Save updated task
-                self.set(&task).await?;
-
+                let task: Task<D> = doc.into();
                 Ok(task)
             }
             None => Err(TaskQueueError::QueueEmpty),
@@ -95,7 +166,7 @@ where
     async fn ack(&self, task_id: &TaskId) -> Result<(), TaskQueueError> {
         let result = self
             .tasks_collection
-            .delete_one(doc! { "_id": task_id.as_string() })
+            .delete_one(doc! { "_id": task_id.get().to_string() })
             .await?;
 
         if result.deleted_count == 0 {
@@ -108,37 +179,72 @@ where
         let mut task_clone = task.clone();
         task_clone.set_dlq("Task moved to DLQ");
 
-        // First insert to DLQ
-        let bytes = S::serialize_task(&task_clone)?;
-        let doc = bson::from_slice::<bson::Document>(&bytes)
-            .map_err(|e| TaskQueueError::Serialization(e.to_string()))?;
+        // Convert to MongoTask explicitly
+        let mongo_task = MongoTask::from(task_clone);
 
-        self.dlq_collection.insert_one(doc).await?;
+        // Insert into DLQ
+        self.dlq_collection
+            .insert_one(mongo_task)
+            .await
+            .map_err(TaskQueueError::from)?;
 
         // Then remove from main queue
         self.tasks_collection
-            .delete_one(doc! { "_id": task.task_id.as_string() })
+            .delete_one(doc! { "_id": task.task_id.get().to_string() })
             .await?;
 
         Ok(())
     }
 
     async fn set(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
-        // Serialize task to BSON document
-        let bytes = S::serialize_task(task)?;
-        let doc = bson::from_slice::<bson::Document>(&bytes)
-            .map_err(|e| TaskQueueError::Serialization(e.to_string()))?;
+        let mongo_task = MongoTask::from(task.clone());
+        let task_id = mongo_task.task_id.to_string();
 
         // Update using _id
         let result = self
             .tasks_collection
-            .replace_one(doc! { "_id": task.task_id.as_string() }, doc)
+            .replace_one(doc! { "_id": task_id }, mongo_task)
             .await?;
 
         if result.matched_count == 0 {
             return Err(TaskQueueError::TaskNotFound(task.task_id));
         }
         Ok(())
+    }
+}
+
+mod mongo_datetime {
+    use bson;
+    use chrono::{DateTime, Utc};
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(
+        datetime: &Option<DateTime<Utc>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match datetime {
+            Some(dt) => {
+                bson::serde_helpers::chrono_datetime_as_bson_datetime::serialize(
+                    dt, serializer,
+                )
+            }
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<Option<DateTime<Utc>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Use the existing BSON datetime deserializer, but wrap in Option
+        Option::deserialize(deserializer).and_then(
+            |opt_dt: Option<bson::DateTime>| Ok(opt_dt.map(|dt| dt.to_chrono())),
+        )
     }
 }
 

@@ -18,6 +18,8 @@ serde_json = { workspace = true }
 async-trait = { workspace = true }
 uuid = { workspace = true }
 rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
+chrono = { version = "0.4", features = ["serde"], optional = true  }
+bson = { version = "2.13", features = ["chrono-0_4"], optional = true }
 mongodb = { version = "3", optional = true }
 futures = { version = "0.3", optional = true }
 futures-util = { version = "0.3", optional = true }
@@ -31,10 +33,9 @@ criterion = { version = "0.5", features = ["html_reports"] }
 fake = { version = "3.0.1", features = ["derive", "url"] }
 mongodb = { version = "3" }
 
-
 [features]
 redis = ["dep:rustis"]
-mongodb = ["dep:futures", "dep:futures-util", "dep:mongodb"]
+mongodb = ["dep:futures", "dep:futures-util", "dep:mongodb", "dep:chrono", "dep:bson"]
 postgres = ["dep:sqlx"]
 
 

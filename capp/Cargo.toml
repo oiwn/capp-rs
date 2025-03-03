@@ -38,17 +38,20 @@ uuid.workspace = true
 # TODO: figure out why can't have derive_builder as common dep.
 # derive_builder.workspace = true
 
+# Workspaces
 capp-config = { path = "../capp-config" }
 capp-queue = { path = "../capp-queue" }
 capp-router = { path = "../capp-router", optional = true }
 capp-cache = { path = "../capp-cache", optional = true }
 
+# Deps
 derive_builder = { version = "0.20" }
 reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"], optional = true }
 rand = { version = "0.9", optional = true }
 serde_yaml = "0.9"
-
 rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
+chrono = { version = "0.4", features = ["serde"], optional = true  }
+bson = { version = "2.13", features = ["chrono-0_4"], optional = true }
 mongodb = { version = "3", optional = true }
 sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "json", "uuid", "chrono" ], optional = true }
 
@@ -71,7 +74,7 @@ router = ["capp-router"]
 healthcheck = ["dep:reqwest"]
 cache = ["capp-cache"]
 redis = ["capp-queue/redis", "dep:rustis"]
-mongodb = ["capp-queue/mongodb", "dep:mongodb"]
+mongodb = ["capp-queue/mongodb", "dep:mongodb", "dep:chrono", "dep:bson"]
 postgres = ["capp-queue/postgres", "dep:sqlx"]
 
 [[example]]
