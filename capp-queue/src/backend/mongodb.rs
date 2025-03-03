@@ -95,7 +95,7 @@ where
     async fn ack(&self, task_id: &TaskId) -> Result<(), TaskQueueError> {
         let result = self
             .tasks_collection
-            .delete_one(doc! { "_id": task_id.get().to_string() })
+            .delete_one(doc! { "_id": task_id.as_string() })
             .await?;
 
         if result.deleted_count == 0 {
@@ -117,7 +117,7 @@ where
 
         // Then remove from main queue
         self.tasks_collection
-            .delete_one(doc! { "_id": task.task_id.get().to_string() })
+            .delete_one(doc! { "_id": task.task_id.as_string() })
             .await?;
 
         Ok(())
