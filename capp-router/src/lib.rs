@@ -29,7 +29,8 @@
 #![warn(clippy::unwrap_used)]
 use indexmap::IndexMap;
 pub use regex::Regex;
-pub use url::Url;
+pub use url;
+use url::Url;
 
 // ClassifiedURLs as a type alias using IndexMap
 pub type ClassifiedURLs = IndexMap<String, Vec<Url>>;
