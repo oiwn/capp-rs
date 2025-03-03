@@ -156,31 +156,6 @@ where
         Ok(())
     }
 
-    /* async fn update_state(
-        &self,
-        key: &str,
-        state: CacheEntryState,
-    ) -> Result<(), CacheError> {
-        let result = self
-            .collection
-            .update_one(
-                doc! { "key": key },
-                doc! {
-                    "$set": {
-                        "state": state,
-                        "last_accessed": Utc::now()
-                    }
-                },
-            )
-            .await?;
-
-        if result.matched_count == 0 {
-            return Err(CacheError::NotFound(key.to_string()));
-        }
-
-        Ok(())
-    } */
-
     async fn remove(&self, key: &str) -> Result<(), CacheError> {
         let result = self.collection.delete_one(doc! { "key": key }).await?;
 

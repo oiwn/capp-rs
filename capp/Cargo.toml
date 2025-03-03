@@ -1,12 +1,12 @@
 [package]
 name = "capp"
-version = "0.4.7"
-edition = "2024"
-license = "MIT"
-authors = ["oiwn"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
 description = "Common things i use to build Rust CLI tools for web crawlers."
-homepage = "https://github.com/oiwn/capp-rs"
-repository = "https://github.com/oiwn/capp-rs"
 readme = "README.md"
 keywords = ["web-crawler", "async", "executor"]
 categories = ["asynchronous", "web-programming", "concurrency"]

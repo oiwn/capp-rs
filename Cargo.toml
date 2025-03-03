@@ -15,6 +15,7 @@ license = "MIT"
 rust-version = "1.85"
 authors = ["oiwn"]
 repository = "https://github.com/oiwn/capp-rs"
+homepage = "https://github.com/oiwn/capp-rs"
 
 [workspace.dependencies]
 # Serialization
