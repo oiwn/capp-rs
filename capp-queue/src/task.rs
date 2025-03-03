@@ -85,6 +85,11 @@ impl TaskId {
     pub fn get(&self) -> Uuid {
         self.0
     }
+
+    // TODO: i don't think it's good idea, maybe better to implement into bson
+    pub fn as_string(&self) -> String {
+        self.0.to_string()
+    }
 }
 
 impl Default for TaskId {

@@ -373,4 +373,51 @@ mod tests {
         assert_eq!(dlq_task.status, TaskStatus::DeadLetter);
         assert!(dlq_task.error_msg.is_some());
     }
+
+    #[tokio::test]
+    async fn test_set_with_uuid_string() {
+        let queue_name = "test_set_uuid_string";
+        let db = get_mongodb().await;
+        let queue = MongoTaskQueue::<TestData, BsonSerializer>::new(db, queue_name)
+            .await
+            .expect("Failed to create MongoTaskQueue");
+
+        // Create and push initial task
+        let mut task = Task::new(TestData { value: 100 });
+        let task_id = task.task_id;
+        queue.push(&task).await.expect("Failed to push task");
+
+        // Verify task was stored with _id as string
+        let _doc = queue
+            .tasks_collection
+            .find_one(doc! { "_id": task.task_id.as_string() })
+            .await
+            .expect("Failed to query")
+            .expect("Document not found");
+
+        // Modify task state and value
+        task.payload.value = 200;
+        task.set_in_progress();
+
+        // Update task in database using set method
+        queue.set(&task).await.expect("Failed to set task");
+
+        // Verify changes were saved by querying directly with the task_id as string
+        let updated_doc = queue
+            .tasks_collection
+            .find_one(doc! { "_id": task_id.as_string() })
+            .await
+            .expect("Failed to query")
+            .expect("Document not found after update");
+
+        // Convert to Task object to check values
+        let bytes = bson::to_vec(&updated_doc).expect("Failed to serialize BSON");
+        let updated_task: Task<TestData> = BsonSerializer::deserialize_task(&bytes)
+            .expect("Failed to deserialize task");
+
+        // Verify updates were saved correctly
+        assert_eq!(updated_task.payload.value, 200);
+        assert_eq!(updated_task.status, TaskStatus::InProgress);
+        assert_eq!(updated_task.task_id, task_id);
+    }
 }
