@@ -1,6 +1,8 @@
 #+title: Notes
 
 * Major Tasks
+** add helpers - "http", "tls" (rquest, tls)
+** Need to get rid from trait f
 ** Shared State (to run like a server with REST?)
 ** tui interface
 ** consider to use https://crates.io/crates/config instead of current configuration?

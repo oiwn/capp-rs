@@ -50,6 +50,8 @@ pub use capp_config as config;
 #[cfg(feature = "http")]
 pub use capp_config::backoff;
 pub use capp_queue as queue;
+#[cfg(feature = "router")]
+pub use capp_router as router;
 #[cfg(feature = "http")]
 pub use config::http;
 #[cfg(feature = "mongodb")]
