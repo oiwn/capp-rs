@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use bson::doc;
 use chrono::{DateTime, Utc};
 use mongodb::{
-    Client, Collection,
-    options::{FindOneAndUpdateOptions, ReturnDocument},
+    Client, Collection, IndexModel,
+    options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument},
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::marker::PhantomData;
@@ -107,6 +107,38 @@ where
             dlq_collection,
             _marker: PhantomData,
         })
+    }
+
+    pub async fn setup_indexes(&self) -> Result<(), TaskQueueError> {
+        let mut indexes = vec![];
+
+        // 1. Primary key index on _id (already exists by default, but we'll ensure it's unique)
+        let id_index = IndexModel::builder()
+            .keys(doc! { "_id": 1 })
+            .options(IndexOptions::builder().unique(true).build())
+            .build();
+        indexes.push(id_index);
+
+        // 2. Compound index for pop operation (status + queued_at for FIFO ordering)
+        let status_queued_index = IndexModel::builder()
+            .keys(doc! { "status": 1, "queued_at": 1 })
+            .build();
+        indexes.push(status_queued_index);
+
+        // 3. Index for finding tasks by status only
+        let status_index = IndexModel::builder().keys(doc! { "status": 1 }).build();
+        indexes.push(status_index);
+
+        // Create indexes for tasks collection
+        self.tasks_collection
+            .create_indexes(indexes.clone())
+            .await?;
+
+        // Create same indexes for DLQ collection
+        self.dlq_collection.create_indexes(indexes).await?;
+
+        tracing::info!("MongoDB indexes created successfully for task queue");
+        Ok(())
     }
 }
 
