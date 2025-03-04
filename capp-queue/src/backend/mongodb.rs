@@ -124,9 +124,14 @@ where
 {
     async fn push(&self, task: &Task<D>) -> Result<(), TaskQueueError> {
         let mongo_task = MongoTask::from(task.clone());
+        let doc = bson::to_document(&mongo_task).unwrap();
 
         self.tasks_collection
-            .insert_one(mongo_task)
+            .update_one(
+                doc! { "_id": task.task_id.get().to_string() },
+                doc! { "$set": doc },
+            )
+            .upsert(true)
             .await
             .map_err(TaskQueueError::from)?;
 
