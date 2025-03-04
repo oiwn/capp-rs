@@ -5,11 +5,10 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+description.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
-description = "Common things i use to build Rust CLI tools for web crawlers."
-readme = "README.md"
-keywords = ["web-crawler", "async", "executor"]
-categories = ["asynchronous", "web-programming", "concurrency"]
 exclude = [
     "tmp/*",
     # "benches/*",
@@ -36,7 +35,7 @@ tokio.workspace = true
 async-trait.workspace = true
 uuid.workspace = true
 # TODO: figure out why can't have derive_builder as common dep.
-# derive_builder.workspace = true
+derive_builder.workspace = true
 
 # Workspaces
 capp-config = { path = "../capp-config" }
@@ -45,7 +44,7 @@ capp-router = { path = "../capp-router", optional = true }
 capp-cache = { path = "../capp-cache", optional = true }
 
 # Deps
-derive_builder = { version = "0.20" }
+# derive_builder = { version = "0.20" }
 reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"], optional = true }
 rand = { version = "0.9", optional = true }
 serde_yaml = "0.9"

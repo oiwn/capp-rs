@@ -9,11 +9,14 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.12"
+version = "0.5.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.85"
 authors = ["oiwn"]
+keywords = ["web-crawler", "async", "executor"]
+categories = ["asynchronous", "web-programming", "concurrency"]
+description = "Common things i use to build Rust CLI tools for web crawlers."
 repository = "https://github.com/oiwn/capp-rs"
 homepage = "https://github.com/oiwn/capp-rs"
 
@@ -36,6 +39,7 @@ tokio = { version = "1.43", features = ["full"] }
 
 # Utils
 async-trait = { version = "0.1" }
+derive_builder = { version = "0.20" }
 uuid = { version = "1.15", features = ["v4", "serde"] }
 rand = { version = "0.9" }
 regex = { version = "1.11" }
