@@ -29,7 +29,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! capp = "0.4"
+//! capp = "0.5"
 //! ```
 //!
 //! Check examples!

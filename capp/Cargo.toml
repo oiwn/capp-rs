@@ -42,11 +42,13 @@ capp-config = { path = "../capp-config" }
 capp-queue = { path = "../capp-queue" }
 capp-router = { path = "../capp-router", optional = true }
 capp-cache = { path = "../capp-cache", optional = true }
+capp-urls = { path = "../capp-urls", optional = true }
 
 # Deps
 # derive_builder = { version = "0.20" }
 reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"], optional = true }
-rand = { version = "0.9", optional = true }
+# rand = { version = "0.9", optional = true }
+rand = { workspace = true }
 serde_yaml = "0.9"
 rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
 chrono = { version = "0.4", features = ["serde"], optional = true  }
@@ -55,7 +57,7 @@ mongodb = { version = "3", optional = true }
 sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "json", "uuid", "chrono" ], optional = true }
 
 [dev-dependencies]
-capp = { path = ".", features = ["http", "router", "healthcheck", "mongodb", "redis", "cache"] }
+capp = { path = ".", features = ["http", "router", "healthcheck", "mongodb", "redis", "cache", "urls"] }
 hyper = { version = "1.5", features = ["server", "http1"] }
 http-body-util = "0.1"
 bytes = "1.6"
@@ -72,6 +74,7 @@ http = ["dep:reqwest", "capp-config/http"]
 router = ["capp-router"]
 healthcheck = ["dep:reqwest"]
 cache = ["capp-cache"]
+urls = ["capp-urls"]
 redis = ["capp-queue/redis", "dep:rustis"]
 mongodb = ["capp-queue/mongodb", "dep:mongodb", "dep:chrono", "dep:bson"]
 postgres = ["capp-queue/postgres", "dep:sqlx"]

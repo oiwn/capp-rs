@@ -6,6 +6,7 @@ members = [
     "capp-config",
     "capp-router",
     "capp-cache",
+    "capp-urls"
 ]
 
 [workspace.package]
@@ -43,3 +44,4 @@ derive_builder = { version = "0.20" }
 uuid = { version = "1.15", features = ["v4", "serde"] }
 rand = { version = "0.9" }
 regex = { version = "1.11" }
+url = { version = "2.5" }
