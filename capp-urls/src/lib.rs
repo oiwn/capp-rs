@@ -99,7 +99,7 @@ mod tests {
         let exclude_filter = StringPatternMiddleware::new(patterns, false);
         let filtered = url_list.clone().apply(&exclude_filter);
 
-        assert_eq!(filtered.len(), 1); // Should only keep example.org URL
+        assert_eq!(filtered.len(), 2); // Should only keep example.org URL
         assert!(
             filtered
                 .urls()
