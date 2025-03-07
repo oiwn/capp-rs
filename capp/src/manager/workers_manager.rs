@@ -19,6 +19,7 @@ use tokio::{
 };
 use tracing::Instrument;
 
+// Complex type to store channels/senders
 type WorkerCommandSenders =
     Arc<Mutex<HashMap<WorkerId, mpsc::Sender<WorkerCommand>>>>;
 

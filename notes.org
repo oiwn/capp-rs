@@ -2,14 +2,12 @@
 
 * Major Tasks
 ** add helpers - "http", "tls" (rquest, tls)
-** Need to get rid from trait f
+** Need to get rid from trait for function which should run inside the task
 ** Shared State (to run like a server with REST?)
 ** tui interface
 ** consider to use https://crates.io/crates/config instead of current configuration?
 ** figure if it can get rid of returning yaml_value in favour of some generic configuration type
-** DONE fix RoundRobin queue
-i think it's done
-** Redis backend should return RedisError, now custom ones.
+** DONE Redis backend should return RedisError, now custom ones.
 ** DONE mongodb queue
 ** DONE postgres queue
 ** TODO benchmarks criterion

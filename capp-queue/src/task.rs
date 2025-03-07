@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
+use std::{str::FromStr, time::SystemTime};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -86,9 +86,9 @@ impl TaskId {
         self.0
     }
 
-    // TODO: i don't think it's good idea, maybe better to implement into bson
-    pub fn as_string(&self) -> String {
-        self.0.to_string()
+    pub fn from_string(uuid_str: &str) -> Self {
+        let uuid = Uuid::from_str(uuid_str).unwrap();
+        Self(uuid)
     }
 }
 
@@ -137,6 +137,13 @@ mod tests {
     #[derive(Clone, Serialize, Deserialize, Default)]
     struct TaskData {
         value: u32,
+    }
+
+    #[test]
+    fn task_uuid_conversion() {
+        let task = Task::new(TaskData { value: 42 });
+        let uuid_string = task.task_id.get().to_string();
+        assert!(!uuid_string.contains("TaskId"));
     }
 
     #[test]

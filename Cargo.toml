@@ -6,14 +6,18 @@ members = [
     "capp-config",
     "capp-router",
     "capp-cache",
+    "capp-urls"
 ]
 
 [workspace.package]
-version = "0.4.9"
+version = "0.5.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.85"
 authors = ["oiwn"]
+keywords = ["web-crawler", "async", "executor"]
+categories = ["asynchronous", "web-programming", "concurrency"]
+description = "Common things i use to build Rust CLI tools for web crawlers."
 repository = "https://github.com/oiwn/capp-rs"
 homepage = "https://github.com/oiwn/capp-rs"
 
@@ -23,7 +27,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # Error handling
-thiserror = "1"
+thiserror = "2"
 anyhow = "1"
 
 # Logging
@@ -36,6 +40,8 @@ tokio = { version = "1.43", features = ["full"] }
 
 # Utils
 async-trait = { version = "0.1" }
+derive_builder = { version = "0.20" }
 uuid = { version = "1.15", features = ["v4", "serde"] }
 rand = { version = "0.9" }
 regex = { version = "1.11" }
+url = { version = "2.5" }

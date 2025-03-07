@@ -1,13 +1,16 @@
 [package]
-name = "capp-router"
+name = "capp-urls"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description.workspace = true
 repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
-regex = { workspace = true }
 url = { workspace = true }
-indexmap = { version = "2.6" }
+regex = { workspace = true }
