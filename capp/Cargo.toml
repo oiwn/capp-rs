@@ -34,7 +34,6 @@ tracing-subscriber.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
 uuid.workspace = true
-# TODO: figure out why can't have derive_builder as common dep.
 derive_builder.workspace = true
 
 # Workspaces
@@ -45,9 +44,7 @@ capp-cache = { path = "../capp-cache", optional = true }
 capp-urls = { path = "../capp-urls", optional = true }
 
 # Deps
-# derive_builder = { version = "0.20" }
 reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"], optional = true }
-# rand = { version = "0.9", optional = true }
 rand = { workspace = true }
 serde_yaml = "0.9"
 rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
