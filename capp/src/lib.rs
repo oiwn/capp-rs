@@ -29,7 +29,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! capp = "0.4"
+//! capp = "0.5"
 //! ```
 //!
 //! Check examples!
@@ -62,6 +62,7 @@ pub use reqwest;
 pub use rustis;
 // re-export
 pub use async_trait;
+pub use rand;
 pub use serde;
 pub use serde_json;
 pub use serde_yaml;

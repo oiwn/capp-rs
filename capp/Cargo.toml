@@ -5,11 +5,10 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+description.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
-description = "Common things i use to build Rust CLI tools for web crawlers."
-readme = "README.md"
-keywords = ["web-crawler", "async", "executor"]
-categories = ["asynchronous", "web-programming", "concurrency"]
 exclude = [
     "tmp/*",
     # "benches/*",
@@ -35,25 +34,27 @@ tracing-subscriber.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
 uuid.workspace = true
-# TODO: figure out why can't have derive_builder as common dep.
-# derive_builder.workspace = true
+derive_builder.workspace = true
 
+# Workspaces
 capp-config = { path = "../capp-config" }
 capp-queue = { path = "../capp-queue" }
 capp-router = { path = "../capp-router", optional = true }
 capp-cache = { path = "../capp-cache", optional = true }
+capp-urls = { path = "../capp-urls", optional = true }
 
-derive_builder = { version = "0.20" }
+# Deps
 reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"], optional = true }
-rand = { version = "0.9", optional = true }
+rand = { workspace = true }
 serde_yaml = "0.9"
-
 rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
+chrono = { version = "0.4", features = ["serde"], optional = true  }
+bson = { version = "2.13", features = ["chrono-0_4"], optional = true }
 mongodb = { version = "3", optional = true }
 sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "json", "uuid", "chrono" ], optional = true }
 
 [dev-dependencies]
-capp = { path = ".", features = ["http", "router", "healthcheck", "mongodb", "redis", "cache"] }
+capp = { path = ".", features = ["http", "router", "healthcheck", "mongodb", "redis", "cache", "urls"] }
 hyper = { version = "1.5", features = ["server", "http1"] }
 http-body-util = "0.1"
 bytes = "1.6"
@@ -70,8 +71,9 @@ http = ["dep:reqwest", "capp-config/http"]
 router = ["capp-router"]
 healthcheck = ["dep:reqwest"]
 cache = ["capp-cache"]
+urls = ["capp-urls"]
 redis = ["capp-queue/redis", "dep:rustis"]
-mongodb = ["capp-queue/mongodb", "dep:mongodb"]
+mongodb = ["capp-queue/mongodb", "dep:mongodb", "dep:chrono", "dep:bson"]
 postgres = ["capp-queue/postgres", "dep:sqlx"]
 
 [[example]]
