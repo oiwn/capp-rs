@@ -5,7 +5,7 @@ use bson::doc;
 use chrono::{DateTime, Utc};
 use mongodb::{
     Client, Collection, IndexModel,
-    options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument},
+    options::{FindOneAndUpdateOptions, ReturnDocument},
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::marker::PhantomData;
@@ -112,12 +112,18 @@ where
     pub async fn setup_indexes(&self) -> Result<(), TaskQueueError> {
         let mut indexes = vec![];
 
+        // TODO: Proabably need to get rid of it, since this:
+        // Caused by:
+        // Kind: Command failed: Error code 197 (InvalidIndexSpecificationOption):
+        // The field 'unique' is not valid for an _id index specification.
+        // Specification: { key: { _id: 1 }, name: "_id_1", unique: true, v: 2 }, labels: {}
+        //
         // 1. Primary key index on _id (already exists by default, but we'll ensure it's unique)
-        let id_index = IndexModel::builder()
-            .keys(doc! { "_id": 1 })
-            .options(IndexOptions::builder().unique(true).build())
-            .build();
-        indexes.push(id_index);
+        // let id_index = IndexModel::builder()
+        //     .keys(doc! { "_id": 1 })
+        //     .options(IndexOptions::builder().unique(true).build())
+        //     .build();
+        // indexes.push(id_index);
 
         // 2. Compound index for pop operation (status + queued_at for FIFO ordering)
         let status_queued_index = IndexModel::builder()
