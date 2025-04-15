@@ -5,7 +5,7 @@ use bson::doc;
 use chrono::{DateTime, Utc};
 use mongodb::{
     Client, Collection, IndexModel,
-    options::{FindOneAndUpdateOptions, IndexOptions, ReturnDocument},
+    options::{FindOneAndUpdateOptions, ReturnDocument},
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::marker::PhantomData;
