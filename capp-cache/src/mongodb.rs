@@ -46,7 +46,7 @@ where
     }
 
     /// Set up necessary indexes for the cache collection
-    async fn setup_indexes(&self) -> Result<(), CacheError> {
+    pub async fn setup_indexes(&self) -> Result<(), CacheError> {
         let mut indexes = vec![];
 
         // Key index
