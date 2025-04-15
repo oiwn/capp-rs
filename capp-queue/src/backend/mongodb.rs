@@ -279,9 +279,11 @@ mod mongo_datetime {
         D: Deserializer<'de>,
     {
         // Use the existing BSON datetime deserializer, but wrap in Option
-        Option::deserialize(deserializer).and_then(
-            |opt_dt: Option<bson::DateTime>| Ok(opt_dt.map(|dt| dt.to_chrono())),
-        )
+        // Option::deserialize(deserializer).and_then(
+        //     |opt_dt: Option<bson::DateTime>| Ok(opt_dt.map(|dt| dt.to_chrono())),
+        // )
+        Option::deserialize(deserializer)
+            .map(|opt_dt: Option<bson::DateTime>| opt_dt.map(|dt| dt.to_chrono()))
     }
 }
 
