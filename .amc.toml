@@ -1,7 +1,8 @@
 delimiter = "==== FILE BOUNDARY ===="
 extensions = [".rs", ".toml", "*.md"]
 llm_prompt = """
-This is a collection of source code files from a project. Each file is separated by '---' delimiters.
+This is a collection of source code files from a project.
+Each file is separated by "==== FILE BOUNDARY ====" delimiters.
 The files include Git metadata showing their last modification details.
 
 Key points for analysis:
