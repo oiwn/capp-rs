@@ -44,7 +44,7 @@ capp-cache = { path = "../capp-cache", optional = true }
 capp-urls = { path = "../capp-urls", optional = true }
 
 # Deps
-reqwest = { version = "0.12", features = ["gzip", "rustls-tls", "json"], optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["gzip", "rustls-tls", "json"], optional = true }
 rand = { workspace = true }
 serde_yaml = "0.9"
 rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
@@ -55,7 +55,7 @@ sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "json", "uui
 
 [dev-dependencies]
 capp = { path = ".", features = ["http", "router", "healthcheck", "mongodb", "redis", "cache", "urls"] }
-hyper = { version = "1.5", features = ["server", "http1"] }
+hyper = { version = "1.6", features = ["server", "http1"] }
 http-body-util = "0.1"
 bytes = "1.6"
 pin-project-lite = "0.2"
