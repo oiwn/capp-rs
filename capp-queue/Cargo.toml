@@ -21,6 +21,7 @@ uuid = { workspace = true }
 rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
 chrono = { version = "0.4", features = ["serde"], optional = true  }
 bson = { version = "2.13", features = ["chrono-0_4"], optional = true }
+# mongodb = { version = "3", optional = true }
 mongodb = { version = "3", optional = true }
 futures = { version = "0.3", optional = true }
 futures-util = { version = "0.3", optional = true }
