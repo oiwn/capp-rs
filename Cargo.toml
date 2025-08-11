@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "capp", 
+    "capp",
     "capp-queue",
     "capp-config",
     "capp-router",
@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.5.1"
+version = "0.5.2"
 edition = "2024"
 license = "MIT"
 rust-version = "1.85"
@@ -36,12 +36,12 @@ tracing-subscriber = "0.3"
 
 # HTTP client
 reqwest = { version = "0.12", default-features = false, features = ["gzip", "rustls-tls", "json"] }
-tokio = { version = "1.43", features = ["full"] }
+tokio = { version = "1.47", features = ["full"] }
 
 # Utils
 async-trait = { version = "0.1" }
 derive_builder = { version = "0.20" }
-uuid = { version = "1.15", features = ["v4", "serde"] }
+uuid = { version = "1.17", features = ["v4", "serde"] }
 rand = { version = "0.9" }
 regex = { version = "1.11" }
 url = { version = "2.5" }

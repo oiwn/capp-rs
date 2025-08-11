@@ -22,5 +22,4 @@ tags
 
 tarpaulin-report.html
 .DS_Store
-.code
-code.txt
+capp_rs.txt

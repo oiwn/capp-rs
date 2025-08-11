@@ -146,7 +146,7 @@ impl ClassificationRule for RegexRule {
     fn classify(&self, url: &Url) -> Option<String> {
         let domain = url.domain()?;
         let path = url.path();
-        let test_str = format!("{}{}", domain, path);
+        let test_str = format!("{domain}{path}");
 
         #[allow(clippy::collapsible_if)]
         if self.allow.iter().any(|r| r.is_match(&test_str)) {
