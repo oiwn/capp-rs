@@ -114,7 +114,7 @@ where
         task.set_in_progress();
         if let Err(e) = self.queue.set(&task).await {
             error!("Failed to update task status: {:?}", e);
-            self.handle_error(&mut task, &format!("Queue error: {}", e))
+            self.handle_error(&mut task, &format!("Queue error: {e}"))
                 .await?;
             return Ok(true);
         }
@@ -144,21 +144,15 @@ where
                     task.set_succeed();
                     if let Err(e) = self.queue.set(&task).await {
                         error!("Failed to update successful task: {:?}", e);
-                        self.handle_error(
-                            &mut task,
-                            &format!("Queue error: {}", e),
-                        )
-                        .await?;
+                        self.handle_error(&mut task, &format!("Queue error: {e}"))
+                            .await?;
                         return Ok(true);
                     }
 
                     if let Err(e) = self.queue.ack(&task.task_id).await {
                         error!("Failed to ack successful task: {:?}", e);
-                        self.handle_error(
-                            &mut task,
-                            &format!("Queue error: {}", e),
-                        )
-                        .await?;
+                        self.handle_error(&mut task, &format!("Queue error: {e}"))
+                            .await?;
                         return Ok(true);
                     }
 
@@ -188,9 +182,9 @@ where
 
         if task.retries < self.options.max_retries {
             if let Err(e) = self.queue.push(task).await {
-                error!("Failed to push task for retry: {:?}", e);
+                error!("Failed to push task for retry: {e:?}");
                 // If we can't push for retry, try to send to DLQ
-                task.set_dlq(&format!("Failed to retry: {}", e));
+                task.set_dlq(&format!("Failed to retry: {e}"));
                 if let Err(e) = self.queue.nack(task).await {
                     error!("Failed to nack task after retry failure: {:?}", e);
                 }
