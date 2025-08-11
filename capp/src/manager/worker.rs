@@ -1,4 +1,5 @@
 #![deny(clippy::unwrap_used)]
+#![allow(clippy::collapsible_if)]
 use crate::manager::{Computation, WorkerStats};
 use capp_config::Configurable;
 use capp_queue::{AbstractTaskQueue, Task, TaskQueue, TaskQueueError};
