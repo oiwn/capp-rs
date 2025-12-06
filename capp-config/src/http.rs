@@ -10,15 +10,15 @@
 //! # Example
 //! ```no_run
 //! use capp_config::http::{HttpClientParams, build_http_client};
-//! use serde_yaml::Value;
+//! use toml::Value;
 //!
-//! let config: Value = serde_yaml::from_str(r#"
-//! http:
-//!     proxy:
-//!         use: true
-//!         uri: http://proxy.example.com:{8080-8082}
-//!     timeout: 30
-//!     connect_timeout: 10
+//! let config: Value = toml::from_str(r#"
+//! [http]
+//! timeout = 30
+//! connect_timeout = 10
+//! [http.proxy]
+//! use = true
+//! uri = "http://proxy.example.com:{8080-8082}"
 //! "#).unwrap();
 //!
 //! let params = HttpClientParams::from_config(&config["http"], "my-crawler/1.0");
@@ -62,25 +62,29 @@ impl<'a> HttpClientParams<'a> {
     /// # Panics
     /// Panics if required configuration fields are missing (timeout, connect_timeout)
     pub fn from_config(
-        http_config: &serde_yaml::Value,
+        http_config: &toml::Value,
         user_agent: &'a str,
     ) -> Self {
-        let timeout = http_config["timeout"]
-            .as_u64()
+        let timeout = http_config
+            .get("timeout")
+            .and_then(|v| v.as_integer())
+            .and_then(|v| u64::try_from(v).ok())
             .expect("No timeout field in config");
-        let connect_timeout = http_config["connect_timeout"]
-            .as_u64()
+        let connect_timeout = http_config
+            .get("connect_timeout")
+            .and_then(|v| v.as_integer())
+            .and_then(|v| u64::try_from(v).ok())
             .expect("No connect_timeout field in config");
 
-        let proxy_provider =
-            if http_config["proxy"]["use"].as_bool().unwrap_or(false) {
-                Some(Box::new(
-                    RandomProxyProvider::from_config(&http_config["proxy"])
-                        .expect("Failed to create proxy provider"),
-                ) as Box<dyn ProxyProvider + Send + Sync>)
+        let proxy_provider = http_config.get("proxy").and_then(|proxy_cfg| {
+            if proxy_cfg.get("use").and_then(|v| v.as_bool()).unwrap_or(false) {
+                RandomProxyProvider::from_config(proxy_cfg).map(|provider| {
+                    Box::new(provider) as Box<dyn ProxyProvider + Send + Sync>
+                })
             } else {
                 None
-            };
+            }
+        });
 
         Self {
             timeout,
@@ -181,55 +185,56 @@ pub async fn fetch_url_content(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_yaml::Value;
     use std::collections::HashSet;
     use std::time::Duration;
+    use toml::Value;
 
-    const YAML_CONF_SINGLE_PORT: &str = r#"
-    http:
-        proxy:
-            use: true
-            uri: http://proxy1.example.com:8080
-        timeout: 30
-        connect_timeout: 10
+    const TOML_CONF_SINGLE_PORT: &str = r#"
+    [http]
+    timeout = 30
+    connect_timeout = 10
+    [http.proxy]
+    use = true
+    uri = "http://proxy1.example.com:8080"
     "#;
 
-    const YAML_CONF_PORT_RANGE: &str = r#"
-    http:
-        proxy:
-            use: true
-            uri: http://proxy1.example.com:{8080-8082}
-        timeout: 30
-        connect_timeout: 10
+    const TOML_CONF_PORT_RANGE: &str = r#"
+    [http]
+    timeout = 30
+    connect_timeout = 10
+    [http.proxy]
+    use = true
+    uri = "http://proxy1.example.com:{8080-8082}"
     "#;
 
-    const YAML_CONF_MULTIPLE_PORT_RANGES: &str = r#"
-    http:
-        proxy:
-            use: true
-            uris:
-                - http://proxy1.example.com:{8080-8082}
-                - http://proxy2.example.com:9090
-                - http://proxy3.example.com:{9000-9001}
-        timeout: 30
-        connect_timeout: 10
+    const TOML_CONF_MULTIPLE_PORT_RANGES: &str = r#"
+    [http]
+    timeout = 30
+    connect_timeout = 10
+    [http.proxy]
+    use = true
+    uris = [
+        "http://proxy1.example.com:{8080-8082}",
+        "http://proxy2.example.com:9090",
+        "http://proxy3.example.com:{9000-9001}",
+    ]
     "#;
 
-    const YAML_CONF_TEXT: &str = r#"
-    http:
-      proxy:
-        use: true
-        uri: http://bro:admin@proxygate1.com:42042
-      timeout: 30
-      connect_timeout: 10
+    const TOML_CONF_TEXT: &str = r#"
+    [http]
+    timeout = 30
+    connect_timeout = 10
+    [http.proxy]
+    use = true
+    uri = "http://bro:admin@proxygate1.com:42042"
     "#;
 
-    const WRONG_YAML_CONF_TEXT: &str = r#"
-    http:
-      proxy:
-        use: true
-        uri: http://bro:admin@proxygate1.com:42042
-      connect_timeout: 10
+    const WRONG_TOML_CONF_TEXT: &str = r#"
+    [http]
+    connect_timeout = 10
+    [http.proxy]
+    use = true
+    uri = "http://bro:admin@proxygate1.com:42042"
     "#;
 
     #[test]
@@ -246,8 +251,7 @@ mod tests {
 
     #[test]
     fn test_build_client_from_config() {
-        let config: serde_yaml::Value =
-            serde_yaml::from_str(YAML_CONF_TEXT).unwrap();
+        let config: toml::Value = toml::from_str(TOML_CONF_TEXT).unwrap();
         let client = build_http_client(HttpClientParams::from_config(
             config.get("http").unwrap(),
             "hellobot",
@@ -258,8 +262,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "No timeout field in config")]
     fn test_build_client_bad_config() {
-        let config: serde_yaml::Value =
-            serde_yaml::from_str(WRONG_YAML_CONF_TEXT).unwrap();
+        let config: toml::Value =
+            toml::from_str(WRONG_TOML_CONF_TEXT).unwrap();
         let _ = build_http_client(HttpClientParams::from_config(
             config.get("http").unwrap(),
             "hellobot",
@@ -268,7 +272,7 @@ mod tests {
 
     #[test]
     fn test_http_client_single_port() {
-        let config: Value = serde_yaml::from_str(YAML_CONF_SINGLE_PORT).unwrap();
+        let config: Value = toml::from_str(TOML_CONF_SINGLE_PORT).unwrap();
         let client_params =
             HttpClientParams::from_config(&config["http"], "test-agent/1.0");
 
@@ -285,7 +289,7 @@ mod tests {
 
     #[test]
     fn test_http_client_port_range() {
-        let config: Value = serde_yaml::from_str(YAML_CONF_PORT_RANGE).unwrap();
+        let config: Value = toml::from_str(TOML_CONF_PORT_RANGE).unwrap();
         let client_params =
             HttpClientParams::from_config(&config["http"], "test-agent/1.0");
 
@@ -309,7 +313,7 @@ mod tests {
     #[test]
     fn test_http_client_multiple_port_ranges() {
         let config: Value =
-            serde_yaml::from_str(YAML_CONF_MULTIPLE_PORT_RANGES).unwrap();
+            toml::from_str(TOML_CONF_MULTIPLE_PORT_RANGES).unwrap();
         let client_params =
             HttpClientParams::from_config(&config["http"], "test-agent/1.0");
 
@@ -363,7 +367,7 @@ mod tests {
 
     #[test]
     fn test_http_client_builder_timeouts_are_set() {
-        let config: Value = serde_yaml::from_str(YAML_CONF_PORT_RANGE).unwrap();
+        let config: Value = toml::from_str(TOML_CONF_PORT_RANGE).unwrap();
         let client_params =
             HttpClientParams::from_config(&config["http"], "test-agent/1.0");
 
@@ -376,16 +380,16 @@ mod tests {
 
     #[test]
     fn test_proxy_disabled() {
-        let yaml = r#"
-        http:
-            proxy:
-                use: false
-                uri: http://proxy1.example.com:8080
-            timeout: 30
-            connect_timeout: 10
+        let toml = r#"
+        [http]
+        timeout = 30
+        connect_timeout = 10
+        [http.proxy]
+        use = false
+        uri = "http://proxy1.example.com:8080"
         "#;
 
-        let config: Value = serde_yaml::from_str(yaml).unwrap();
+        let config: Value = toml::from_str(toml).unwrap();
         let client_params =
             HttpClientParams::from_config(&config["http"], "test-agent/1.0");
 
@@ -398,30 +402,30 @@ mod tests {
     #[test]
     #[should_panic(expected = "No timeout field in config")]
     fn test_missing_timeout() {
-        let yaml = r#"
-        http:
-            proxy:
-                use: true
-                uri: http://proxy1.example.com:8080
-            connect_timeout: 10
+        let toml = r#"
+        [http]
+        connect_timeout = 10
+        [http.proxy]
+        use = true
+        uri = "http://proxy1.example.com:8080"
         "#;
 
-        let config: Value = serde_yaml::from_str(yaml).unwrap();
+        let config: Value = toml::from_str(toml).unwrap();
         let _ = HttpClientParams::from_config(&config["http"], "test-agent/1.0");
     }
 
     #[test]
     fn test_invalid_port_range() {
-        let yaml = r#"
-        http:
-            proxy:
-                use: true
-                uri: http://proxy1.example.com:{8082-8080}
-            timeout: 30
-            connect_timeout: 10
+        let toml = r#"
+        [http]
+        timeout = 30
+        connect_timeout = 10
+        [http.proxy]
+        use = true
+        uri = "http://proxy1.example.com:{8082-8080}"
         "#;
 
-        let config: Value = serde_yaml::from_str(yaml).unwrap();
+        let config: Value = toml::from_str(toml).unwrap();
         let client_params =
             HttpClientParams::from_config(&config["http"], "test-agent/1.0");
 

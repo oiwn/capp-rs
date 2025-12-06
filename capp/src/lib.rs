@@ -65,7 +65,7 @@ pub use async_trait;
 pub use rand;
 pub use serde;
 pub use serde_json;
-pub use serde_yaml;
+pub use toml;
 pub use thiserror;
 pub use tracing;
 pub use tracing_subscriber;

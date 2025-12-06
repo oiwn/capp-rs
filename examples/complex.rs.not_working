@@ -23,12 +23,12 @@ pub struct DivisionComputation;
 #[derive(Clone)]
 pub struct Context {
     pub redis: rustis::client::Client,
-    config: serde_yaml::Value,
+    config: toml::Value,
     pub user_agents: Vec<String>,
 }
 
 impl Configurable for Context {
-    fn config(&self) -> &serde_yaml::Value {
+    fn config(&self) -> &toml::Value {
         &self.config
     }
 }
@@ -131,7 +131,7 @@ async fn make_storage(
 async fn main() {
     tracing_subscriber::fmt::init();
     // Load app
-    let config_path = "tests/simple_config.yml";
+    let config_path = "tests/simple_config.toml";
     std::env::set_var("REDIS_URI", "redis://localhost:6379/15");
     let ctx = Context::from_config(config_path).await;
     let storage = make_storage(ctx.redis.clone()).await;

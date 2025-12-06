@@ -25,12 +25,12 @@ mod tests {
     #[derive(Debug, Serialize, Deserialize)]
     pub struct Context {
         name: String,
-        config: serde_yaml::Value,
+        config: toml::Value,
         is_test: bool,
     }
 
     impl Configurable for Context {
-        fn config(&self) -> &serde_yaml::Value {
+        fn config(&self) -> &toml::Value {
             &self.config
         }
     }
@@ -122,7 +122,7 @@ mod tests {
     fn test_manager() {
         let rt = Runtime::new().unwrap();
 
-        let ctx = Arc::new(Context::from_config("tests/simple_config.yml"));
+        let ctx = Arc::new(Context::from_config("tests/simple_config.toml"));
         let storage = Arc::new(make_storage());
 
         let storage_len_before = storage.list.lock().unwrap().len();

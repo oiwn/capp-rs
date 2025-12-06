@@ -316,6 +316,7 @@ mod tests {
     use capp_queue::{InMemoryTaskQueue, JsonSerializer};
     use serde::{Deserialize, Serialize};
     use std::time::Duration;
+    use toml::Value;
 
     // Test data structures
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -326,11 +327,11 @@ mod tests {
     }
 
     struct TestContext {
-        config: serde_yaml::Value,
+        config: Value,
     }
 
     impl Configurable for TestContext {
-        fn config(&self) -> &serde_yaml::Value {
+        fn config(&self) -> &Value {
             &self.config
         }
     }
@@ -371,7 +372,7 @@ mod tests {
         Arc<InMemoryTaskQueue<TestData, JsonSerializer>>,
     ) {
         let ctx = Arc::new(TestContext {
-            config: serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            config: Value::Table(toml::map::Map::new()),
         });
         let queue = Arc::new(InMemoryTaskQueue::<TestData, JsonSerializer>::new());
         let computation = Arc::new(TestComputation {
@@ -497,7 +498,7 @@ mod tests {
     #[tokio::test]
     async fn test_task_limit() {
         let ctx = Arc::new(TestContext {
-            config: serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            config: Value::Table(toml::map::Map::new()),
         });
         let queue = Arc::new(InMemoryTaskQueue::<TestData, JsonSerializer>::new());
         let computation = Arc::new(TestComputation {

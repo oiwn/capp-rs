@@ -54,12 +54,12 @@ struct SiteLink {
 struct HNCrawler {}
 
 struct Context {
-    config: serde_yaml::Value,
+    config: toml::Value,
     pub user_agents: Vec<String>,
 }
 
 impl Configurable for Context {
-    fn config(&self) -> &serde_yaml::Value {
+    fn config(&self) -> &toml::Value {
         &self.config
     }
 }
@@ -338,7 +338,7 @@ impl HNCrawler {
 async fn main() {
     tracing_subscriber::fmt::init();
     let ctx =
-        Arc::new(Context::from_config("examples/hackernews/hn_config.yml").await);
+        Arc::new(Context::from_config("examples/hackernews/hn_config.toml").await);
 
     tracing::info!("Starting HN crawler...");
 

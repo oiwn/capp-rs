@@ -46,12 +46,12 @@ capp-urls = { path = "../capp-urls", optional = true }
 # Deps
 reqwest = { version = "0.12", default-features = false, features = ["gzip", "rustls-tls", "json"], optional = true }
 rand = { workspace = true }
-serde_yaml = "0.9"
 rustis = { version = "0.16", features = ["tokio-runtime"], optional = true }
 chrono = { version = "0.4", features = ["serde"], optional = true  }
 bson = { version = "2.15", features = ["chrono-0_4"], optional = true }
 mongodb = { version = "3", optional = true }
 sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "json", "uuid", "chrono" ], optional = true }
+toml = { workspace = true }
 
 [dev-dependencies]
 capp = { path = ".", features = ["http", "router", "healthcheck", "mongodb", "redis", "cache", "urls"] }
@@ -83,5 +83,4 @@ path = "../examples/basic.rs"
 # [[example]]
 # name = "hackernews"
 # path = "../examples/hackernews/main.rs"
-
 

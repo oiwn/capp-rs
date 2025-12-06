@@ -1,6 +1,7 @@
 use rand::{rng, seq::IndexedRandom};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use toml::Value;
 use std::{
     fmt,
     sync::{LazyLock, Mutex},
@@ -38,22 +39,20 @@ impl ProxyConfig {
         vec![uri.to_string()]
     }
 
-    pub fn from_config(config: &serde_yaml::Value) -> Option<Self> {
-        let use_proxy = config["use"].as_bool()?;
+    pub fn from_config(config: &Value) -> Option<Self> {
+        let use_proxy = config.get("use")?.as_bool()?;
         let uris = if use_proxy {
-            match config["uris"].as_sequence() {
-                Some(seq) => seq
-                    .iter()
+            if let Some(seq) = config.get("uris").and_then(|v| v.as_array()) {
+                seq.iter()
                     .filter_map(|v| v.as_str())
                     .flat_map(Self::expand_uri)
-                    .collect(),
-                None => {
-                    if let Some(uri) = config["uri"].as_str() {
-                        Self::expand_uri(uri)
-                    } else {
-                        vec![]
-                    }
-                }
+                    .collect()
+            } else if let Some(uri) =
+                config.get("uri").and_then(|v| v.as_str())
+            {
+                Self::expand_uri(uri)
+            } else {
+                vec![]
             }
         } else {
             vec![]
@@ -73,7 +72,7 @@ impl RandomProxyProvider {
         Self { config }
     }
 
-    pub fn from_config(config: &serde_yaml::Value) -> Option<Self> {
+    pub fn from_config(config: &Value) -> Option<Self> {
         let config = ProxyConfig::from_config(config)?;
         Some(Self::new(config))
     }
@@ -106,7 +105,7 @@ impl RoundRobinProxyProvider {
         }
     }
 
-    pub fn from_config(config: &serde_yaml::Value) -> Option<Self> {
+    pub fn from_config(config: &Value) -> Option<Self> {
         let config = ProxyConfig::from_config(config)?;
         Some(Self::new(config))
     }
@@ -128,30 +127,30 @@ impl ProxyProvider for RoundRobinProxyProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_yaml::Value;
 
-    const YAML_CONF_SINGLE: &str = r#"
-    proxy:
-        use: true
-        uri: http://proxy1.example.com:8080
-        timeout: 30
-        connect_timeout: 10
+    const TOML_CONF_SINGLE: &str = r#"
+    [proxy]
+    use = true
+    uri = "http://proxy1.example.com:8080"
+    timeout = 30
+    connect_timeout = 10
     "#;
 
-    const YAML_CONF_MULTIPLE: &str = r#"
-    proxy:
-        use: true
-        uris:
-            - http://proxy1.example.com:8080
-            - http://proxy2.example.com:8080
-            - http://proxy3.example.com:8080
-        timeout: 30
-        connect_timeout: 10
+    const TOML_CONF_MULTIPLE: &str = r#"
+    [proxy]
+    use = true
+    uris = [
+        "http://proxy1.example.com:8080",
+        "http://proxy2.example.com:8080",
+        "http://proxy3.example.com:8080",
+    ]
+    timeout = 30
+    connect_timeout = 10
     "#;
 
     #[test]
     fn test_proxy_provider() {
-        let config: Value = serde_yaml::from_str(YAML_CONF_SINGLE).unwrap();
+        let config: Value = toml::from_str(TOML_CONF_SINGLE).unwrap();
         let provider = RandomProxyProvider::from_config(&config["proxy"]).unwrap();
 
         let proxy_url = provider.get_proxy().unwrap();
@@ -160,7 +159,7 @@ mod tests {
 
     #[test]
     fn test_random_proxy_provider() {
-        let config: Value = serde_yaml::from_str(YAML_CONF_MULTIPLE).unwrap();
+        let config: Value = toml::from_str(TOML_CONF_MULTIPLE).unwrap();
         let provider = RandomProxyProvider::from_config(&config["proxy"]).unwrap();
 
         // Test multiple calls return different proxies
@@ -175,7 +174,7 @@ mod tests {
 
     #[test]
     fn test_round_robin_proxy_provider() {
-        let config: Value = serde_yaml::from_str(YAML_CONF_MULTIPLE).unwrap();
+        let config: Value = toml::from_str(TOML_CONF_MULTIPLE).unwrap();
         let provider =
             RoundRobinProxyProvider::from_config(&config["proxy"]).unwrap();
 
@@ -192,11 +191,11 @@ mod tests {
 
     #[test]
     fn test_proxy_provider_disabled() {
-        let config: Value = serde_yaml::from_str(
+        let config: Value = toml::from_str(
             r#"
-        proxy:
-            use: false
-            uri: http://proxy1.example.com:8080
+        [proxy]
+        use = false
+        uri = "http://proxy1.example.com:8080"
         "#,
         )
         .unwrap();
@@ -207,13 +206,13 @@ mod tests {
 
     #[test]
     fn test_proxy_config_port_range() {
-        let yaml = r#"
-        proxy:
-            use: true
-            uri: http://proxy1.example.com:{8080-8082}
+        let toml = r#"
+        [proxy]
+        use = true
+        uri = "http://proxy1.example.com:{8080-8082}"
         "#;
 
-        let config: Value = serde_yaml::from_str(yaml).unwrap();
+        let config: Value = toml::from_str(toml).unwrap();
         let proxy_config = ProxyConfig::from_config(&config["proxy"]).unwrap();
 
         assert_eq!(proxy_config.uris.len(), 3);
@@ -236,16 +235,17 @@ mod tests {
 
     #[test]
     fn test_proxy_config_multiple_uris_with_ranges() {
-        let yaml = r#"
-        proxy:
-            use: true
-            uris:
-                - http://proxy1.example.com:{8080-8082}
-                - http://proxy2.example.com:8090
-                - http://proxy3.example.com:{9000-9001}
+        let toml = r#"
+        [proxy]
+        use = true
+        uris = [
+            "http://proxy1.example.com:{8080-8082}",
+            "http://proxy2.example.com:8090",
+            "http://proxy3.example.com:{9000-9001}",
+        ]
         "#;
 
-        let config: Value = serde_yaml::from_str(yaml).unwrap();
+        let config: Value = toml::from_str(toml).unwrap();
         let proxy_config = ProxyConfig::from_config(&config["proxy"]).unwrap();
 
         assert_eq!(proxy_config.uris.len(), 6); // 3 from first range + 1 single + 2 from last range
@@ -258,13 +258,13 @@ mod tests {
 
     #[test]
     fn test_invalid_port_range() {
-        let yaml = r#"
-        proxy:
-            use: true
-            uri: http://proxy1.example.com:{8082-8080}
+        let toml = r#"
+        [proxy]
+        use = true
+        uri = "http://proxy1.example.com:{8082-8080}"
         "#;
 
-        let config: Value = serde_yaml::from_str(yaml).unwrap();
+        let config: Value = toml::from_str(toml).unwrap();
         let proxy_config = ProxyConfig::from_config(&config["proxy"]).unwrap();
 
         // Should treat invalid range as literal string
@@ -277,13 +277,13 @@ mod tests {
 
     #[test]
     fn test_no_port_range() {
-        let yaml = r#"
-        proxy:
-            use: true
-            uri: http://proxy1.example.com:8080
+        let toml = r#"
+        [proxy]
+        use = true
+        uri = "http://proxy1.example.com:8080"
         "#;
 
-        let config: Value = serde_yaml::from_str(yaml).unwrap();
+        let config: Value = toml::from_str(toml).unwrap();
         let proxy_config = ProxyConfig::from_config(&config["proxy"]).unwrap();
 
         assert_eq!(proxy_config.uris.len(), 1);

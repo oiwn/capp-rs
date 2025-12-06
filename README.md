@@ -85,19 +85,20 @@ let queue = RedisTaskQueue::new(client, "my-queue").await?;
 
 ## Configuration
 
-Configure via YAML files:
+Configure via TOML files:
 
-```yaml
-app:
-  threads: 4
-  max_queue: 500
+```toml
+[app]
+threads = 4
+max_queue = 500
 
-http:
-  proxy:
-    use: true
-    uri: "http://proxy.example.com:8080"
-  timeout: 30
-  connect_timeout: 10
+[http]
+timeout = 30
+connect_timeout = 10
+
+[http.proxy]
+use = true
+uri = "http://proxy.example.com:8080"
 ```
 
 ## Features
