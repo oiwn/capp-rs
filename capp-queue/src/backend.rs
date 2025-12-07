@@ -1,3 +1,5 @@
+#[cfg(feature = "fjall")]
+pub mod fjall;
 pub mod memory;
 #[cfg(feature = "mongodb")]
 pub mod mongodb;
@@ -8,6 +10,8 @@ pub mod redis;
 #[cfg(feature = "redis")]
 pub mod redis_rr;
 
+#[cfg(feature = "fjall")]
+pub use fjall::FjallTaskQueue;
 pub use memory::InMemoryTaskQueue;
 #[cfg(feature = "mongodb")]
 pub use mongodb::MongoTaskQueue;

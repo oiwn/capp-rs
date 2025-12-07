@@ -1,11 +1,11 @@
 use rand::{rng, seq::IndexedRandom};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use toml::Value;
 use std::{
     fmt,
     sync::{LazyLock, Mutex},
 };
+use toml::Value;
 
 // Add Debug to the trait bounds
 pub trait ProxyProvider: Send + Sync + fmt::Debug {
@@ -47,9 +47,7 @@ impl ProxyConfig {
                     .filter_map(|v| v.as_str())
                     .flat_map(Self::expand_uri)
                     .collect()
-            } else if let Some(uri) =
-                config.get("uri").and_then(|v| v.as_str())
-            {
+            } else if let Some(uri) = config.get("uri").and_then(|v| v.as_str()) {
                 Self::expand_uri(uri)
             } else {
                 vec![]

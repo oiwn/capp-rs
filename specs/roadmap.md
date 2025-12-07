@@ -1,42 +1,55 @@
 % Roadmap for 0.6
 
-## Focus Areas
-- Config format swap to TOML (breaking change) and version bump to 0.6.
-- Queue backend expansion with fjall KV store, inspired by FetchBox task 03 queue workers.
-- Worker ingestion model improvements (message boxes/mailboxes) to decouple producers and executors.
-- Per-worker monitoring and optional control server for observability.
+## Goals
+- Cut 0.6 with TOML as the only config format; breaking changes are fine (single-user).
+- Move the compute path onto `tower::Service` so we can stack rate limiting, retries, and timeouts declaratively.
+- Add fjall-backed storage (queue first, cache optional) to reduce external deps.
+- Shift workers to message-driven mailboxes instead of blind polling, with control channels.
+- Expose live stats/health over an embedded HTTP endpoint for observability.
+
+## Pillars
+1) Tower-native computation pipeline
+   - Wrap/replace `Computation::call` with a `Service`-based runner; allow layers for rate limiting, backoff, timeouts, and tracing.
+   - Provide a compatibility shim for existing computations during migration (not required to be stable long-term).
+2) Fjall-backed storage
+   - Queue backend: durable task store with visibility timeouts, retry counters, DLQ parity with existing backends; feature-gated.
+   - Cache backend: lightweight fjall-based cache for recent responses/metadata (optional feature).
+   - Operational notes: compaction defaults, file layout, tuning guidance for long-running crawlers.
+3) Message-driven workers
+   - Replace queue polling with per-worker mailboxes (tokio mpsc) fed by a dispatcher.
+   - Add a control channel (broadcast) to pause/resume/scale workers and tweak rate limits dynamically.
+   - Task stealing scenario: if a worker’s partition goes idle while others are saturated, allow stealing from a shared overflow queue to avoid starvation.
+4) Observability
+   - Surface per-worker stats (processed/failed/retries/latency) and queue depth via a small Hyper server behind an `http` feature.
+   - Keep tracing spans around Service layers; add a metrics sink (prometheus text or JSON).
+5) Docs & migration
+   - Update README/examples to highlight tower + fjall usage and the mailbox model.
+   - Note the breaking API/config changes and minimal migration steps (TOML only, new worker wiring).
 
 ## Proposed Work Items
-- Fjall backend
-  - Add fjall as a feature-gated queue backend; mirror in-memory/Redis trait surface.
-  - Implement durable task storage, visibility timeouts, retry bookkeeping, and DLQ parity.
-  - Define migration path and schemas (if any) for fjall files; document operational notes.
-- Message boxes for workers
-  - Explore mailbox model where workers pull from dedicated queues/partitions; compare to shared round-robin.
-  - Evaluate load-balancing vs. fairness, backpressure behavior, and failure isolation.
-  - Prototype API changes in `capp::manager` to allow mailbox-aware scheduling without breaking the prelude ergonomics.
-- Monitoring/Server
-  - Add per-worker metrics (processed, failed, retries, latency) exposed via traits and pluggable sinks.
-  - Optional lightweight HTTP server to expose health/metrics endpoints; consider reuse of existing healthcheck module.
-  - Provide hooks for structured logging/tracing spans per worker and queue backend.
-- Config + docs
-  - Move all sample configs/tests to TOML; update README/AGENTS with new format and feature flags.
-  - Document new backends and monitoring endpoints; add examples for fjall + mailbox usage.
-- Maybe remove queue backends? only use fjall for this.
-- We also need to consider replacing "call" with tower service, with which we could have whole bunch of goodies as rate limiting, which could be controlled via channels
+- Tower integration
+  - Introduce a `Service` wrapper for computations and expose a builder for stacking layers (rate limit, retry/backoff, timeout, tracing).
+  - Adjust `WorkersManager` to execute via the Service stack; provide a helper to adapt existing `Computation` impls.
+- Fjall queue backend
+  - Implement feature-gated fjall queue with parity to in-memory/Redis semantics (ack/nack/retry/dlq, visibility timeouts).
+  - Add tests for crash/restart behavior and simple benchmarks; document disk layout and compaction settings.
+- Fjall cache backend (optional)
+  - Add a minimal fjall cache feature with get/set/ttl; integrate into `capp-cache` helpers if present.
+- Mailbox dispatch
+  - Add dispatcher that fans out tasks from the queue into per-worker mailboxes; workers consume from channels instead of direct polling.
+  - Add optional task stealing from a shared overflow channel to keep workers busy when partitions drain.
+  - Control channel for commands (pause/resume/scale, rate-limit tweaks) to workers.
+- Observability server
+  - Add a small Hyper-based HTTP endpoint to expose stats/health; gate behind `http`.
+  - Emit structured metrics from the dispatcher/worker loops; wire tracing fields through Service layers.
+- Docs & cleanup
+  - Refresh README/examples/specs to show tower usage and fjall backends; mark previous YAML/polling APIs as replaced.
+  - Add a short migration note for 0.6 (TOML configs, tower service wrapper, mailbox manager).
+
+## Decisions
+- No backward compatibility guarantee for 0.6; old polling/Computation-only paths can be removed after shims.
+- Fjall added as feature-gated backends; existing backends stay feature-flagged but fjall can be the default in docs.
 
 ## Open Questions
-- Mailbox model: should workers own stable partitions or can they steal tasks? How to avoid hot partition starvation?
-^^^ provide scenario where worker will need to steal task somewhere?
-- Fjall ops: expected compaction/settings defaults for long-running crawlers; disk layout guidance.
-- Monitoring transport: expose only HTTP/metrics, or also allow channel callbacks for embedding?
-^^^ i think will need to have channel to control the worker
-
-## Risks
-- Compatibility break from YAML → TOML and API shifts for mailbox support.
-- Additional backend increases test matrix; need feature guards and mocked coverage to keep CI stable.
-
-## Research & References
-- FetchBox Task 03 queue workers (mailbox + fjall inspiration): https://github.com/oiwn/FetchBox/blob/main/specs/task_03_queue_workers.md
-- Fjall embedded KV store crate (API, durability characteristics): https://crates.io/crates/fjall
-- Tokio mailboxes/queues for worker models (bounded mpsc, broadcast) docs: https://docs.rs/tokio/latest/tokio/sync/index.html
+- Should fjall become the default queue/cache backend in examples, with others as opt-in?
+- Metrics format: Prometheus text vs JSON; do we need push or only pull via HTTP?

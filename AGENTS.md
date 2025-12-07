@@ -3,7 +3,7 @@
 ## Project Structure & Modules
 - `capp/`: core public API (manager, prelude) re-exporting config/queue/router/backoff under feature flags.
 - `capp-queue/`: task queue traits and backends (in-memory, Redis, MongoDB, PostgreSQL); DB schema files live in `migrations/`.
-- `capp-config/`: YAML-driven configuration, HTTP/proxy/backoff helpers.
+- `capp-config/`: TOML-driven configuration, HTTP/proxy/backoff helpers.
 - `capp-router/`: URL routing/classification utilities; `capp-cache/`: optional cache helpers; `capp-urls/`: URL parsing helpers.
 - `examples/`: runnable samples (`cargo run --example basic`, `--example urls`); `tests/`: integration tests with shared harness in `tests/common/`.
 

@@ -40,31 +40,29 @@ pub struct HttpClientParams<'a> {
 }
 
 impl<'a> HttpClientParams<'a> {
-    /// Creates an HttpClientParams instance from a YAML configuration.
+    /// Creates an HttpClientParams instance from a TOML configuration.
     ///
     /// The configuration should follow this structure:
-    /// ```yaml
-    /// http:
-    ///     proxy:
-    ///         use: true
-    ///         uri: http://user:pass@proxy.example.com:8080
-    ///     timeout: 30
-    ///     connect_timeout: 10
+    /// ```toml
+    /// [http]
+    /// timeout = 30
+    /// connect_timeout = 10
+    ///
+    /// [http.proxy]
+    /// use = true
+    /// uri = "http://user:pass@proxy.example.com:8080"
     /// ```
     ///
     /// The proxy URI can include a port range using the format:
     /// `http://proxy.example.com:{8080-8090}`
     ///
     /// # Arguments
-    /// * `http_config` - YAML configuration containing HTTP settings
+    /// * `http_config` - TOML configuration containing HTTP settings
     /// * `user_agent` - User agent string to be used in requests
     ///
     /// # Panics
     /// Panics if required configuration fields are missing (timeout, connect_timeout)
-    pub fn from_config(
-        http_config: &toml::Value,
-        user_agent: &'a str,
-    ) -> Self {
+    pub fn from_config(http_config: &toml::Value, user_agent: &'a str) -> Self {
         let timeout = http_config
             .get("timeout")
             .and_then(|v| v.as_integer())
@@ -77,7 +75,11 @@ impl<'a> HttpClientParams<'a> {
             .expect("No connect_timeout field in config");
 
         let proxy_provider = http_config.get("proxy").and_then(|proxy_cfg| {
-            if proxy_cfg.get("use").and_then(|v| v.as_bool()).unwrap_or(false) {
+            if proxy_cfg
+                .get("use")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
                 RandomProxyProvider::from_config(proxy_cfg).map(|provider| {
                     Box::new(provider) as Box<dyn ProxyProvider + Send + Sync>
                 })
@@ -262,8 +264,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "No timeout field in config")]
     fn test_build_client_bad_config() {
-        let config: toml::Value =
-            toml::from_str(WRONG_TOML_CONF_TEXT).unwrap();
+        let config: toml::Value = toml::from_str(WRONG_TOML_CONF_TEXT).unwrap();
         let _ = build_http_client(HttpClientParams::from_config(
             config.get("http").unwrap(),
             "hellobot",
@@ -312,8 +313,7 @@ mod tests {
 
     #[test]
     fn test_http_client_multiple_port_ranges() {
-        let config: Value =
-            toml::from_str(TOML_CONF_MULTIPLE_PORT_RANGES).unwrap();
+        let config: Value = toml::from_str(TOML_CONF_MULTIPLE_PORT_RANGES).unwrap();
         let client_params =
             HttpClientParams::from_config(&config["http"], "test-agent/1.0");
 

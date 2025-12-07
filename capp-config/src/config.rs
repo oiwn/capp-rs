@@ -117,7 +117,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_config_valid_yaml() {
+    fn test_load_config_valid_toml() {
         let dir = tempdir().unwrap();
         let config_path = dir.path().join("config.toml");
         let mut file = File::create(&config_path).unwrap();
@@ -131,7 +131,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_config_invalid_yaml() {
+    fn test_load_config_invalid_toml() {
         let dir = tempdir().unwrap();
         let config_path = dir.path().join("config.toml");
         let mut file = File::create(&config_path).unwrap();

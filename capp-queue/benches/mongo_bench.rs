@@ -1,3 +1,5 @@
+#![cfg(feature = "mongodb")]
+
 mod common;
 
 use capp_queue::{BsonSerializer, MongoTaskQueue, TaskQueue};

@@ -1,3 +1,5 @@
+#![cfg(feature = "redis")]
+
 mod common;
 
 use capp_queue::{JsonSerializer, RedisTaskQueue, TaskQueue};

@@ -1,32 +1,20 @@
-% Config Migration Plan (YAML → TOML)
+% Updating to 0.6
 
-## Goal
+## Current State
+- Config loader, proxy/http helpers, examples, and tests now consume `toml::Value` and point to `.toml` fixtures (e.g., `tests/simple_config.toml`).
+- YAML dependencies were removed in favor of `toml`; sample configs converted to TOML; AGENTS.md updated to reference TOML configs.
+- Basic example run succeeds against the TOML fixture.
+- Queue backend changes in flight for v0.6: fjall is the default backend; queue keys now use UUID v7 (roughly time-ordered) instead of a monotonic u64 counter. On-disk compatibility with prior queue layouts is intentionally broken.
 
-Switch configuration format from YAML to TOML across the workspace and bump crate version to 0.6 (breaking change accepted).
+## Follow-ups
+- Bump workspace/crate versions to `0.6.0` and refresh README dependency snippet to match.
+- Run fmt/clippy/test across the workspace after any doc/code touch-ups.
+- Add a short changelog/README note calling out the breaking config format change.
 
-## Proposed Steps
-2) Implement TOML parsing
-   - Replace YAML dependencies with `toml`/`toml_edit` + serde integrations.
-  ^^^ I added already, we'll use "toml"
-   - Update config loader API to read `.toml` files; keep error messages clear for misformatted TOML.
-   - Adjust schema structs if TOML typing requires tweaks (e.g., arrays vs tables).
-3) Update assets and docs
-   - Convert sample configs to `.toml` (tests fixtures, examples, README, AGENTS.md references).
-   - Rename paths/extensions and update any hardcoded `.yml` references.
-4) Tests + tooling
-   - Update integration tests to load TOML fixtures; ensure tokio runtimes still create configs correctly.
-   - Run `cargo fmt`, `cargo clippy --workspace --all-targets --all-features`, `cargo test --workspace --all-features`.
-5) Versioning + release notes
-   - Bump workspace/package version to `0.6.0` in `Cargo.toml` and references.
-   - Note breaking change (config format switch) in changelog/README.
-
-## Files to Update for TOML Migration
-- `capp-config/src/config.rs`: core loader uses `serde_yaml::Value`, YAML error type, and tests reference `tests/simple_config.yml`.
-- `capp-config/src/http.rs`: YAML-focused docs/examples and parsing tests built on `serde_yaml::Value`.
-- `capp-config/src/proxy.rs`: YAML parsing helpers and inline YAML fixtures for proxy lists.
-- `capp/src/lib.rs`: re-exports `serde_yaml`; remove/swap to TOML value type.
-- `capp/src/manager/worker.rs`: worker config fields use `serde_yaml::Value`.
-- `capp/Cargo.toml`, `capp-config/Cargo.toml`: `serde_yaml` dependency and ignore list entry for `.tmuxp.yaml`.
-- Examples: `examples/basic.rs`, `examples/complex.rs.not_working`, `examples/hackernews/main.rs` all load `tests/simple_config.yml` and rely on `serde_yaml::Value`.
-- Tests: `tests/manager_tests.rs` uses `serde_yaml::Value` and loads `tests/simple_config.yml`; fixture `tests/simple_config.yml` must become TOML.
-- Docs: `README.md` configuration snippet in YAML; `AGENTS.md` mentions `tests/*.yml` and should be updated to TOML wording.
+## v0.6 execution plan (tower + mailbox + control/stats)
+- Tower-native service stack: replace/augment `Computation::call` with a `tower::Service<Task>` stack (layers for rate-limit, timeout, retry/backoff, tracing, buffer/load-shed); provide a builder; no back-compat needed.
+- Dispatcher + mailboxes: single dispatcher owns queue I/O (`pop/ack/nack`), wraps tasks in `Envelope`, and sends to per-worker bounded `tokio::mpsc` inboxes (RR or load-aware). Workers never poll queue directly in 0.6.
+- Workers: each owns inbox rx, control rx, stats tx, and a tower service stack. Loop: recv envelope -> run service -> ack/nack via dispatcher helper -> emit stats (latency/status/counters).
+- Control channel: broadcast commands (Pause/Resume dequeue, SetRateLimit, Scale, Drain, ReloadConfig). Dispatcher pauses pulling; workers respond to per-worker commands.
+- Stats channel: workers send metrics to aggregator; dispatcher can add queue depth if backend supports. Snapshot exposed to HTTP/metrics.
+- Observability: small Hyper endpoint behind `http` feature for `/metrics` and `/health`; tracing spans around dequeue/dispatch/service with task/worker IDs.

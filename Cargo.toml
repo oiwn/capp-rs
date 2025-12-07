@@ -41,8 +41,9 @@ tokio = { version = "1.47", features = ["full"] }
 # Utils
 async-trait = { version = "0.1" }
 derive_builder = { version = "0.20" }
-uuid = { version = "1.17", features = ["v4", "serde"] }
+uuid = { version = "1.17", features = ["v4", "v7", "serde"] }
 rand = { version = "0.9" }
 regex = { version = "1.11" }
 url = { version = "2.5" }
 toml = "0.9.8"
+fjall = "2.11.2"

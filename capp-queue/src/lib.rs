@@ -3,6 +3,8 @@ pub mod queue;
 pub mod serializers;
 pub mod task;
 
+#[cfg(feature = "fjall")]
+pub use crate::backend::FjallTaskQueue;
 pub use crate::backend::InMemoryTaskQueue;
 #[cfg(feature = "mongodb")]
 pub use crate::backend::MongoTaskQueue;
@@ -32,6 +34,9 @@ pub enum TaskQueueError {
     TaskNotFound(TaskId),
     #[error("Queue is empty")]
     QueueEmpty,
+    #[cfg(feature = "fjall")]
+    #[error("Fjall error")]
+    FjallError(#[from] fjall::Error),
     #[cfg(feature = "redis")]
     #[error("Redis error")]
     RedisError(#[from] rustis::Error),
