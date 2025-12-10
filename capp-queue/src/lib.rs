@@ -1,4 +1,5 @@
 pub mod backend;
+pub mod dispatch;
 pub mod queue;
 pub mod serializers;
 pub mod task;
@@ -12,6 +13,9 @@ pub use crate::backend::MongoTaskQueue;
 pub use crate::backend::PostgresTaskQueue;
 #[cfg(feature = "redis")]
 pub use crate::backend::{RedisRoundRobinTaskQueue, RedisTaskQueue};
+pub use crate::dispatch::{
+    ProducerError, ProducerHandle, ProducerMsg, WorkerResult,
+};
 pub use crate::queue::{AbstractTaskQueue, HasTagKey, TaskQueue};
 #[cfg(feature = "mongodb")]
 pub use crate::serializers::BsonSerializer;

@@ -54,12 +54,15 @@ pub use capp_queue as queue;
 pub use capp_router as router;
 #[cfg(feature = "http")]
 pub use config::http;
+#[cfg(feature = "observability")]
+pub mod observability;
 #[cfg(feature = "mongodb")]
 pub use mongodb;
 #[cfg(feature = "http")]
 pub use reqwest;
 #[cfg(feature = "redis")]
 pub use rustis;
+pub use tower;
 // re-export
 pub use async_trait;
 pub use rand;

@@ -1,56 +1,41 @@
 % Updating to 0.6
 
-## Quick prompt for next session
-- Target: implement tower-native worker pipeline with dispatcher/mailboxes/control/stats and fjall default queue (UUID v7 keys, no back-compat), starting in new/parallel modules so the current API stays untouched until the switch.
-- Read alongside `specs/overview.md` for project shape; use `capp-queue` fjall backend and `capp/src/manager` when wiring.
-- Key files to touch: `capp-queue/src` (dispatcher helpers, producer handle), `capp/src/manager/worker.rs` (switch to inbox + service), `capp/src/lib.rs` (re-export tower/tokio utils if needed), bench/docs updates as needed.
-- Tests/benches: `cargo test -p capp-queue --features fjall`, `cargo bench --bench fjall_bench`. fmt/clippy/test before PR.
+# Boss thoughs for this session:
 
-^^^ i think would be better to start this in separate files we should have this new api in parallel.
 
-## Current State
-- Config loader, proxy/http helpers, examples, and tests now consume `toml::Value` and point to `.toml` fixtures (e.g., `tests/simple_config.toml`).
-- YAML dependencies were removed in favor of `toml`; sample configs converted to TOML; AGENTS.md updated to reference TOML configs.
-- Basic example run succeeds against the TOML fixture.
-- Queue backend changes in flight for v0.6: fjall is the default backend; queue keys now use UUID v7 (roughly time-ordered) instead of a monotonic u64 counter. On-disk compatibility with prior queue layouts is intentionally broken.
+## User should be able to define middlewares for tower service
 
-## Follow-ups
-- Run fmt/clippy/test across the workspace after any doc/code touch-ups.
-- Add a short changelog/README note calling out the breaking config format change.
+We need to check and make sure user of library would be able to define own middlewares for tower, and assign new, like timeout, retries (if needed), all tower could provide. Do research about this subject and report back in section below.
 
-## v0.6 execution plan (tower + mailbox + control/stats)
-- Tower-native service stack: replace/augment `Computation::call` with a `tower::Service<Task>` stack (layers for rate-limit, timeout, retry/backoff, tracing, buffer/load-shed); provide a builder; no back-compat needed.
-- Dispatcher + mailboxes: single dispatcher owns queue I/O (`pop/ack/nack`), wraps tasks in `Envelope`, and sends to per-worker bounded `tokio::mpsc` inboxes (RR or load-aware). Workers never poll queue directly in 0.6.
-- Workers: each owns inbox rx, control rx, stats tx, and a tower service stack. Loop: recv envelope -> run service -> ack/nack via dispatcher helper -> emit stats (latency/status/counters).
-- Control channel: broadcast commands (keep minimal for now: Pause/Resume dequeue and Stop). Dispatcher pauses pulling; workers respond to stop signals.
-^^^ should have really small subset of commands for now, only pause/resume and stop. 
-- Stats channel: workers send metrics to aggregator; dispatcher can add queue depth if backend supports. Snapshot exposed to HTTP/metrics.
-- Observability: small Hyper endpoint behind `http` feature for `/metrics` and `/health`; tracing spans around dequeue/dispatch/service with task/worker IDs.
-- User function enqueue path: service receives a `ProducerHandle` that sends `ProducerMsg::Enqueue(task)` to dispatcher; dispatcher centralizes queue pushes (batchable). Workers do not touch queue directly.
-- Pros vs polling: centralized queue I/O, backpressure via inboxes, tower layering, clear control/stats plane, batching potential. Cons: more components, dispatcher is a single choke point, slight latency hop, more testing surface.
-- Inbox sizing: default bounded inbox per worker of 1 (tasks are I/O-heavy/long); keep configurable if small buffering (2–4) is desired later.
+### Report (fill this section with your findings)
+- Current mailbox runtime already accepts any Tower stack: `spawn_mailbox_runtime` takes `MailboxService = BoxCloneService<ServiceRequest<D, Ctx>, (), BoxError>`, so callers can compose their own `ServiceBuilder`/`Layer` chain (retry, timeout, tracing, tower-http, etc.) and pass it directly; `build_service_stack` is just a convenience.
+- The helper `build_service_stack` hardcodes `ConcurrencyLimitLayer -> load_shed -> buffer -> timeout` with only `ServiceStackOptions` knobs, so attaching extra middleware requires wrapping the base service before handing it to the helper or skipping it and building/boxing the stack manually.
+- Follow-ups to make this obvious: add docs/example showing a custom stack with `Retry`/`Trace` layers boxed into `MailboxService`, and consider an overload that applies the default layers then lets the caller inject additional `Layer`s (or a `Fn(ServiceBuilder) -> ServiceBuilder`) to keep ergonomics high while preserving our defaults.
 
-^^^ p
+## Need to figure out deps for observability
 
-### Detailed flow (dispatcher + workers)
-- Init:
-  - Build tower stack (rate-limit/timeout/retry/tracing) via builder.
-  - Create per-worker inbox channels (bounded) and control broadcast; create producer channel (for user enqueues) into dispatcher.
-  - Spawn dispatcher with queue handle + inbox senders + producer/control receivers.
-  - Spawn workers with inbox receiver + control receiver + stats sender + cloned service stack + producer handle (tx to dispatcher).
-- Dispatcher loop (single task):
-  - Respect control commands (Pause/Resume/Stop); when paused, skip dequeue; on Stop, drain/exit.
-  - `select!` on:
-    - `queue.pop()`: on Ok -> wrap `Envelope { task, enqueued_at, attempt, result_tx }` -> pick inbox (RR or load-aware) -> send; on `QueueEmpty` -> small delay/backoff.
-    - `producer_rx`: handle `ProducerMsg::Enqueue(task)` by `push` to queue (batchable later).
-    - `result_rx` (oneshots from workers): `Ack { task }` -> `queue.ack`; `Nack { task, reason }` -> retry bookkeeping -> `nack/DLQ`.
-- Worker loop (per worker):
-  - `select!` on control vs inbox:
-    - On command: pause/resume/stop locally.
-    - On `Envelope`: run tower service with `ServiceRequest { task, ctx, producer, attempt }`.
-      - Success: mark task success, send `WorkerResult::Ack { task }` to dispatcher result channel, emit stats (latency, counters).
-      - Error: set retry/DLQ info on task, send `WorkerResult::Nack { task, reason }`, emit failure stats.
-      - User code can call `producer.enqueue(task)` to submit new work via dispatcher.
-- Stats/observability:
-  - Workers send periodic metrics to aggregator; dispatcher can report queue depth/dequeue rate.
-  - HTTP `/metrics` and `/health` behind `http` feature; tracing spans around dequeue/dispatch/service calls with task/worker IDs.
+I would like to use Prometheus for metrics in my cluster and Graphana. Need something compatible, is it possible to have few sources with Graphana? k3s will use prometheus which i could observe using Graphana. How we could organize metrics for capp-rs? I remember one can not push events into Prometheus there is thing like Gateway to pypass it. Research options and return back with report.
+
+### Observability todo
+- Approach: use OpenTelemetry + Prometheus exporter (pull-based), with Grafana pointing at Prom. For multi-source, Prometheus scrapes each pod/instance; Grafana aggregates via Prom queries. Pushgateway stays optional for batch jobs.
+- Dependencies to add (workspace-level): `opentelemetry`, `opentelemetry_sdk`, `opentelemetry-prometheus` (metrics exporter), `tracing-opentelemetry` (bridge spans to OTel), optional `opentelemetry-otlp` if we later emit to a collector instead of direct Prom scrape.
+- Runtime wiring plan: init OTel meter/provider in `capp` (feature-gated, e.g., `metrics`/`http`), register Prometheus exporter, and expose `/metrics` via the planned observability HTTP endpoint. Collector-friendly path: allow OTLP config (env/TOML) to send metrics to k3s Prometheus/collector when scraping isn’t possible.
+- Metrics to emit: counters/gauges for queue depth (when available), processed/succeeded/failed/terminal_failures, worker concurrency, dequeue latency histogram, service execution latency histogram, and retry counts. Tie existing `StatsSnapshot` to gauges to keep values in sync.
+- TODOs: decide feature flag name (`observability`/`metrics`), add config knobs (endpoint bind, OTLP endpoint/headers, histogram buckets), wire shutdown to flush providers, and add an example snippet showing Prom scrape config + Grafana query.
+
+^^^ let's start to form context about observability, rename "report" section into "Observability todo". Where we'll form TODO (name of deps to add into Cargo.toml etc)
+
+
+### Need to write real example.
+
+Which could use httpbin service as target to fetch different pages and demonstrate how it could act in real world example, after it done it should provide report with data.
+
+Make detailed plan about how this example should work (if should fit 1 file btw and just fjall as queue backend).
+
+### Plan (write plan here)
+- Single-file example `examples/httpbin_mailbox.rs` using fjall queue (`FjallTaskQueue<_, JsonSerializer>::open(path)`) and the mailbox runtime.
+- Task payload `FetchJob { path: String }` with base URL configurable via env (default `https://httpbin.org`). Seed tasks like `/get?i=n`, `/uuid`, `/delay/2`, `/status/500` to exercise success, latency, and errors.
+- Build one `reqwest::Client` in context; base `service_fn` clones it, builds URL, times the request, and sends `FetchResult { url, status, latency_ms, body_len, error }` over a channel for reporting.
+- Compose Tower stack with `ServiceBuilder`: load-shed + buffer (e.g., 32) + concurrency limit (e.g., 8) + timeout (e.g., 5s) plus a retry layer (`tower::retry::Retry` with exponential/backoff policy from `capp_config::backoff`), then box into `MailboxService`.
+- Configure `MailboxConfig` (worker_count ~4, max_retries 2–3, short dequeue_backoff), enqueue the tasks, wait for all results/stat snapshots, then `shutdown`.
+- Aggregate results into a summary printed to stdout (counts by status, failures with errors/attempts, average latency; optionally emit a tiny CSV/JSON snippet to mimic a “report with data”).

@@ -52,6 +52,10 @@ bson = { version = "2.15", features = ["chrono-0_4"], optional = true }
 mongodb = { version = "3", optional = true }
 sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "json", "uuid", "chrono" ], optional = true }
 toml = { workspace = true }
+tower = { version = "0.5.2", features = ["util", "timeout", "load-shed", "limit", "buffer", "retry"] }
+opentelemetry = { version = "0.31.0", features = ["metrics"], optional = true }
+opentelemetry_sdk = { version = "0.31.0", features = ["metrics", "rt-tokio"], optional = true }
+opentelemetry-otlp = { version = "0.31.0", features = ["metrics", "http-proto"], optional = true }
 
 [dev-dependencies]
 capp = { path = ".", features = ["http", "router", "healthcheck", "mongodb", "redis", "cache", "urls"] }
@@ -75,12 +79,20 @@ urls = ["capp-urls"]
 redis = ["capp-queue/redis", "dep:rustis"]
 mongodb = ["capp-queue/mongodb", "dep:mongodb", "dep:chrono", "dep:bson"]
 postgres = ["capp-queue/postgres", "dep:sqlx"]
+observability = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+]
 
 [[example]]
 name = "basic"
 path = "../examples/basic.rs"
 
+[[example]]
+name = "mailbox"
+path = "../examples/mailbox.rs"
+
 # [[example]]
 # name = "hackernews"
 # path = "../examples/hackernews/main.rs"
-

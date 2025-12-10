@@ -28,6 +28,7 @@ mongodb = { version = "3", optional = true }
 futures = { version = "0.3", optional = true }
 futures-util = { version = "0.3", optional = true }
 sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "json", "uuid", "chrono" ], optional = true }
+tower = { version = "0.5.2", features = ["util", "timeout", "load-shed", "limit", "buffer", "retry"] }
 
 [dev-dependencies]
 dotenvy = "0.15"
