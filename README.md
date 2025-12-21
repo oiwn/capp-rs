@@ -10,7 +10,7 @@ asynchronous task processing systems with multiple backend support.
 
 ## Features
 
-- **Multi-Backend Task Queues**: Support for Redis, MongoDB, PostgreSQL, and in-memory storage
+- **Multi-Backend Task Queues**: Support for Fjall (default), MongoDB, and in-memory storage
 - **Configurable Workers**: Process tasks concurrently with customizable retry logic and timeouts
 - **Dead Letter Queue (DLQ)**: Automatic handling of failed tasks
 - **Round-Robin Processing**: Fair task distribution across different domains
@@ -26,7 +26,7 @@ Add to your `Cargo.toml`:
 capp = "0.4"
 
 # Optional features
-capp = { version = "0.4", features = ["redis", "mongodb", "postgres"] }
+capp = { version = "0.4", features = ["mongodb", "router"] }
 ```
 
 ## Usage
@@ -74,15 +74,6 @@ async fn main() {
 }
 ```
 
-### Redis Queue Example
-
-```rust
-use capp::prelude::*;
-
-let client = Client::connect("redis://localhost:6379").await?;
-let queue = RedisTaskQueue::new(client, "my-queue").await?;
-```
-
 ## Configuration
 
 Configure via TOML files:
@@ -104,9 +95,8 @@ uri = "http://proxy.example.com:8080"
 ## Features
 
 - **http**: HTTP client functionality with proxy support
-- **redis**: Redis backend support
+- **fjall**: Embedded queue backend enabled by default
 - **mongodb**: MongoDB backend support
-- **postgres**: PostgreSQL backend support
 - **router**: URL classification and routing
 - **healthcheck**: System health monitoring
 

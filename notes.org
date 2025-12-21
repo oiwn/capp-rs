@@ -7,7 +7,6 @@
 ** tui interface
 ** consider to use https://crates.io/crates/config instead of current configuration?
 ** figure if it can get rid of returning yaml_value in favour of some generic configuration type
-** DONE Redis backend should return RedisError, now custom ones.
 ** DONE mongodb queue
 ** DONE postgres queue
 ** TODO benchmarks criterion
@@ -27,11 +26,9 @@ let router = axum::Router::new()
 ** need workflows
 - [ ] coverage
 - [X] tests/clippy/check/fmt
-- [ ] integration tests (require only redis now)
 ** TODO healthcheck
 - [X] internet
 - [ ] proxy with httpbin
-- [ ] optional redis
 - [ ] optional mongodb
 - [ ] optional postgres
 ** Refactor worker. Add basic monitoring capabilities.
@@ -73,7 +70,5 @@ Manager should collect stats about workers
 ** DONE prelude rs
 ** TODO tower integration
 ** I think need to update Status states with channels.
-** redis storage backend with bloom filter
-** redis storage backend with priorities
 * Notes
 ** httpbin could be launched as container "docker run -p 80:80 kennethreitz/httpbin"

@@ -167,7 +167,7 @@ mod tests {
         let app = TestApp::from_config(config_path);
 
         assert_eq!(
-            app.get_config_value("logging.log_to_redis")
+            app.get_config_value("logging.log_to_file")
                 .unwrap()
                 .as_bool(),
             Some(true)

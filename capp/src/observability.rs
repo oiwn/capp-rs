@@ -1,20 +1,31 @@
+use std::time::Duration;
+
 use opentelemetry::{KeyValue, global};
 use opentelemetry_otlp::{ExportConfig, WithExportConfig};
 use opentelemetry_sdk::{
     Resource,
     metrics::{PeriodicReader, SdkMeterProvider},
-    runtime,
 };
 
 /// Handle returned by `init_metrics` so callers can flush on shutdown.
 pub struct MetricsHandle {
-    provider: SdkMeterProvider,
+    provider: Option<SdkMeterProvider>,
 }
 
 impl MetricsHandle {
     /// Flush buffered metrics.
-    pub fn shutdown(self) {
-        let _ = self.provider.shutdown();
+    pub fn shutdown(mut self) {
+        if let Some(provider) = self.provider.take() {
+            let _ = provider.shutdown();
+        }
+    }
+}
+
+impl Drop for MetricsHandle {
+    fn drop(&mut self) {
+        if let Some(provider) = self.provider.take() {
+            let _ = provider.shutdown();
+        }
     }
 }
 
@@ -28,16 +39,21 @@ pub fn init_metrics(
     let exporter = opentelemetry_otlp::MetricExporter::builder()
         .with_http()
         .with_export_config(ExportConfig {
-            endpoint: endpoint
-                .unwrap_or("http://127.0.0.1:4318/v1/metrics")
-                .to_string(),
+            endpoint: Some(
+                endpoint
+                    // Expect base OTLP endpoint (no /v1/metrics suffix); defaults to local OTLP port.
+                    .unwrap_or("http://127.0.0.1:4318")
+                    .to_string(),
+            ),
             ..Default::default()
         })
         .build()?;
 
-    let reader = PeriodicReader::builder(exporter, runtime::Tokio).build();
+    let reader = PeriodicReader::builder(exporter)
+        .with_interval(Duration::from_secs(1))
+        .build();
     let resource = Resource::builder()
-        .with_service_name(service_name)
+        .with_service_name(service_name.to_string())
         .with_attributes([KeyValue::new("library", "capp")])
         .build();
 
@@ -48,5 +64,7 @@ pub fn init_metrics(
 
     global::set_meter_provider(provider.clone());
 
-    Ok(MetricsHandle { provider })
+    Ok(MetricsHandle {
+        provider: Some(provider),
+    })
 }

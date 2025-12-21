@@ -7,7 +7,7 @@ user_agents_file = "tests/simple_uas.txt"
 entities = ["apple", "orange"]
 
 [logging]
-log_to_redis = true
+log_to_file = true
 
 [logging.log_settings]
 file_name = "errors.log"

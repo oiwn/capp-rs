@@ -4,7 +4,7 @@
 CAPP (Comprehensive Asynchronous Parallel Processing) is a Rust workspace for building web crawlers and async task processors. It supplies worker orchestration, configurable queues, routing utilities, and health checks so crawlers can scale across domains and backends.
 
 ## Core Capabilities
-- Multi-backend queues: in-memory, Redis, MongoDB, PostgreSQL (schema in `migrations/`).
+- Multi-backend queues: in-memory, Fjall (default), MongoDB.
 - Workers manager: configurable concurrency, retries, round-robin distribution, dead-letter queue.
 - Config + HTTP helpers: YAML-driven settings, proxy/backoff utilities; routing for URL classification.
 - Health monitoring: built-in internet/endpoint checks to keep runtimes healthy.
@@ -20,9 +20,21 @@ CAPP (Comprehensive Asynchronous Parallel Processing) is a Rust workspace for bu
 Add the crate with optional backends:
 ```toml
 [dependencies]
-capp = { version = "0.5", features = ["redis", "mongodb", "postgres", "router"] }
+capp = { version = "0.5", features = ["mongodb", "router"] }
 ```
 See `examples/basic.rs` for minimal worker setup; run with `cargo run --example basic`.
+
+## Example: Mailbox Stats HTTP
+Run the mailbox demo with a live stats endpoint:
+```sh
+cargo run -p capp --features stats-http --example mailbox_stats_http
+```
+Then query the stats endpoint:
+```sh
+curl http://127.0.0.1:8080/stats
+```
+The demo runs indefinitely and enqueues a follow-up task after each success. Stop
+it with Ctrl+C.
 
 ## Development Commands
 - `cargo fmt --all` — rustfmt (edition 2024, width 84).

@@ -18,16 +18,11 @@ serde_json = { workspace = true }
 async-trait = { workspace = true }
 uuid = { workspace = true }
 fjall = { workspace = true, optional = true }
-
-# rustis = { version = "0.13", features = ["tokio-runtime"], optional = true }
-rustis = { version = "0.16", features = ["tokio-runtime"], optional = true }
 chrono = { version = "0.4", features = ["serde"], optional = true  }
 bson = { version = "2.13", features = ["chrono-0_4"], optional = true }
-# mongodb = { version = "3", optional = true }
 mongodb = { version = "3", optional = true }
 futures = { version = "0.3", optional = true }
 futures-util = { version = "0.3", optional = true }
-sqlx = { version = "0.8", features = [ "runtime-tokio", "postgres", "json", "uuid", "chrono" ], optional = true }
 tower = { version = "0.5.2", features = ["util", "timeout", "load-shed", "limit", "buffer", "retry"] }
 
 [dev-dependencies]
@@ -42,9 +37,7 @@ tempfile = "3"
 [features]
 default = ["fjall"]
 fjall = ["dep:fjall"]
-redis = ["dep:rustis"]
 mongodb = ["dep:futures", "dep:futures-util", "dep:mongodb", "dep:chrono", "dep:bson"]
-postgres = ["dep:sqlx"]
 
 [[bench]]
 name = "fjall_bench"
@@ -55,16 +48,6 @@ name = "inmemory_bench"
 harness = false
 
 [[bench]]
-name = "redis_bench"
-harness = false
-required-features = ["redis"]
-
-[[bench]]
 name = "mongo_bench"
 harness = false
 required-features = ["mongodb"]
-
-[[bench]]
-name = "postgres_bench"
-harness = false
-required-features = ["postgres"]

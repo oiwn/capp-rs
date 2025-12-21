@@ -9,10 +9,6 @@ pub use crate::backend::FjallTaskQueue;
 pub use crate::backend::InMemoryTaskQueue;
 #[cfg(feature = "mongodb")]
 pub use crate::backend::MongoTaskQueue;
-#[cfg(feature = "postgres")]
-pub use crate::backend::PostgresTaskQueue;
-#[cfg(feature = "redis")]
-pub use crate::backend::{RedisRoundRobinTaskQueue, RedisTaskQueue};
 pub use crate::dispatch::{
     ProducerError, ProducerHandle, ProducerMsg, WorkerResult,
 };
@@ -41,13 +37,7 @@ pub enum TaskQueueError {
     #[cfg(feature = "fjall")]
     #[error("Fjall error")]
     FjallError(#[from] fjall::Error),
-    #[cfg(feature = "redis")]
-    #[error("Redis error")]
-    RedisError(#[from] rustis::Error),
     #[cfg(feature = "mongodb")]
     #[error("Mongodb Error")]
     MongodbError(#[from] mongodb::error::Error),
-    #[cfg(feature = "postgres")]
-    #[error("Postgres Error")]
-    PostgresError(#[from] sqlx::Error),
 }

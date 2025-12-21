@@ -3,14 +3,10 @@ use serde::{Serialize, de::DeserializeOwned};
 
 // Marker traits for backend compatibility
 pub trait InMemoryCompatible {}
-pub trait RedisCompatible {}
 pub trait MongoCompatible {}
-pub trait PostgresCompatible {}
 
 // Mark which backends JsonSerializer is compatible with
 impl InMemoryCompatible for JsonSerializer {}
-impl RedisCompatible for JsonSerializer {}
-impl PostgresCompatible for JsonSerializer {}
 
 #[cfg(feature = "mongodb")]
 impl MongoCompatible for BsonSerializer {}

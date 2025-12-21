@@ -17,14 +17,11 @@ We need to check and make sure user of library would be able to define own middl
 I would like to use Prometheus for metrics in my cluster and Graphana. Need something compatible, is it possible to have few sources with Graphana? k3s will use prometheus which i could observe using Graphana. How we could organize metrics for capp-rs? I remember one can not push events into Prometheus there is thing like Gateway to pypass it. Research options and return back with report.
 
 ### Observability todo
-- Approach: use OpenTelemetry + Prometheus exporter (pull-based), with Grafana pointing at Prom. For multi-source, Prometheus scrapes each pod/instance; Grafana aggregates via Prom queries. Pushgateway stays optional for batch jobs.
-- Dependencies to add (workspace-level): `opentelemetry`, `opentelemetry_sdk`, `opentelemetry-prometheus` (metrics exporter), `tracing-opentelemetry` (bridge spans to OTel), optional `opentelemetry-otlp` if we later emit to a collector instead of direct Prom scrape.
-- Runtime wiring plan: init OTel meter/provider in `capp` (feature-gated, e.g., `metrics`/`http`), register Prometheus exporter, and expose `/metrics` via the planned observability HTTP endpoint. Collector-friendly path: allow OTLP config (env/TOML) to send metrics to k3s Prometheus/collector when scraping isn’t possible.
-- Metrics to emit: counters/gauges for queue depth (when available), processed/succeeded/failed/terminal_failures, worker concurrency, dequeue latency histogram, service execution latency histogram, and retry counts. Tie existing `StatsSnapshot` to gauges to keep values in sync.
-- TODOs: decide feature flag name (`observability`/`metrics`), add config knobs (endpoint bind, OTLP endpoint/headers, histogram buckets), wire shutdown to flush providers, and add an example snippet showing Prom scrape config + Grafana query.
-
-^^^ let's start to form context about observability, rename "report" section into "Observability todo". Where we'll form TODO (name of deps to add into Cargo.toml etc)
-
+- Approach chosen: OpenTelemetry OTLP metrics (HTTP) behind `observability` feature; Prometheus/Grafana ingest via OTLP endpoint or collector.
+- Deps (capp, optional): `opentelemetry`, `opentelemetry_sdk`, `opentelemetry-otlp`.
+- Wiring: `observability::init_metrics(service_name, endpoint?)` installs OTLP exporter (default `http://127.0.0.1:4318/v1/metrics`), sets global meter; returns shutdown handle.
+- Emitted metrics via mailbox stats: counters `capp_tasks_processed_total`, `capp_tasks_succeeded_total`, `capp_tasks_failed_total`, `capp_tasks_terminal_failures_total`; histogram `capp_task_latency_ms`; gauge `capp_queue_depth`.
+- Example hook: `examples/mailbox.rs` calls `init_metrics`, reads `OTEL_EXPORTER_OTLP_ENDPOINT` if set; smoke test under feature flag.
 
 ### Need to write real example.
 

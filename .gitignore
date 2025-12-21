@@ -18,6 +18,7 @@ Cargo.lock
 # misc
 .env
 /tmp
+.cargo
 tags
 
 tarpaulin-report.html

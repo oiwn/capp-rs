@@ -10,7 +10,7 @@ practices and a well-thought-out architecture.
 ### Core Components
 
 1. **Task Queue System**
-   - Multiple backend implementations (Redis, MongoDB, Postgres, In-Memory)
+   - Multiple backend implementations (Fjall, MongoDB, In-Memory)
    - Generic task handling with serialization support
    - Dead Letter Queue (DLQ) for failed tasks
    - Round-robin task distribution capability

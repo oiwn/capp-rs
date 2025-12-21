@@ -612,10 +612,10 @@ impl ObservabilityMetrics {
             .build();
         let queue_depth = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
         let gauge_state = queue_depth.clone();
-        let queue_depth = meter
+        let queue_depth_inst = meter
             .u64_observable_gauge("capp_queue_depth")
             .with_description("Last observed queue depth (when backend reports)")
-            .with_callback(|obs| {
+            .with_callback(move |obs| {
                 obs.observe(
                     gauge_state.load(std::sync::atomic::Ordering::Relaxed),
                     &[],
@@ -629,8 +629,8 @@ impl ObservabilityMetrics {
             failed,
             terminal_failure,
             latency_ms,
-            queue_depth: gauge_state,
-            _queue_depth_inst: queue_depth,
+            queue_depth,
+            _queue_depth_inst: queue_depth_inst,
         }
     }
 
