@@ -9,8 +9,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  REDIS_URI: redis://localhost:6379
-  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/testdb
 
 jobs:
   check:
@@ -38,15 +36,6 @@ jobs:
     name: Test Suite
     runs-on: ubuntu-latest
     services:
-      redis:
-        image: redis
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
       mongodb:
         image: mongo:6
         ports:
@@ -56,22 +45,8 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: testdb
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     env:
       MONGODB_URI: mongodb://localhost:27017/testdb
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/testdb
 
     steps:
       - uses: actions/checkout@v4
@@ -175,34 +150,12 @@ jobs:
     name: Code coverage
     runs-on: ubuntu-latest
     services:
-      redis:
-        image: redis
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
       mongodb:
         image: mongo:6
         ports:
           - 27017:27017
         options: >-
           --health-cmd "mongosh --eval 'db.runCommand(\"ping\").ok'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: testdb
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -223,12 +176,6 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install SQLx CLI
-        run: cargo install sqlx-cli --no-default-features --features postgres
-        
-      - name: Run SQLx Migrations
-        run: sqlx migrate run
-          
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
         
@@ -244,4 +191,3 @@ jobs:
           verbose: true
     env:
       MONGODB_URI: mongodb://localhost:27017/testdb
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/testdb

@@ -5,7 +5,7 @@
 ## Status
 - [x] Tower middleware extensibility: mailbox runtime accepts any boxed Tower stack; `build_service_stack` is optional sugar.
 - [x] Observability: OTLP metrics via `observability` feature and Prometheus/Grafana ingest.
-- [ ] Real httpbin example with report output (plan below).
+- [x] Real httpbin example using Tower rate limits + timeouts.
 
 ## Tower Middleware Notes (done)
 - `spawn_mailbox_runtime` takes a `MailboxService` (`BoxCloneService<ServiceRequest<_, _>, (), BoxError>`), so callers can build their own `ServiceBuilder` chain (retry, timeout, tracing, tower-http).
@@ -19,12 +19,11 @@
 - Emitted metrics: `capp_tasks_processed_total`, `capp_tasks_succeeded_total`, `capp_tasks_failed_total`, `capp_tasks_terminal_failures_total`, `capp_task_latency_ms`, `capp_queue_depth`.
 - Example hook exists in `examples/mailbox.rs` with `OTEL_EXPORTER_OTLP_ENDPOINT`.
 
-## Httpbin Example Plan (todo)
-- Single-file `examples/httpbin_mailbox.rs` using fjall queue and mailbox runtime.
-- Task payload `FetchJob { path }` with base URL from env (default `https://httpbin.org`).
-- One `reqwest::Client` in context; service collects latency + status and reports via channel.
-- Tower stack with load-shed, buffer, concurrency limit, timeout, and retry.
-- Print summary report (counts by status + latency stats).
+## Httpbin Example Notes (done)
+- `examples/httpbin_tower.rs` uses mailbox runtime + Tower stack (rate limit,
+  concurrency limit, buffer, timeout).
+- Includes `/delay/*` endpoints to trigger the timeout layer and `/status/500`
+  to exercise retries/DLQ behavior.
 
 ## Benchmarks
 - Microbenchmarks for hot paths using `criterion`: queue push/pop and serializer encode/decode.

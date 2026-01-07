@@ -12,7 +12,7 @@
 - [x] Fjall queue backend + benches (default feature).
 - [x] Mailbox dispatcher + per-worker inboxes, control/stop, stats snapshot.
 - [ ] Observability HTTP endpoint with Prometheus text output (decision: use Prometheus text; JSON optional).
-- [ ] README/docs refresh + migration note (TOML-only, tower+mailbox wiring).
+- [x] README/docs refresh + migration note (TOML-only, tower+mailbox wiring).
 - [ ] Optional fjall cache backend (get/set/ttl) if still desired.
 
 ## Pillars (Current State + Next Steps)
@@ -34,7 +34,7 @@
 
 5) Docs & migration  
    - Current: specs/examples cover tower+mailbox + fjall; TOML already the only config.  
-   - TODO: README refresh, migration note for 0.6 (TOML only, new worker wiring, fjall default).
+   - Done: README refresh + migration guide in `specs/migration-0.6.md`.
 
 ## Decisions
 - No backward compatibility guarantee for 0.6; old polling paths can be removed after any shims.  

@@ -6,7 +6,8 @@ CAPP (Comprehensive Asynchronous Parallel Processing) is a Rust workspace for bu
 ## Core Capabilities
 - Multi-backend queues: in-memory, Fjall (default), MongoDB.
 - Workers manager: configurable concurrency, retries, round-robin distribution, dead-letter queue.
-- Config + HTTP helpers: YAML-driven settings, proxy/backoff utilities; routing for URL classification.
+- Config + HTTP helpers: TOML-driven settings, proxy/backoff utilities; routing for URL classification.
+- Mailbox runtime: Tower-native execution pipeline with rate limits, timeouts, and stats.
 - Health monitoring: built-in internet/endpoint checks to keep runtimes healthy.
 
 ## Workspace Layout
@@ -14,13 +15,13 @@ CAPP (Comprehensive Asynchronous Parallel Processing) is a Rust workspace for bu
 - `capp-queue/`: queue traits/backends, serializers, task types.
 - `capp-config/`: config loader, HTTP/proxy/backoff helpers, router glue.
 - `capp-router/`, `capp-cache/`, `capp-urls/`: opt-in routing, caching, and URL helpers.
-- `examples/`: runnable demos (`basic`, `urls`, `hackernews`); `tests/`: integration flows with shared harness in `tests/common/`.
+- `examples/`: runnable demos (`basic`, `urls`, `mailbox`, `httpbin_tower`); `tests/`: integration flows with shared harness in `tests/common/`.
 
 ## Quick Start
 Add the crate with optional backends:
 ```toml
 [dependencies]
-capp = { version = "0.5", features = ["mongodb", "router"] }
+capp = { version = "0.6", features = ["mongodb", "router"] }
 ```
 See `examples/basic.rs` for minimal worker setup; run with `cargo run --example basic`.
 
