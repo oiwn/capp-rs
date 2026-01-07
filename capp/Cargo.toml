@@ -103,6 +103,10 @@ path = "../examples/otlp_heartbeat.rs"
 name = "mailbox_stats_http"
 path = "../examples/mailbox_stats_http.rs"
 
+[[example]]
+name = "httpbin_tower"
+path = "../examples/httpbin_tower.rs"
+
 # [[example]]
 # name = "hackernews"
 # path = "../examples/hackernews/main.rs"

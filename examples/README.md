@@ -37,6 +37,13 @@ Runs indefinitely; stop with Ctrl+C.
 cargo run -p capp --features stats-http --example mailbox_stats_http
 ```
 
+## httpbin_tower.rs
+Mailbox demo that fetches HTTPBin endpoints with Tower rate limiting + timeouts.
+Uses `/delay/*` endpoints to trigger the timeout layer.
+```sh
+cargo run -p capp --features http --example httpbin_tower
+```
+
 ## otlp_heartbeat.rs
 Emits a heartbeat metric to verify OTLP ingestion. Requires `observability`.
 Defaults to `http://127.0.0.1:4318` (override with `OTEL_EXPORTER_OTLP_ENDPOINT`).
