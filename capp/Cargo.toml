@@ -94,18 +94,22 @@ path = "../examples/mailbox.rs"
 [[example]]
 name = "mailbox_metrics"
 path = "../examples/mailbox_metrics.rs"
+required-features = ["observability"]
 
 [[example]]
 name = "otlp_heartbeat"
 path = "../examples/otlp_heartbeat.rs"
+required-features = ["observability"]
 
 [[example]]
 name = "mailbox_stats_http"
 path = "../examples/mailbox_stats_http.rs"
+required-features = ["stats-http"]
 
 [[example]]
 name = "httpbin_tower"
 path = "../examples/httpbin_tower.rs"
+required-features = ["http"]
 
 # [[example]]
 # name = "hackernews"
