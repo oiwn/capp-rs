@@ -59,3 +59,46 @@ pub enum ProducerError {
     #[error("producer channel closed")]
     ChannelClosed,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Task;
+
+    #[tokio::test]
+    async fn channel_enqueue_delivers_task() {
+        let (producer, mut rx) = ProducerHandle::channel(4);
+        let task = Task::new(42u32);
+
+        producer.enqueue(task.clone()).await.unwrap();
+
+        match rx.recv().await {
+            Some(ProducerMsg::Enqueue(received)) => {
+                assert_eq!(received.payload, task.payload);
+            }
+            other => panic!("unexpected message: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn sender_clone_enqueues() {
+        let (tx, mut rx) = mpsc::channel(4);
+        let producer = ProducerHandle::new(tx);
+        let sender = producer.sender();
+        let task = Task::new("hi");
+
+        sender.send(ProducerMsg::Enqueue(task)).await.unwrap();
+
+        let msg = rx.recv().await;
+        assert!(matches!(msg, Some(ProducerMsg::Enqueue(_))));
+    }
+
+    #[tokio::test]
+    async fn enqueue_errors_when_channel_closed() {
+        let (producer, rx) = ProducerHandle::channel(1);
+        drop(rx);
+
+        let result = producer.enqueue(Task::new(7u32)).await;
+        assert!(matches!(result, Err(ProducerError::ChannelClosed)));
+    }
+}

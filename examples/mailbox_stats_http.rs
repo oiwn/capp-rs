@@ -54,7 +54,7 @@ async fn main() -> Result<(), BoxError> {
                     "processing task"
                 );
                 tokio::time::sleep(delay).await;
-                if req.task.payload.id % 7 == 0 && req.attempt <= 1 {
+                if req.task.payload.id.is_multiple_of(7) && req.attempt <= 1 {
                     return Err(anyhow::anyhow!("simulated failure"))
                         .map_err(Into::into);
                 }

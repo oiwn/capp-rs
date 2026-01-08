@@ -208,28 +208,28 @@ where
     }
 
     let mut handles = Vec::with_capacity(worker_count + 1);
-    handles.push(tokio::spawn(dispatcher_loop(
-        queue.clone(),
-        control_rx_for_dispatcher,
+    handles.push(tokio::spawn(dispatcher_loop(DispatcherParams {
+        queue: queue.clone(),
+        control_rx: control_rx_for_dispatcher,
         producer_rx,
         result_rx,
-        inbox_senders,
-        config.max_retries,
-        config.dequeue_backoff,
-        stats_tx.clone(),
-    )));
+        inboxes: inbox_senders,
+        max_retries: config.max_retries,
+        dequeue_backoff: config.dequeue_backoff,
+        stats_tx: stats_tx.clone(),
+    })));
 
     for (worker_idx, inbox) in inbox_receivers.into_iter().enumerate() {
-        handles.push(tokio::spawn(worker_loop(
-            worker_idx,
-            ctx.clone(),
+        handles.push(tokio::spawn(worker_loop(WorkerParams {
+            worker_id: worker_idx,
+            ctx: ctx.clone(),
             inbox,
-            control_tx.subscribe(),
-            service.clone(),
-            result_tx.clone(),
-            stats_tx.clone(),
-            producer.clone(),
-        )));
+            control_rx: control_tx.subscribe(),
+            service: service.clone(),
+            result_tx: result_tx.clone(),
+            stats_tx: stats_tx.clone(),
+            producer: producer.clone(),
+        })));
     }
     handles.push(stats_handle);
 
@@ -241,17 +241,20 @@ where
     }
 }
 
-#[instrument(skip_all)]
-async fn dispatcher_loop<D>(
+struct DispatcherParams<D: Clone> {
     queue: AbstractTaskQueue<D>,
-    mut control_rx: broadcast::Receiver<ControlCommand>,
-    mut producer_rx: mpsc::Receiver<ProducerMsg<D>>,
-    mut result_rx: mpsc::Receiver<WorkerResult<D>>,
-    mut inboxes: Vec<mpsc::Sender<Envelope<D>>>,
+    control_rx: broadcast::Receiver<ControlCommand>,
+    producer_rx: mpsc::Receiver<ProducerMsg<D>>,
+    result_rx: mpsc::Receiver<WorkerResult<D>>,
+    inboxes: Vec<mpsc::Sender<Envelope<D>>>,
     max_retries: u32,
     dequeue_backoff: Duration,
     stats_tx: mpsc::Sender<StatsEvent>,
-) where
+}
+
+#[instrument(skip_all)]
+async fn dispatcher_loop<D>(params: DispatcherParams<D>)
+where
     D: std::fmt::Debug
         + Clone
         + Serialize
@@ -260,6 +263,16 @@ async fn dispatcher_loop<D>(
         + Sync
         + 'static,
 {
+    let DispatcherParams {
+        queue,
+        mut control_rx,
+        mut producer_rx,
+        mut result_rx,
+        mut inboxes,
+        max_retries,
+        dequeue_backoff,
+        stats_tx,
+    } = params;
     let mut paused = false;
     let mut stopping = false;
     let mut next_worker = 0usize;
@@ -420,16 +433,19 @@ where
     Ok(())
 }
 
-async fn worker_loop<D, Ctx>(
+struct WorkerParams<D: Clone, Ctx> {
     worker_id: usize,
     ctx: Arc<Ctx>,
-    mut inbox: mpsc::Receiver<Envelope<D>>,
-    mut control_rx: broadcast::Receiver<ControlCommand>,
+    inbox: mpsc::Receiver<Envelope<D>>,
+    control_rx: broadcast::Receiver<ControlCommand>,
     service: MailboxService<D, Ctx>,
     result_tx: mpsc::Sender<WorkerResult<D>>,
     stats_tx: mpsc::Sender<StatsEvent>,
     producer: ProducerHandle<D>,
-) where
+}
+
+async fn worker_loop<D, Ctx>(params: WorkerParams<D, Ctx>)
+where
     D: std::fmt::Debug
         + Clone
         + Serialize
@@ -439,6 +455,16 @@ async fn worker_loop<D, Ctx>(
         + 'static,
     Ctx: Send + Sync + 'static,
 {
+    let WorkerParams {
+        worker_id,
+        ctx,
+        mut inbox,
+        mut control_rx,
+        service,
+        result_tx,
+        stats_tx,
+        producer,
+    } = params;
     let mut paused = false;
     let mut stop_requested = false;
 

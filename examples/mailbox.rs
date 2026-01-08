@@ -47,8 +47,8 @@ async fn main() -> Result<(), BoxError> {
             let done_tx = done_tx.clone();
             async move {
                 let delay = Duration::from_millis(req.task.payload.sleep_ms);
-                let stubborn = req.task.payload.id % 15 == 0;
-                let random_fail = req.task.payload.id % 5 == 0;
+                let stubborn = req.task.payload.id.is_multiple_of(15);
+                let random_fail = req.task.payload.id.is_multiple_of(5);
                 let should_fail = (stubborn && req.attempt <= 3) || random_fail;
                 tracing::info!(
                     task_id = req.task.payload.id,

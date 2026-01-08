@@ -59,7 +59,8 @@ async fn main() -> Result<(), BoxError> {
         service_fn(move |req: ServiceRequest<DemoTask, ()>| {
             let done_tx = done_tx.clone();
             async move {
-                let should_fail = req.task.payload.id % 5 == 0 && req.attempt <= 2;
+                let should_fail =
+                    req.task.payload.id.is_multiple_of(5) && req.attempt <= 2;
                 let delay = Duration::from_millis(req.task.payload.delay_ms);
                 tracing::info!(
                     task_id = req.task.payload.id,
