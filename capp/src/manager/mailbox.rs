@@ -686,8 +686,10 @@ impl ObservabilityMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use capp_queue::{InMemoryTaskQueue, JsonSerializer};
+    use capp_queue::{InMemoryTaskQueue, JsonSerializer, TaskQueue};
     use serde::{Deserialize, Serialize};
+    use std::io;
+    use tokio::task::yield_now;
     use tokio::time::timeout;
     use tower::{BoxError, service_fn};
 
@@ -751,6 +753,319 @@ mod tests {
         .expect("tasks not processed in time");
 
         runtime.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn build_service_stack_boxes_errors() {
+        let base_service =
+            service_fn(|_req: ServiceRequest<TestPayload, ()>| async move {
+                Err::<(), io::Error>(io::Error::new(io::ErrorKind::Other, "boom"))
+            });
+        let service = build_service_stack(
+            base_service,
+            ServiceStackOptions {
+                timeout: None,
+                buffer: 1,
+                concurrency_limit: Some(1),
+            },
+        );
+        let (producer, _producer_rx) = ProducerHandle::channel(1);
+        let request = ServiceRequest {
+            task: Task::new(TestPayload { value: 99 }),
+            ctx: Arc::new(()),
+            producer,
+            attempt: 1,
+            worker_id: 0,
+        };
+
+        let result = service.clone().oneshot(request).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn handle_producer_msg_enqueues_task() {
+        let queue =
+            Arc::new(InMemoryTaskQueue::<TestPayload, JsonSerializer>::new());
+        let abstract_queue: AbstractTaskQueue<TestPayload> = queue.clone();
+        let task = Task::new(TestPayload { value: 10 });
+
+        handle_producer_msg(&abstract_queue, ProducerMsg::Enqueue(task.clone()))
+            .await
+            .unwrap();
+
+        let popped = queue.pop().await.unwrap();
+        assert_eq!(popped.payload.value, task.payload.value);
+    }
+
+    #[tokio::test]
+    async fn handle_worker_result_ack_removes_task() {
+        let queue =
+            Arc::new(InMemoryTaskQueue::<TestPayload, JsonSerializer>::new());
+        let abstract_queue: AbstractTaskQueue<TestPayload> = queue.clone();
+        let (stats_tx, _stats_rx) = mpsc::channel(4);
+        let task = Task::new(TestPayload { value: 1 });
+
+        queue.push(&task).await.unwrap();
+        handle_worker_result(
+            &abstract_queue,
+            WorkerResult::Ack { task: task.clone() },
+            1,
+            &stats_tx,
+        )
+        .await
+        .unwrap();
+
+        assert!(queue.hashmap.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn handle_worker_result_retry_requeues_task() {
+        let queue =
+            Arc::new(InMemoryTaskQueue::<TestPayload, JsonSerializer>::new());
+        let abstract_queue: AbstractTaskQueue<TestPayload> = queue.clone();
+        let (stats_tx, _stats_rx) = mpsc::channel(4);
+        let task = Task::new(TestPayload { value: 2 });
+
+        queue.push(&task).await.unwrap();
+        handle_worker_result(
+            &abstract_queue,
+            WorkerResult::Nack {
+                task: task.clone(),
+                error: "nope".to_string(),
+            },
+            3,
+            &stats_tx,
+        )
+        .await
+        .unwrap();
+
+        assert!(queue.hashmap.lock().unwrap().contains_key(&task.task_id));
+    }
+
+    #[tokio::test]
+    async fn handle_worker_result_dlq_emits_terminal_failure() {
+        let queue =
+            Arc::new(InMemoryTaskQueue::<TestPayload, JsonSerializer>::new());
+        let abstract_queue: AbstractTaskQueue<TestPayload> = queue.clone();
+        let (stats_tx, mut stats_rx) = mpsc::channel(4);
+        let mut task = Task::new(TestPayload { value: 3 });
+        task.retries = 3;
+
+        queue.push(&task).await.unwrap();
+        handle_worker_result(
+            &abstract_queue,
+            WorkerResult::Nack {
+                task: task.clone(),
+                error: "boom".to_string(),
+            },
+            3,
+            &stats_tx,
+        )
+        .await
+        .unwrap();
+
+        assert!(queue.dlq.lock().unwrap().contains_key(&task.task_id));
+        assert!(matches!(
+            stats_rx.recv().await,
+            Some(StatsEvent::TerminalFailure)
+        ));
+    }
+
+    #[tokio::test]
+    async fn handle_worker_result_return_resets_task() {
+        let queue =
+            Arc::new(InMemoryTaskQueue::<TestPayload, JsonSerializer>::new());
+        let abstract_queue: AbstractTaskQueue<TestPayload> = queue.clone();
+        let (stats_tx, _stats_rx) = mpsc::channel(4);
+        let mut task = Task::new(TestPayload { value: 4 });
+        task.set_in_progress();
+
+        queue.push(&task).await.unwrap();
+        handle_worker_result(
+            &abstract_queue,
+            WorkerResult::Return { task: task.clone() },
+            1,
+            &stats_tx,
+        )
+        .await
+        .unwrap();
+
+        let popped = queue.pop().await.unwrap();
+        assert!(matches!(popped.status, TaskStatus::Queued));
+        assert!(popped.started_at.is_none());
+        assert!(popped.finished_at.is_none());
+        assert!(popped.error_msg.is_none());
+    }
+
+    #[tokio::test]
+    async fn stats_collector_tracks_failures_and_depth() {
+        let (stats_tx, stats_rx) = mpsc::channel(8);
+        let (mut stats_watch, handle) = spawn_stats_collector(stats_rx);
+
+        stats_tx
+            .send(StatsEvent::Worker {
+                worker_id: 1,
+                success: false,
+                latency: Duration::from_millis(5),
+            })
+            .await
+            .unwrap();
+        stats_tx.send(StatsEvent::TerminalFailure).await.unwrap();
+        stats_tx.send(StatsEvent::QueueDepth(3)).await.unwrap();
+
+        timeout(Duration::from_secs(1), stats_watch.changed())
+            .await
+            .unwrap()
+            .unwrap();
+        let snapshot = stats_watch.borrow().clone();
+        let worker = snapshot.workers.get(&1).unwrap();
+        assert_eq!(worker.failed, 1);
+        assert_eq!(snapshot.terminal_failures, 1);
+        assert_eq!(snapshot.queue_depth, Some(3));
+
+        drop(stats_tx);
+        let _ = handle.await;
+    }
+
+    #[tokio::test]
+    async fn worker_loop_reports_failure() {
+        let (inbox_tx, inbox_rx) = mpsc::channel(2);
+        let (control_tx, control_rx) = broadcast::channel(4);
+        let (result_tx, mut result_rx) = mpsc::channel(4);
+        let (stats_tx, mut stats_rx) = mpsc::channel(4);
+        let (producer, _producer_rx) = ProducerHandle::channel(1);
+
+        let base_service =
+            service_fn(|_req: ServiceRequest<TestPayload, ()>| async move {
+                Err::<(), BoxError>(
+                    io::Error::new(io::ErrorKind::Other, "fail").into(),
+                )
+            });
+        let service = build_service_stack(
+            base_service,
+            ServiceStackOptions {
+                timeout: None,
+                buffer: 1,
+                concurrency_limit: Some(1),
+            },
+        );
+
+        let handle = tokio::spawn(worker_loop(WorkerParams {
+            worker_id: 0,
+            ctx: Arc::new(()),
+            inbox: inbox_rx,
+            control_rx,
+            service,
+            result_tx,
+            stats_tx,
+            producer,
+        }));
+
+        inbox_tx
+            .send(Envelope {
+                task: Task::new(TestPayload { value: 42 }),
+                enqueued_at: std::time::SystemTime::now(),
+                attempt: 1,
+            })
+            .await
+            .unwrap();
+
+        let result = timeout(Duration::from_secs(1), result_rx.recv())
+            .await
+            .unwrap();
+        assert!(matches!(result, Some(WorkerResult::Nack { .. })));
+        let stats = timeout(Duration::from_secs(1), stats_rx.recv())
+            .await
+            .unwrap();
+        assert!(matches!(
+            stats,
+            Some(StatsEvent::Worker { success: false, .. })
+        ));
+
+        let _ = control_tx.send(ControlCommand::Stop);
+        let _ = handle.await;
+    }
+
+    #[tokio::test]
+    async fn worker_loop_pause_stop_drains_inbox() {
+        let (inbox_tx, inbox_rx) = mpsc::channel(2);
+        let (control_tx, control_rx) = broadcast::channel(4);
+        let (result_tx, mut result_rx) = mpsc::channel(4);
+        let (stats_tx, _stats_rx) = mpsc::channel(4);
+        let (producer, _producer_rx) = ProducerHandle::channel(1);
+
+        let base_service =
+            service_fn(|_req: ServiceRequest<TestPayload, ()>| async move {
+                Ok::<(), BoxError>(())
+            });
+        let service =
+            build_service_stack(base_service, ServiceStackOptions::default());
+
+        let handle = tokio::spawn(worker_loop(WorkerParams {
+            worker_id: 1,
+            ctx: Arc::new(()),
+            inbox: inbox_rx,
+            control_rx,
+            service,
+            result_tx,
+            stats_tx,
+            producer,
+        }));
+
+        let _ = control_tx.send(ControlCommand::Pause);
+        yield_now().await;
+        let _ = control_tx.send(ControlCommand::Resume);
+        yield_now().await;
+        let _ = control_tx.send(ControlCommand::Pause);
+        yield_now().await;
+
+        inbox_tx
+            .send(Envelope {
+                task: Task::new(TestPayload { value: 7 }),
+                enqueued_at: std::time::SystemTime::now(),
+                attempt: 1,
+            })
+            .await
+            .unwrap();
+
+        let _ = control_tx.send(ControlCommand::Stop);
+        let result = timeout(Duration::from_secs(1), result_rx.recv())
+            .await
+            .unwrap();
+        assert!(matches!(result, Some(WorkerResult::Return { .. })));
+
+        let _ = handle.await;
+    }
+
+    #[tokio::test]
+    async fn worker_loop_exits_on_closed_inbox() {
+        let (inbox_tx, inbox_rx) = mpsc::channel(1);
+        let (_control_tx, control_rx) = broadcast::channel(4);
+        let (result_tx, _result_rx) = mpsc::channel(1);
+        let (stats_tx, _stats_rx) = mpsc::channel(1);
+        let (producer, _producer_rx) = ProducerHandle::channel(1);
+
+        drop(inbox_tx);
+
+        let base_service =
+            service_fn(|_req: ServiceRequest<TestPayload, ()>| async move {
+                Ok::<(), BoxError>(())
+            });
+        let service =
+            build_service_stack(base_service, ServiceStackOptions::default());
+
+        let handle = tokio::spawn(worker_loop(WorkerParams {
+            worker_id: 2,
+            ctx: Arc::new(()),
+            inbox: inbox_rx,
+            control_rx,
+            service,
+            result_tx,
+            stats_tx,
+            producer,
+        }));
+
+        let _ = handle.await;
     }
 
     #[cfg(feature = "observability")]
