@@ -25,9 +25,9 @@ jobs:
         run: |
           extract_version() {
             awk -F'"' '
-              $0 ~ /^\\[workspace\\.package\\]/ { in_block=1; next }
+              $0 ~ /^\[workspace\.package\]/ { in_block=1; next }
               in_block && $0 ~ /^version =/ { print $2; exit }
-              in_block && $0 ~ /^\\[/ { in_block=0 }
+              in_block && $0 ~ /^\[/ { in_block=0 }
             ' "$1"
           }
 
