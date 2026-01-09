@@ -24,11 +24,11 @@ pub struct DivisionComputation;
 
 #[derive(Debug)]
 pub struct Context {
-    config: serde_yaml::Value,
+    config: toml::Value,
 }
 
 impl Configurable for Context {
-    fn config(&self) -> &serde_yaml::Value {
+    fn config(&self) -> &toml::Value {
         &self.config
     }
 }
@@ -112,7 +112,7 @@ async fn make_storage() -> impl TaskQueue<TaskData> + Send + Sync {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-    let config_path = "tests/simple_config.yml";
+    let config_path = "tests/simple_config.toml";
     let ctx = Context::from_config(config_path);
     let storage = make_storage().await;
 

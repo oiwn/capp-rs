@@ -79,11 +79,19 @@ impl<D: Clone> Task<D> {
 
 impl TaskId {
     pub fn new() -> Self {
-        Self(Uuid::new_v4())
+        Self(Uuid::now_v7())
     }
 
     pub fn get(&self) -> Uuid {
         self.0
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 16] {
+        self.0.as_bytes()
+    }
+
+    pub fn from_uuid(uuid: Uuid) -> Self {
+        Self(uuid)
     }
 
     pub fn from_string(uuid_str: &str) -> Self {

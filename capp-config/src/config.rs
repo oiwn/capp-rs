@@ -4,25 +4,27 @@ use std::{
     path,
 };
 
+use toml::Value;
+
 #[derive(thiserror::Error, Debug)]
 pub enum ConfigError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("YAML parsing error: {0}")]
-    YamlParse(#[from] serde_yaml::Error),
+    #[error("TOML parsing error: {0}")]
+    TomlParse(#[from] toml::de::Error),
     #[error("Line parsing error: {0}")]
     LineParse(String),
 }
 
 pub trait Configurable {
-    fn config(&self) -> &serde_yaml::Value;
+    fn config(&self) -> &Value;
 
-    // read configuration from yaml config
+    // read configuration from toml config
     fn load_config(
         config_file_path: impl AsRef<path::Path>,
-    ) -> Result<serde_yaml::Value, ConfigError> {
+    ) -> Result<Value, ConfigError> {
         let content: String = fs::read_to_string(config_file_path)?;
-        let config: serde_yaml::Value = serde_yaml::from_str(&content)?;
+        let config: Value = toml::from_str(&content)?;
         Ok(config)
     }
 
@@ -39,27 +41,25 @@ pub trait Configurable {
     }
 
     /// Extract Value from config using dot notation i.e. "app.concurrency"
-    fn get_config_value(&self, key: &str) -> Option<&serde_yaml::Value> {
+    fn get_config_value(&self, key: &str) -> Option<&Value> {
         let keys: Vec<&str> = key.split('.').collect();
         Self::get_value_recursive(self.config(), &keys)
     }
 
     fn get_value_recursive<'a>(
-        config: &'a serde_yaml::Value,
+        config: &'a Value,
         keys: &[&str],
-    ) -> Option<&'a serde_yaml::Value> {
+    ) -> Option<&'a Value> {
         if keys.is_empty() {
             return None;
         };
 
         match config {
-            serde_yaml::Value::Mapping(map) => {
+            Value::Table(map) => {
                 let key = keys[0];
                 let remaining_keys = &keys[1..];
 
-                if let Some(value) =
-                    map.get(serde_yaml::Value::String(key.to_string()))
-                {
+                if let Some(value) = map.get(key) {
                     if remaining_keys.is_empty() {
                         Some(value)
                     } else {
@@ -82,12 +82,12 @@ mod tests {
     use tempfile::tempdir;
 
     pub struct TestApp {
-        config: serde_yaml::Value,
+        config: Value,
         user_agents: Option<Vec<String>>,
     }
 
     impl Configurable for TestApp {
-        fn config(&self) -> &serde_yaml::Value {
+        fn config(&self) -> &Value {
             &self.config
         }
     }
@@ -108,37 +108,37 @@ mod tests {
 
     #[test]
     fn test_load_config() {
-        let config_path = "../tests/simple_config.yml";
+        let config_path = "../tests/simple_config.toml";
         let app = TestApp::from_config(config_path);
 
-        assert_eq!(app.config["app"]["threads"].as_u64(), Some(4));
-        assert_eq!(app.config()["app"]["max_queue"].as_u64(), Some(500));
+        assert_eq!(app.config["app"]["threads"].as_integer(), Some(4));
+        assert_eq!(app.config()["app"]["max_queue"].as_integer(), Some(500));
         assert_eq!(app.user_agents, None);
     }
 
     #[test]
-    fn test_load_config_valid_yaml() {
+    fn test_load_config_valid_toml() {
         let dir = tempdir().unwrap();
-        let config_path = dir.path().join("config.yml");
+        let config_path = dir.path().join("config.toml");
         let mut file = File::create(&config_path).unwrap();
-        writeln!(file, "key: value\napp:\n  setting: 42").unwrap();
+        writeln!(file, "key = \"value\"\n[app]\nsetting = 42").unwrap();
 
         let config = TestApp::load_config(&config_path);
         assert!(config.is_ok());
         let config = config.unwrap();
         assert_eq!(config["key"].as_str(), Some("value"));
-        assert_eq!(config["app"]["setting"].as_i64(), Some(42));
+        assert_eq!(config["app"]["setting"].as_integer(), Some(42));
     }
 
     #[test]
-    fn test_load_config_invalid_yaml() {
+    fn test_load_config_invalid_toml() {
         let dir = tempdir().unwrap();
-        let config_path = dir.path().join("config.yml");
+        let config_path = dir.path().join("config.toml");
         let mut file = File::create(&config_path).unwrap();
-        writeln!(file, "invalid: : yaml: content").unwrap();
+        writeln!(file, "invalid = : toml").unwrap();
 
         let config = TestApp::load_config(&config_path);
-        assert!(matches!(config, Err(ConfigError::YamlParse(_))));
+        assert!(matches!(config, Err(ConfigError::TomlParse(_))));
     }
 
     #[test]
@@ -156,18 +156,18 @@ mod tests {
 
     #[test]
     fn test_get_config_value_empty_keys() {
-        let config_path = "../tests/simple_config.yml";
+        let config_path = "../tests/simple_config.toml";
         let app = TestApp::from_config(config_path);
         assert_eq!(app.get_config_value(""), None);
     }
 
     #[test]
     fn test_get_config_value() {
-        let config_path = "../tests/simple_config.yml";
+        let config_path = "../tests/simple_config.toml";
         let app = TestApp::from_config(config_path);
 
         assert_eq!(
-            app.get_config_value("logging.log_to_redis")
+            app.get_config_value("logging.log_to_file")
                 .unwrap()
                 .as_bool(),
             Some(true)
@@ -176,12 +176,11 @@ mod tests {
 
     #[test]
     fn test_get_config_value_recursive() {
-        let yaml = r#"
-        app:
-          nested:
-            value: 42
+        let toml = r#"
+        [app.nested]
+        value = 42
         "#;
-        let config: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let config: Value = toml::from_str(toml).unwrap();
         let app = TestApp {
             config,
             user_agents: None,
@@ -189,7 +188,7 @@ mod tests {
 
         assert_eq!(
             app.get_config_value("app.nested.value")
-                .and_then(|v| v.as_i64()),
+                .and_then(|v| v.as_integer()),
             Some(42)
         );
         assert_eq!(app.get_config_value("app.missing.value"), None);
@@ -198,7 +197,7 @@ mod tests {
 
     #[test]
     fn test_load_lines() {
-        let config_path = "../tests/simple_config.yml";
+        let config_path = "../tests/simple_config.toml";
         let mut app = TestApp::from_config(config_path);
         let uas_file_path = {
             app.get_config_value("app.user_agents_file")

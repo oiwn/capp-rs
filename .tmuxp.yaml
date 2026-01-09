@@ -7,12 +7,12 @@ windows:
     panes:
       - shell_command:
         - helix
-  - window_name: cmd
+  - window_name: agent
     start-directory: ./
     panes:
       - shell_command:
-        - clear
-  - window_name: srv
+        - codex
+  - window_name: cmd
     start-directory: ./
     panes:
       - shell_command:
@@ -21,7 +21,7 @@ windows:
     panes:
       - shell_command:
         - emacs -nw notes.org
-  - window_name: redis
+  - window_name: db
     panes:
       - shell_command:
         - just connect-redis

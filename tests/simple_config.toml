@@ -1,0 +1,28 @@
+[app]
+name = "test-app"
+threads = 4
+max_queue = 500
+user_agents_file = "tests/simple_uas.txt"
+
+entities = ["apple", "orange"]
+
+[logging]
+log_to_file = true
+
+[logging.log_settings]
+file_name = "errors.log"
+
+[http]
+timeout = 30
+connect_timeout = 10
+
+[http.proxy]
+use = true
+uri = "http://bro:admin@proxygate1.com:42042"
+
+[another-http]
+timeout = 10
+connect_timeout = 5
+
+[another-http.proxy]
+use = false

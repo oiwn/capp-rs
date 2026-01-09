@@ -5,7 +5,7 @@
 //! ## Features
 //!
 //! - **Asynchronous Task Management**: Utilize tokio-based asynchronous processing for efficient, non-blocking execution of tasks.
-//! - **Flexible Task Queue**: Implement various backend storage options for task queues, including in-memory and Redis-based solutions.
+//! - **Flexible Task Queue**: Implement various backend storage options for task queues, including in-memory, Fjall, and MongoDB.
 //! - **Round-Robin Task Distribution**: Ensure fair distribution of tasks across different domains or categories.
 //! - **Configurable Workers**: Set up and manage multiple worker instances to process tasks concurrently.
 //! - **Error Handling and Retry Mechanisms**: Robust error handling with configurable retry policies for failed tasks.
@@ -54,19 +54,22 @@ pub use capp_queue as queue;
 pub use capp_router as router;
 #[cfg(feature = "http")]
 pub use config::http;
+#[cfg(feature = "observability")]
+pub mod observability;
+#[cfg(feature = "stats-http")]
+pub mod stats_http;
 #[cfg(feature = "mongodb")]
 pub use mongodb;
 #[cfg(feature = "http")]
 pub use reqwest;
-#[cfg(feature = "redis")]
-pub use rustis;
+pub use tower;
 // re-export
 pub use async_trait;
 pub use rand;
 pub use serde;
 pub use serde_json;
-pub use serde_yaml;
 pub use thiserror;
+pub use toml;
 pub use tracing;
 pub use tracing_subscriber;
 pub use uuid;
