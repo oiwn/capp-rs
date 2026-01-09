@@ -4,7 +4,7 @@ mod common;
 
 #[cfg(test)]
 mod tests {
-    use crate::common::http_server::{run_service, TestServiceFactory};
+    use crate::common::http_server::{TestServiceFactory, run_service};
     use capp_config::healthcheck::internet;
 
     #[test]
