@@ -1,0 +1,85 @@
+name: Publish to crates.io
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Cargo.toml"
+  workflow_dispatch:
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.compare_versions.outputs.should_publish }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare versions
+        id: compare_versions
+        shell: bash
+        run: |
+          extract_version() {
+            awk -F'"' '
+              $0 ~ /^\\[workspace\\.package\\]/ { in_block=1; next }
+              in_block && $0 ~ /^version =/ { print $2; exit }
+              in_block && $0 ~ /^\\[/ { in_block=0 }
+            ' "$1"
+          }
+
+          CURRENT_VERSION=$(extract_version Cargo.toml)
+          PREVIOUS_VERSION=$(git show HEAD~1:Cargo.toml | extract_version /dev/stdin)
+
+          echo "Current version: $CURRENT_VERSION"
+          echo "Previous version: $PREVIOUS_VERSION"
+
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version unchanged"
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish:
+    needs: check-version
+    if: needs.check-version.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check publishability
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          for crate in \
+            capp-config \
+            capp-queue \
+            capp-cache \
+            capp-router \
+            capp-urls \
+            capp; do
+            cargo publish -p "$crate" --dry-run
+          done
+
+      - name: Publish to crates.io
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          for crate in \
+            capp-config \
+            capp-queue \
+            capp-cache \
+            capp-router \
+            capp-urls \
+            capp; do
+            cargo publish -p "$crate" --token "$CRATES_IO_TOKEN"
+          done
