@@ -22,6 +22,13 @@ repository = "https://github.com/oiwn/capp-rs"
 homepage = "https://github.com/oiwn/capp-rs"
 
 [workspace.dependencies]
+# Workspace crates
+capp-cache = { path = "capp-cache", version = "0.6.2" }
+capp-config = { path = "capp-config", version = "0.6.2" }
+capp-queue = { path = "capp-queue", version = "0.6.2" }
+capp-router = { path = "capp-router", version = "0.6.2" }
+capp-urls = { path = "capp-urls", version = "0.6.2" }
+
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
