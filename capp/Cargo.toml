@@ -37,11 +37,11 @@ uuid.workspace = true
 derive_builder.workspace = true
 
 # Workspaces
-capp-config = { path = "../capp-config" }
-capp-queue = { path = "../capp-queue" }
-capp-router = { path = "../capp-router", optional = true }
-capp-cache = { path = "../capp-cache", optional = true }
-capp-urls = { path = "../capp-urls", optional = true }
+capp-config = { workspace = true }
+capp-queue = { workspace = true }
+capp-router = { workspace = true, optional = true }
+capp-cache = { workspace = true, optional = true }
+capp-urls = { workspace = true, optional = true }
 
 # Deps
 reqwest = { version = "0.12", default-features = false, features = ["gzip", "rustls-tls", "json"], optional = true }
