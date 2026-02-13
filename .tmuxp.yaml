@@ -20,7 +20,8 @@ windows:
   - window_name: notes
     panes:
       - shell_command:
-        - emacs -nw notes.org
+        # - emacs -nw notes.org
+        - ls -a
   - window_name: db
     panes:
       - shell_command:
