@@ -2,7 +2,7 @@
 
 ## Who should read this
 - Users upgrading from 0.5.x to 0.6.x.
-- Anyone moving from the legacy `WorkersManager` flow to the new mailbox runtime.
+- Anyone moving older code onto the mailbox runtime.
 
 ## Headline changes
 - Config is TOML-only (YAML is no longer supported).
@@ -59,12 +59,7 @@
    );
    ```
 
-4) **Keep `WorkersManager` only if you need it**
-   - The legacy `Computation` flow remains available for now.
-   - Prefer mailbox + Tower for new work to take advantage of rate limits and
-     timeouts.
-
-5) **Optional: disable Fjall if you don't need it**
+4) **Optional: disable Fjall if you don't need it**
    - For a custom setup, depend on `capp-queue` directly with
      `default-features = false`, then enable the backend you want.
 

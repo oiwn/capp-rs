@@ -1,16 +1,16 @@
-use async_trait::async_trait;
-use capp::prelude::{
-    Computation, ComputationError, WorkerId, WorkerOptionsBuilder,
-};
+use std::{path, sync::Arc, time::Duration};
+
 use capp::{
     config::Configurable,
-    manager::{WorkersManager, WorkersManagerOptionsBuilder},
-    queue::{
-        AbstractTaskQueue, InMemoryTaskQueue, JsonSerializer, Task, TaskQueue,
+    manager::{
+        MailboxConfig, ServiceRequest, ServiceStackOptions, build_service_stack,
+        spawn_mailbox_runtime,
     },
+    queue::{InMemoryTaskQueue, JsonSerializer, Task},
 };
 use serde::{Deserialize, Serialize};
-use std::{path, sync::Arc};
+use tokio::sync::mpsc;
+use tower::{BoxError, service_fn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskData {
@@ -18,9 +18,6 @@ pub struct TaskData {
     pub value: u32,
     pub finished: bool,
 }
-
-#[derive(Debug)]
-pub struct DivisionComputation;
 
 #[derive(Debug)]
 pub struct Context {
@@ -35,101 +32,126 @@ impl Configurable for Context {
 
 impl Context {
     fn from_config(config_file_path: impl AsRef<path::Path>) -> Self {
-        let config = Self::load_config(config_file_path);
-        Self {
-            config: config.unwrap(),
-        }
+        let config = Self::load_config(config_file_path).unwrap();
+        Self { config }
     }
 }
 
-#[async_trait]
-impl Computation<TaskData, Context> for DivisionComputation {
-    /// TaskRunner will fail tasks which value can't be divided by 3
-    async fn call(
-        &self,
-        worker_id: WorkerId,
-        _ctx: Arc<Context>,
-        _queue: AbstractTaskQueue<TaskData>,
-        task: &mut Task<TaskData>,
-    ) -> Result<(), ComputationError> {
-        tracing::info!(
-            "[{}] Test division task: {:?}",
-            worker_id,
-            task.get_payload()
-        );
-
-        let rem = task.payload.value % 3;
-        if rem != 0 {
-            let err_msg =
-                format!("[{}] Can't divide {} by 3", worker_id, task.payload.value);
-            tokio::time::sleep(tokio::time::Duration::from_secs(rem as u64)).await;
-            return Err(ComputationError::Function(err_msg));
-        };
-
-        task.payload.finished = true;
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        Ok(())
-    }
-}
-
-/// Make storage filled with test data.
-/// For current set following conditions should be true:
-/// total tasks = 9
-/// number of failed tasks = 4
-async fn make_storage() -> impl TaskQueue<TaskData> + Send + Sync {
-    let storage: InMemoryTaskQueue<TaskData, JsonSerializer> =
-        InMemoryTaskQueue::new();
-
+async fn enqueue_tasks(
+    runtime: &capp::manager::MailboxRuntime<TaskData>,
+) -> Result<(), BoxError> {
     for i in 1..=5 {
-        let task: Task<TaskData> = Task::new(TaskData {
-            domain: "one".to_string(),
-            value: i,
-            finished: false,
-        });
-        let _ = storage.push(&task).await;
+        runtime
+            .producer
+            .enqueue(Task::new(TaskData {
+                domain: "one".to_string(),
+                value: i,
+                finished: false,
+            }))
+            .await?;
     }
 
     for i in 1..=5 {
-        let task: Task<TaskData> = Task::new(TaskData {
-            domain: "two".to_string(),
-            value: i * 3,
-            finished: false,
-        });
-        let _ = storage.push(&task).await;
+        runtime
+            .producer
+            .enqueue(Task::new(TaskData {
+                domain: "two".to_string(),
+                value: i * 3,
+                finished: false,
+            }))
+            .await?;
     }
 
     for _ in 1..=10 {
-        let task: Task<TaskData> = Task::new(TaskData {
-            domain: "three".to_string(),
-            value: 2,
-            finished: false,
-        });
-        let _ = storage.push(&task).await;
+        runtime
+            .producer
+            .enqueue(Task::new(TaskData {
+                domain: "three".to_string(),
+                value: 2,
+                finished: false,
+            }))
+            .await?;
     }
-    storage
+
+    Ok(())
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), BoxError> {
     tracing_subscriber::fmt::init();
+
     let config_path = "tests/simple_config.toml";
-    let ctx = Context::from_config(config_path);
-    let storage = make_storage().await;
+    let ctx = Arc::new(Context::from_config(config_path));
+    let queue = Arc::new(InMemoryTaskQueue::<TaskData, JsonSerializer>::new());
+    let (done_tx, mut done_rx) = mpsc::channel::<TaskData>(32);
 
-    let computation = DivisionComputation {};
-    let manager_options = WorkersManagerOptionsBuilder::default()
-        .worker_options(
-            WorkerOptionsBuilder::default()
-                .task_limit(10)
-                .build()
-                .unwrap(),
-        )
-        .task_limit(30)
-        .concurrency_limit(4_usize)
-        .build()
-        .unwrap();
+    let service = build_service_stack(
+        service_fn(move |req: ServiceRequest<TaskData, Context>| {
+            let done_tx = done_tx.clone();
+            async move {
+                let mut payload = req.task.payload;
+                let rem = payload.value % 3;
 
-    let mut manager =
-        WorkersManager::new(ctx, computation, storage, manager_options);
-    manager.run_workers().await;
+                tracing::info!(
+                    worker_id = req.worker_id,
+                    value = payload.value,
+                    attempt = req.attempt,
+                    "processing division task"
+                );
+
+                if rem != 0 {
+                    tokio::time::sleep(Duration::from_secs(rem as u64)).await;
+                    return Err(
+                        format!("can't divide {} by 3", payload.value).into()
+                    );
+                }
+
+                payload.finished = true;
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                let _ = done_tx.send(payload).await;
+                Ok::<(), BoxError>(())
+            }
+        }),
+        ServiceStackOptions {
+            timeout: Some(Duration::from_secs(5)),
+            buffer: 8,
+            concurrency_limit: Some(4),
+        },
+    );
+
+    let runtime = spawn_mailbox_runtime(
+        queue,
+        ctx,
+        service,
+        MailboxConfig {
+            worker_count: 4,
+            inbox_capacity: 1,
+            producer_buffer: 32,
+            result_buffer: 32,
+            max_retries: 2,
+            dequeue_backoff: Duration::from_millis(25),
+        },
+    );
+
+    enqueue_tasks(&runtime).await?;
+
+    let mut completed = 0usize;
+    let expected = 5usize;
+    while completed < expected {
+        if done_rx.recv().await.is_some() {
+            completed += 1;
+        } else {
+            break;
+        }
+    }
+
+    let stats = runtime.stats.borrow().clone();
+    tracing::info!(
+        completed,
+        terminal_failures = stats.terminal_failures,
+        "basic example finished"
+    );
+
+    runtime.shutdown().await;
+    Ok(())
 }

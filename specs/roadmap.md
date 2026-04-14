@@ -17,8 +17,7 @@
 
 ## Pillars (Current State + Next Steps)
 1) Tower-native computation pipeline  
-   - Done: boxed `MailboxService` builder with load-shed/buffer/timeout/concurrency; workers execute via tower.  
-   - Next: adapter/shim for legacy `Computation` if we keep it during migration.
+   - Done: boxed `MailboxService` builder with load-shed/buffer/timeout/concurrency; workers execute via tower.
 
 2) Fjall-backed storage  
    - Done: fjall queue backend feature-gated; benches in `capp-queue`.  
@@ -37,7 +36,7 @@
    - Done: README refresh + migration guide in `specs/migration-0.6.md`.
 
 ## Decisions
-- No backward compatibility guarantee for 0.6; old polling paths can be removed after any shims.  
+- No backward compatibility guarantee for 0.6; old polling paths can be removed as part of cleanup.  
 - Fjall stays feature-gated but is the default backend in docs/examples.  
 - Metrics format: Prometheus text exposition for the HTTP endpoint; JSON optional toggle.
 

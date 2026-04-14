@@ -4,15 +4,14 @@
 //! HTTP-heavy applications. It offers a trait-based API with pluggable backends.
 //!
 //! Currently supported backends:
-//! - MongoDB (with the "mongodb" feature)
+//! - File-backed cache with a Fjall metadata index
 
 mod cache;
 mod error;
+mod file;
 mod http_cache;
-mod mongodb;
 
 pub use cache::{CacheEntry, CacheEntryState, HttpCachePayload};
 pub use error::CacheError;
+pub use file::FileHttpCache;
 pub use http_cache::HttpCache;
-
-pub use mongodb::MongoHttpCache;

@@ -6,8 +6,8 @@ cargo run -p capp --example <name>
 ```
 
 ## basic.rs
-In-memory queue + `WorkersManager` with a simple task that fails when values
-are not divisible by 3 (uses `tests/simple_config.toml`).
+Minimal mailbox runtime example using an in-memory queue and a simple division
+task flow (uses `tests/simple_config.toml`).
 ```sh
 cargo run -p capp --example basic
 ```
@@ -58,13 +58,9 @@ cargo run -p capp --example urls
 ```
 
 ## hackernews/
-Hacker News crawler using `examples/hackernews/hn_config.toml` and
-`examples/hackernews/hn_uas.txt`. Performs real network requests and writes
-pages under `target/tmp`.
-To run, re-enable the example entry in `capp/Cargo.toml`, then:
-```sh
-cargo run -p capp --features http --example hackernews
-```
+Example assets remain in `examples/hackernews/`, but the old crawler entrypoint
+was removed with the legacy worker runtime and needs a mailbox-based rewrite
+before it can return as a runnable example.
 
 ## otel-local.yaml
 Local OpenTelemetry Collector config (OTLP -> Prometheus).

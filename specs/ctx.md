@@ -13,8 +13,7 @@ described work which has already landed in the tree.
 - The mailbox runtime is the primary modern execution path.
 - Queue I/O is centralized in the dispatcher; workers execute tasks through a
   Tower service stack.
-- `WorkersManager` and the older `Computation` flow still exist, but they are
-  scheduled for removal as part of the cleanup.
+- The legacy `WorkersManager` and `Computation` flow have been removed.
 
 See also:
 - `specs/mailbox.md`
@@ -39,15 +38,12 @@ Notes:
 
 ### Cache
 
-- `capp-cache` currently exposes a trait-based API, but the only real backend is
-  MongoDB.
-- The cache crate is still coupled to MongoDB at the type level:
-  - error variants are Mongo-specific
-  - cache entry timestamps use BSON serde helpers
-  - the only concrete backend is `MongoHttpCache`
-
-This means cache migration is not just a backend swap; the crate needs a small
-storage-neutral redesign first.
+- `capp-cache` now uses a file-backed cache implementation with a Fjall metadata
+  index.
+- Full serialized `CacheEntry<T>` records are stored on disk.
+- Cache files are segmented by date so they can be pruned manually by
+  year/month/day when needed.
+- The cache crate no longer depends on MongoDB or BSON.
 
 ## Configuration
 
@@ -73,7 +69,7 @@ The intended direction is:
   local use.
 - The codebase should remain structurally extensible so that additional
   backends can be added later if there is a real need.
-- The legacy `WorkersManager` and `Computation` path should be removed so the
+- The legacy `WorkersManager` and `Computation` path has been removed so the
   runtime model is no longer split across two orchestration styles.
 
 This means:
@@ -106,30 +102,30 @@ Cleanup behavior for the first version should stay narrow:
 
 # Near-Term Plan
 
-## 1. Remove legacy worker path
+## 1. Legacy worker path cleanup
 
-- delete `WorkersManager` and the older `Computation`-driven flow
-- move examples and docs fully onto the mailbox runtime
-- remove compatibility language that treats the legacy worker model as a
-  supported long-term path
+- completed: `WorkersManager` and the older `Computation`-driven flow removed
+- completed: examples and docs moved onto the mailbox runtime
+- completed: compatibility language for the legacy worker model removed
 
 ## 2. Make `capp-cache` storage-neutral
 
-- remove MongoDB-specific error variants from core cache errors
-- stop using BSON-only serde helpers in cache entry types
-- keep `HttpCache<T>` as the abstraction point
+- completed: MongoDB-specific error variants removed from core cache errors
+- completed: BSON-only serde helpers removed from cache entry types
+- completed: `HttpCache<T>` kept as the abstraction point
 
 ## 3. Add file-backed cache with Fjall metadata
 
-- store full serialized `CacheEntry<T>` records under `.cache`
-- store lookup/cleanup metadata in a small Fjall keyspace
-- support the existing cache trait operations:
+- completed: full serialized `CacheEntry<T>` records stored under `.cache`
+- completed: lookup/cleanup metadata stored in a small Fjall keyspace
+- completed: cache supports:
   - `get`
   - `set`
   - `update_state`
   - `remove`
   - `cleanup`
   - `contains`
+  - `clear_all` as an implementation-specific helper
 
 ## 4. Add explicit cache configuration
 
@@ -171,11 +167,10 @@ Exit criteria:
 
 ## Stage 2. Legacy runtime cleanup
 
-- remove `WorkersManager`
-- remove the old `Computation`-based orchestration flow
-- update examples and docs to use mailbox runtime only
-- remove compatibility wording that suggests the legacy worker path remains
-  supported
+- completed: `WorkersManager` removed
+- completed: old `Computation`-based orchestration flow removed
+- completed: examples and docs updated to use mailbox runtime only
+- completed: compatibility wording for the legacy worker path removed
 
 Exit criteria:
 
@@ -184,10 +179,10 @@ Exit criteria:
 
 ## Stage 3. Cache core redesign
 
-- make `capp-cache` storage-neutral at the type level
-- remove MongoDB-specific cache errors
-- remove BSON-specific serialization assumptions from core cache types
-- preserve the `HttpCache<T>` abstraction as the backend boundary
+- completed: `capp-cache` made storage-neutral at the type level
+- completed: MongoDB-specific cache errors removed
+- completed: BSON-specific serialization assumptions removed from core cache types
+- completed: `HttpCache<T>` preserved as the backend boundary
 
 Exit criteria:
 
@@ -196,12 +191,12 @@ Exit criteria:
 
 ## Stage 4. File-backed cache implementation
 
-- add a file-backed cache under `./.cache`
-- store full serialized `CacheEntry<T>` records on disk
-- organize files with date-based segmentation
-- add a simple Fjall metadata index for lookup and state tracking
-- support `get`, `set`, `update_state`, `remove`, `cleanup`, and `contains`
-- keep cleanup built-ins limited to delete-by-key and delete-all
+- completed: file-backed cache added under `./.cache`
+- completed: full serialized `CacheEntry<T>` records stored on disk
+- completed: files organized with date-based segmentation
+- completed: simple Fjall metadata index added for lookup and state tracking
+- completed: supports `get`, `set`, `update_state`, `remove`, `cleanup`, and `contains`
+- completed: cleanup built-ins limited to delete-by-key and delete-all
 
 Exit criteria:
 

@@ -34,7 +34,6 @@ tracing-subscriber.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
 uuid.workspace = true
-derive_builder.workspace = true
 
 # Workspaces
 capp-config = { workspace = true }

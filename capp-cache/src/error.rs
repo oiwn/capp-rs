@@ -11,12 +11,12 @@ pub enum CacheError {
     #[error("Deserialization error: {0}")]
     Deserialization(String),
 
-    #[error("MongoDB error: {0}")]
-    Mongo(#[from] mongodb::error::Error),
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
 
-    #[error("MongoDB serialization error: {0}")]
-    MongoBsonSer(#[from] mongodb::bson::ser::Error),
+    #[error("Path error: {0}")]
+    Path(String),
 
-    #[error("MongoDB deserialization error: {0}")]
-    MongoBsonDe(#[from] mongodb::bson::de::Error),
+    #[error("Fjall error: {0}")]
+    Fjall(#[from] fjall::Error),
 }
