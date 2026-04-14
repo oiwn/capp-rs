@@ -43,14 +43,14 @@ capp-cache = { workspace = true, optional = true }
 capp-urls = { workspace = true, optional = true }
 
 # Deps
-reqwest = { version = "0.12", default-features = false, features = ["gzip", "rustls-tls", "json"], optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["gzip", "rustls", "json"], optional = true }
 rand = { workspace = true }
 toml = { workspace = true }
-tower = { version = "0.5.2", features = ["util", "timeout", "load-shed", "limit", "buffer", "retry"] }
+tower = { version = "0.5.3", features = ["util", "timeout", "load-shed", "limit", "buffer", "retry"] }
 opentelemetry = { version = "0.31.0", features = ["metrics"], optional = true }
 opentelemetry_sdk = { version = "0.31.0", features = ["metrics", "rt-tokio"], optional = true }
-opentelemetry-otlp = { version = "0.31.0", features = ["metrics", "http-proto"], optional = true }
-hyper = { version = "1.8", features = ["server", "http1"], optional = true }
+opentelemetry-otlp = { version = "0.31.1", features = ["metrics", "http-proto"], optional = true }
+hyper = { version = "1.9", features = ["server", "http1"], optional = true }
 http-body-util = { version = "0.1", optional = true }
 bytes = { version = "1.11", optional = true }
 hyper-util = { version = "0.1", features = ["full"] }
@@ -59,9 +59,9 @@ hyper-util = { version = "0.1", features = ["full"] }
 capp = { path = ".", features = ["http", "router", "healthcheck", "cache", "urls"] }
 pin-project-lite = "0.2"
 dotenvy = "0.15"
-scraper = "0.23"
-rand = "0.9"
-md5 = "0.7"
+scraper = "0.26"
+rand = "0.10"
+md5 = "0.8"
 url = "2.5"
 base64 = "0.22"
 

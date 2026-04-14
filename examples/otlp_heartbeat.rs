@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use capp::{observability, tracing, tracing_subscriber};
 use opentelemetry::{KeyValue, global};
-use rand::{Rng, rng};
+use rand::{RngExt, rng};
 use tokio::{signal, time};
 
 const OTLP_ENDPOINT: &str = "http://127.0.0.1:4318";

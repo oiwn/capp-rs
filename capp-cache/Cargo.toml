@@ -16,7 +16,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
 fjall = { workspace = true }
-md5 = "0.7"
+md5 = "0.8"
 
 [dev-dependencies]
 tempfile = "3"

@@ -42,15 +42,15 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 
 # HTTP client
-reqwest = { version = "0.12", default-features = false, features = ["gzip", "rustls-tls", "json"] }
-tokio = { version = "1.48", features = ["full"] }
+reqwest = { version = "0.13", default-features = false, features = ["gzip", "rustls", "json"] }
+tokio = { version = "1.51", features = ["full"] }
 
 # Utils
 async-trait = { version = "0.1" }
 derive_builder = { version = "0.20" }
-uuid = { version = "1.17", features = ["v4", "v7", "serde"] }
-rand = { version = "0.9" }
-regex = { version = "1.11" }
+uuid = { version = "1.23", features = ["v4", "v7", "serde"] }
+rand = { version = "0.10" }
+regex = { version = "1.12" }
 url = { version = "2.5" }
-toml = "0.9.8"
-fjall = "2.11.2"
+toml = "1.1.2"
+fjall = "3.1.3"

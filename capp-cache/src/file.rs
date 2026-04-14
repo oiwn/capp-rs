@@ -5,9 +5,7 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::{Datelike, Utc};
-use fjall::{
-    Config, Keyspace, PartitionCreateOptions, PartitionHandle, PersistMode,
-};
+use fjall::{Database, Keyspace, KeyspaceCreateOptions, PersistMode};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::debug;
@@ -36,8 +34,8 @@ where
 {
     base_dir: PathBuf,
     files_dir: PathBuf,
-    keyspace: Keyspace,
-    entries: PartitionHandle,
+    db: Database,
+    entries: Keyspace,
     lock: Mutex<()>,
     _marker: PhantomData<T>,
 }
@@ -54,14 +52,13 @@ where
         std::fs::create_dir_all(&files_dir)?;
         std::fs::create_dir_all(&index_dir)?;
 
-        let keyspace = Config::new(index_dir).open()?;
-        let entries = keyspace
-            .open_partition("entries", PartitionCreateOptions::default())?;
+        let db = Database::builder(&index_dir).open()?;
+        let entries = db.keyspace("entries", KeyspaceCreateOptions::default)?;
 
         Ok(Self {
             base_dir,
             files_dir,
-            keyspace,
+            db,
             entries,
             lock: Mutex::new(()),
             _marker: PhantomData,
@@ -84,8 +81,8 @@ where
     fn collect_keys(&self) -> Result<Vec<String>, CacheError> {
         let mut keys = Vec::new();
         for item in self.entries.iter() {
-            let (key, _) = item?;
-            let key = String::from_utf8(key.as_ref().to_vec())
+            let (key, _) = item.into_inner()?;
+            let key = String::from_utf8(key.to_vec())
                 .map_err(|err| CacheError::Deserialization(err.to_string()))?;
             keys.push(key);
         }
@@ -124,7 +121,7 @@ where
             return Ok(None);
         };
 
-        let metadata = serde_json::from_slice(&bytes)
+        let metadata = serde_json::from_slice(bytes.as_ref())
             .map_err(|err| CacheError::Deserialization(err.to_string()))?;
         Ok(Some(metadata))
     }
@@ -137,7 +134,7 @@ where
         let bytes = serde_json::to_vec(metadata)
             .map_err(|err| CacheError::Serialization(err.to_string()))?;
         self.entries.insert(key.as_bytes(), bytes)?;
-        self.keyspace.persist(PersistMode::SyncAll)?;
+        self.db.persist(PersistMode::SyncAll)?;
         Ok(())
     }
 
@@ -185,7 +182,7 @@ where
         }
 
         self.entries.remove(key.as_bytes())?;
-        self.keyspace.persist(PersistMode::SyncAll)?;
+        self.db.persist(PersistMode::SyncAll)?;
         Ok(())
     }
 }
@@ -205,7 +202,7 @@ where
         let path = self.file_path_from_metadata(&metadata)?;
         let Some(mut entry) = self.read_entry(&path).await? else {
             self.entries.remove(key.as_bytes())?;
-            self.keyspace.persist(PersistMode::SyncAll)?;
+            self.db.persist(PersistMode::SyncAll)?;
             return Ok(None);
         };
 
@@ -290,7 +287,7 @@ where
         let path = self.file_path_from_metadata(&metadata)?;
         let Some(mut entry) = self.read_entry(&path).await? else {
             self.entries.remove(key.as_bytes())?;
-            self.keyspace.persist(PersistMode::SyncAll)?;
+            self.db.persist(PersistMode::SyncAll)?;
             return Err(CacheError::NotFound(key.to_string()));
         };
 
@@ -328,10 +325,10 @@ where
 
         let mut keys_to_delete = Vec::new();
         for item in self.entries.iter() {
-            let (key, value) = item?;
-            let key = String::from_utf8(key.as_ref().to_vec())
+            let (key, value) = item.into_inner()?;
+            let key = String::from_utf8(key.to_vec())
                 .map_err(|err| CacheError::Deserialization(err.to_string()))?;
-            let metadata: CacheIndexEntry = serde_json::from_slice(&value)
+            let metadata: CacheIndexEntry = serde_json::from_slice(value.as_ref())
                 .map_err(|err| CacheError::Deserialization(err.to_string()))?;
 
             if metadata.state == CacheEntryState::Invalid

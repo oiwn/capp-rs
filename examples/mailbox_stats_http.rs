@@ -20,7 +20,7 @@ use capp::{
     queue::{InMemoryTaskQueue, JsonSerializer, Task},
     stats_http, tracing, tracing_subscriber,
 };
-use rand::{Rng, rng};
+use rand::{RngExt, rng};
 use tokio::signal;
 use tower::{BoxError, service_fn};
 
