@@ -10,7 +10,7 @@ asynchronous task processing systems with multiple backend support.
 
 ## Features
 
-- **Multi-Backend Task Queues**: Support for Fjall (default), MongoDB, and in-memory storage
+- **Task Queues**: Support for Fjall (default persistent backend) and in-memory storage
 - **Workers + Mailbox Runtime**: Legacy workers plus Tower-native mailbox execution
 - **Dead Letter Queue (DLQ)**: Automatic handling of failed tasks
 - **Round-Robin Processing**: Fair task distribution across different domains
@@ -26,7 +26,7 @@ Add to your `Cargo.toml`:
 capp = "0.6"
 
 # Optional features
-capp = { version = "0.6", features = ["mongodb", "router"] }
+capp = { version = "0.6", features = ["router"] }
 ```
 
 ## Usage
@@ -95,7 +95,6 @@ uri = "http://proxy.example.com:8080"
 ## Features
 
 - **http**: HTTP client functionality with proxy support
-- **mongodb**: MongoDB backend support
 - **router**: URL classification and routing
 - **healthcheck**: System health monitoring
 - **cache**: Cache helpers

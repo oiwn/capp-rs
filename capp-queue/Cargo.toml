@@ -18,11 +18,6 @@ serde_json = { workspace = true }
 async-trait = { workspace = true }
 uuid = { workspace = true }
 fjall = { workspace = true, optional = true }
-chrono = { version = "0.4", features = ["serde"], optional = true  }
-bson = { version = "2.13", features = ["chrono-0_4"], optional = true }
-mongodb = { version = "3", optional = true }
-futures = { version = "0.3", optional = true }
-futures-util = { version = "0.3", optional = true }
 tower = { version = "0.5.2", features = ["util", "timeout", "load-shed", "limit", "buffer", "retry"] }
 
 [dev-dependencies]
@@ -31,13 +26,11 @@ tokio = { version = "1.43", features = ["full", "test-util"] }
 serial_test = "3"
 criterion = { version = "0.5", features = ["html_reports"] }
 fake = { version = "3.0", features = ["derive", "url"] }
-mongodb = { version = "3" }
 tempfile = "3"
 
 [features]
 default = ["fjall"]
 fjall = ["dep:fjall"]
-mongodb = ["dep:futures", "dep:futures-util", "dep:mongodb", "dep:chrono", "dep:bson"]
 
 [[bench]]
 name = "fjall_bench"
@@ -46,8 +39,3 @@ harness = false
 [[bench]]
 name = "inmemory_bench"
 harness = false
-
-[[bench]]
-name = "mongo_bench"
-harness = false
-required-features = ["mongodb"]
