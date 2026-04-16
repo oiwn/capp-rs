@@ -57,6 +57,7 @@ hyper-util = { version = "0.1", features = ["full"] }
 
 [dev-dependencies]
 capp = { path = ".", features = ["http", "router", "healthcheck", "cache", "urls"] }
+capp-testkit = { path = "../capp-testkit" }
 pin-project-lite = "0.2"
 dotenvy = "0.15"
 scraper = "0.26"
@@ -104,6 +105,11 @@ required-features = ["stats-http"]
 [[example]]
 name = "httpbin_tower"
 path = "../examples/httpbin_tower.rs"
+required-features = ["http"]
+
+[[example]]
+name = "local_blog_crawl"
+path = "../examples/local_blog_crawl.rs"
 required-features = ["http"]
 
 # [[example]]

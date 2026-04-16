@@ -44,6 +44,13 @@ Uses `/delay/*` endpoints to trigger the timeout layer.
 cargo run -p capp --features http --example httpbin_tower
 ```
 
+## local_blog_crawl.rs
+Mailbox crawler demo against a generated local blog fixture with 100 posts.
+Uses `capp-testkit` and verifies crawl coverage via the fixture stats endpoint.
+```sh
+cargo run -p capp --features http --example local_blog_crawl
+```
+
 ## otlp_heartbeat.rs
 Emits a heartbeat metric to verify OTLP ingestion. Requires `observability`.
 Defaults to `http://127.0.0.1:4318` (override with `OTEL_EXPORTER_OTLP_ENDPOINT`).

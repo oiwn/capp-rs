@@ -6,7 +6,8 @@ members = [
     "capp-config",
     "capp-router",
     "capp-cache",
-    "capp-urls"
+    "capp-urls",
+    "capp-testkit"
 ]
 
 [workspace.package]
