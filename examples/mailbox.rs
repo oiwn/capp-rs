@@ -9,7 +9,7 @@ use capp::{
     queue::{InMemoryTaskQueue, JsonSerializer, Task},
     tracing, tracing_subscriber,
 };
-use rand::{Rng, rng};
+use rand::{RngExt, rng};
 use tokio::{signal, sync::mpsc};
 use tower::{BoxError, service_fn};
 

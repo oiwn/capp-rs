@@ -12,16 +12,17 @@ windows:
     panes:
       - shell_command:
         - codex
-  - window_name: cmd
+  - window_name: cmd1
     start-directory: ./
     panes:
       - shell_command:
         - clear
-  - window_name: notes
+  - window_name: cmd2
     panes:
       - shell_command:
-        - emacs -nw notes.org
-  - window_name: db
+        # - emacs -nw notes.org
+        - eza -l
+  - window_name: yazi
     panes:
       - shell_command:
-        - just connect-redis
+        - yazi

@@ -3,15 +3,9 @@ use serde::{Serialize, de::DeserializeOwned};
 
 // Marker traits for backend compatibility
 pub trait InMemoryCompatible {}
-pub trait MongoCompatible {}
 
 // Mark which backends JsonSerializer is compatible with
 impl InMemoryCompatible for JsonSerializer {}
-
-#[cfg(feature = "mongodb")]
-impl MongoCompatible for BsonSerializer {}
-#[cfg(feature = "mongodb")]
-impl InMemoryCompatible for BsonSerializer {}
 
 pub trait TaskSerializer: Send + Sync {
     fn serialize_task<T>(task: &Task<T>) -> Result<Vec<u8>, TaskQueueError>
@@ -44,46 +38,59 @@ impl TaskSerializer for JsonSerializer {
     }
 }
 
-#[cfg(feature = "mongodb")]
-use mongodb::bson::{self};
+#[cfg(test)]
+mod tests {
+    use super::{JsonSerializer, TaskSerializer};
+    use crate::{Task, TaskQueueError};
+    use serde::{Deserialize, Serialize, Serializer};
 
-#[cfg(feature = "mongodb")]
-#[derive(Debug, Clone, Copy)]
-pub struct BsonSerializer;
-
-#[cfg(feature = "mongodb")]
-impl TaskSerializer for BsonSerializer {
-    fn serialize_task<T>(task: &Task<T>) -> Result<Vec<u8>, TaskQueueError>
-    where
-        T: Serialize + DeserializeOwned + Clone,
-    {
-        // Convert to BSON document first
-        let mut doc = bson::to_document(task)
-            .map_err(|e| TaskQueueError::Serialization(e.to_string()))?;
-
-        // Move task_id to _id
-        if let Some(task_id) = doc.remove("task_id") {
-            doc.insert("_id", task_id);
-        }
-
-        // Serialize complete BSON document to bytes
-        bson::to_vec(&doc).map_err(|e| TaskQueueError::Serialization(e.to_string()))
+    #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+    struct Payload {
+        value: u32,
     }
 
-    fn deserialize_task<T>(data: &[u8]) -> Result<Task<T>, TaskQueueError>
-    where
-        T: Serialize + DeserializeOwned + Clone,
-    {
-        // First get BSON document from bytes
-        let mut doc: bson::Document = bson::from_slice(data)
-            .map_err(|e| TaskQueueError::Deserialization(e.to_string()))?;
+    #[derive(Clone, Debug, Deserialize)]
+    struct FailingPayload;
 
-        if let Some(id) = doc.remove("_id") {
-            doc.insert("task_id", id);
+    impl Serialize for FailingPayload {
+        fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            Err(serde::ser::Error::custom("boom"))
         }
+    }
 
-        // Convert complete document back to Task
-        bson::from_document(doc)
-            .map_err(|e| TaskQueueError::Deserialization(e.to_string()))
+    #[test]
+    fn json_serializer_round_trips_task() {
+        let task = Task::new(Payload { value: 42 });
+        let encoded = JsonSerializer::serialize_task(&task).unwrap();
+        let decoded =
+            JsonSerializer::deserialize_task::<Payload>(&encoded).unwrap();
+
+        assert_eq!(decoded.payload, task.payload);
+        assert_eq!(decoded.status, task.status);
+    }
+
+    #[test]
+    fn json_serializer_reports_serialization_errors() {
+        let task = Task::new(FailingPayload);
+        let error = JsonSerializer::serialize_task(&task).unwrap_err();
+
+        match error {
+            TaskQueueError::Serialization(msg) => assert!(msg.contains("boom")),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn json_serializer_reports_deserialization_errors() {
+        let error = JsonSerializer::deserialize_task::<Payload>(b"not valid json")
+            .unwrap_err();
+
+        match error {
+            TaskQueueError::Deserialization(_) => {}
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 }

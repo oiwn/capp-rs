@@ -13,9 +13,10 @@ thiserror = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
-bson = { version = "2.15", features = ["chrono-0_4"] }
-mongodb = { version = "3", features = ["rustls-tls"] }
+fjall = { workspace = true }
+md5 = "0.8"
 
 [dev-dependencies]
-dotenvy = "0.15"
+tempfile = "3"

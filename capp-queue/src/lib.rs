@@ -7,14 +7,10 @@ pub mod task;
 #[cfg(feature = "fjall")]
 pub use crate::backend::FjallTaskQueue;
 pub use crate::backend::InMemoryTaskQueue;
-#[cfg(feature = "mongodb")]
-pub use crate::backend::MongoTaskQueue;
 pub use crate::dispatch::{
     ProducerError, ProducerHandle, ProducerMsg, WorkerResult,
 };
 pub use crate::queue::{AbstractTaskQueue, HasTagKey, TaskQueue};
-#[cfg(feature = "mongodb")]
-pub use crate::serializers::BsonSerializer;
 pub use crate::serializers::{JsonSerializer, TaskSerializer};
 pub use crate::task::{Task, TaskId, TaskStatus};
 
@@ -37,7 +33,4 @@ pub enum TaskQueueError {
     #[cfg(feature = "fjall")]
     #[error("Fjall error")]
     FjallError(#[from] fjall::Error),
-    #[cfg(feature = "mongodb")]
-    #[error("Mongodb Error")]
-    MongodbError(#[from] mongodb::error::Error),
 }

@@ -1,9 +1,7 @@
 use std::{marker::PhantomData, path::Path, sync::Mutex};
 
 use async_trait::async_trait;
-use fjall::{
-    Config, Keyspace, PartitionCreateOptions, PartitionHandle, PersistMode,
-};
+use fjall::{Database, Keyspace, KeyspaceCreateOptions, PersistMode};
 use serde::{Serialize, de::DeserializeOwned};
 use uuid::Uuid;
 
@@ -19,10 +17,10 @@ pub struct FjallTaskQueue<D, S>
 where
     S: TaskSerializer,
 {
-    db: Keyspace,
-    tasks: PartitionHandle,
-    queue: PartitionHandle,
-    dlq: PartitionHandle,
+    db: Database,
+    tasks: Keyspace,
+    queue: Keyspace,
+    dlq: Keyspace,
     // Serialize push/pop/ack/nack/set to keep ordering simple.
     lock: Mutex<()>,
     _marker: PhantomData<(D, S)>,
@@ -33,16 +31,13 @@ where
     S: TaskSerializer,
 {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, TaskQueueError> {
-        let keyspace = Config::new(path).open()?;
-        let tasks =
-            keyspace.open_partition("tasks", PartitionCreateOptions::default())?;
-        let queue =
-            keyspace.open_partition("queue", PartitionCreateOptions::default())?;
-        let dlq =
-            keyspace.open_partition("dlq", PartitionCreateOptions::default())?;
+        let db = Database::builder(path).open()?;
+        let tasks = db.keyspace("tasks", KeyspaceCreateOptions::default)?;
+        let queue = db.keyspace("queue", KeyspaceCreateOptions::default)?;
+        let dlq = db.keyspace("dlq", KeyspaceCreateOptions::default)?;
 
         Ok(Self {
-            db: keyspace,
+            db,
             tasks,
             queue,
             dlq,
@@ -92,12 +87,12 @@ where
     async fn pop(&self) -> Result<Task<D>, TaskQueueError> {
         let _guard = self.lock.lock().unwrap();
 
-        let Some(entry) = self.queue.first_key_value()? else {
+        let Some(entry) = self.queue.first_key_value() else {
             return Err(TaskQueueError::QueueEmpty);
         };
 
-        let (task_id_bytes, _) = entry;
-        let task_id_bytes = task_id_bytes.as_ref().to_vec();
+        let (task_id_bytes, _) = entry.into_inner()?;
+        let task_id_bytes = task_id_bytes.to_vec();
         self.queue.remove(task_id_bytes.clone())?;
 
         let task_id = Self::task_id_from_bytes(&task_id_bytes)?;

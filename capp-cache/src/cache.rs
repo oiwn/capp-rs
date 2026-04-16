@@ -28,7 +28,7 @@ pub enum CacheEntryState {
 }
 
 /// A generic cached entry with HTTP-specific fields
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CacheEntry<T> {
     /// Unique identifier for this cache entry
     pub key: String,
@@ -39,10 +39,8 @@ pub struct CacheEntry<T> {
     /// Current state of the cache entry
     pub state: CacheEntryState,
     /// When this entry was first created
-    #[serde(with = "bson::serde_helpers::chrono_datetime_as_bson_datetime")]
     pub created_at: DateTime<Utc>,
     /// When this entry was last accessed
-    #[serde(with = "bson::serde_helpers::chrono_datetime_as_bson_datetime")]
     pub last_accessed: DateTime<Utc>,
     /// Number of errors encountered for this entry
     pub error_count: i32,

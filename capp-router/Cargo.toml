@@ -10,4 +10,4 @@ repository.workspace = true
 [dependencies]
 regex = { workspace = true }
 url = { workspace = true }
-indexmap = { version = "2.6" }
+indexmap = { version = "2.14" }

@@ -10,8 +10,8 @@ asynchronous task processing systems with multiple backend support.
 
 ## Features
 
-- **Multi-Backend Task Queues**: Support for Fjall (default), MongoDB, and in-memory storage
-- **Workers + Mailbox Runtime**: Legacy workers plus Tower-native mailbox execution
+- **Task Queues**: Support for Fjall (default persistent backend) and in-memory storage
+- **Mailbox Runtime**: Tower-native dispatcher/workers with retries, backpressure, and control signals
 - **Dead Letter Queue (DLQ)**: Automatic handling of failed tasks
 - **Round-Robin Processing**: Fair task distribution across different domains
 - **Health Checks**: Built-in monitoring capabilities
@@ -26,7 +26,7 @@ Add to your `Cargo.toml`:
 capp = "0.6"
 
 # Optional features
-capp = { version = "0.6", features = ["mongodb", "router"] }
+capp = { version = "0.6", features = ["router"] }
 ```
 
 ## Usage
@@ -34,43 +34,50 @@ capp = { version = "0.6", features = ["mongodb", "router"] }
 ### Basic Example
 
 ```rust
-use capp::prelude::*;
-use async_trait::async_trait;
+use std::{sync::Arc, time::Duration};
+use capp::{
+    manager::{MailboxConfig, ServiceRequest, build_service_stack, spawn_mailbox_runtime},
+    queue::{InMemoryTaskQueue, JsonSerializer, Task},
+};
 use serde::{Deserialize, Serialize};
+use tower::{BoxError, service_fn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TaskData {
     value: u32,
 }
 
-struct MyComputation;
-
-#[async_trait]
-impl Computation<TaskData, Context> for MyComputation {
-    async fn call(
-        &self,
-        worker_id: WorkerId,
-        ctx: Arc<Context>,
-        queue: AbstractTaskQueue<TaskData>,
-        task: &mut Task<TaskData>,
-    ) -> Result<(), ComputationError> {
-        // Process task here
-        Ok(())
-    }
-}
-
 #[tokio::main]
-async fn main() {
-    let storage = InMemoryTaskQueue::new();
-    let computation = MyComputation {};
-    
-    let options = WorkersManagerOptionsBuilder::default()
-        .concurrency_limit(4)
-        .build()
-        .unwrap();
+async fn main() -> Result<(), BoxError> {
+    let queue = Arc::new(InMemoryTaskQueue::<TaskData, JsonSerializer>::new());
+    let ctx = Arc::new(());
 
-    let mut manager = WorkersManager::new(ctx, computation, storage, options);
-    manager.run_workers().await;
+    let service = build_service_stack(
+        service_fn(|req: ServiceRequest<TaskData, ()>| async move {
+            println!("processing {}", req.task.payload.value);
+            Ok::<(), BoxError>(())
+        }),
+        Default::default(),
+    );
+
+    let runtime = spawn_mailbox_runtime(
+        queue,
+        ctx,
+        service,
+        MailboxConfig {
+            worker_count: 4,
+            dequeue_backoff: Duration::from_millis(25),
+            ..Default::default()
+        },
+    );
+
+    runtime
+        .producer
+        .enqueue(Task::new(TaskData { value: 42 }))
+        .await?;
+
+    runtime.shutdown().await;
+    Ok(())
 }
 ```
 
@@ -95,7 +102,6 @@ uri = "http://proxy.example.com:8080"
 ## Features
 
 - **http**: HTTP client functionality with proxy support
-- **mongodb**: MongoDB backend support
 - **router**: URL classification and routing
 - **healthcheck**: System health monitoring
 - **cache**: Cache helpers

@@ -34,7 +34,6 @@ tracing-subscriber.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
 uuid.workspace = true
-derive_builder.workspace = true
 
 # Workspaces
 capp-config = { workspace = true }
@@ -44,28 +43,26 @@ capp-cache = { workspace = true, optional = true }
 capp-urls = { workspace = true, optional = true }
 
 # Deps
-reqwest = { version = "0.12", default-features = false, features = ["gzip", "rustls-tls", "json"], optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["gzip", "rustls", "json"], optional = true }
 rand = { workspace = true }
-chrono = { version = "0.4", features = ["serde"], optional = true  }
-bson = { version = "2.15", features = ["chrono-0_4"], optional = true }
-mongodb = { version = "3", optional = true }
 toml = { workspace = true }
-tower = { version = "0.5.2", features = ["util", "timeout", "load-shed", "limit", "buffer", "retry"] }
+tower = { version = "0.5.3", features = ["util", "timeout", "load-shed", "limit", "buffer", "retry"] }
 opentelemetry = { version = "0.31.0", features = ["metrics"], optional = true }
 opentelemetry_sdk = { version = "0.31.0", features = ["metrics", "rt-tokio"], optional = true }
-opentelemetry-otlp = { version = "0.31.0", features = ["metrics", "http-proto"], optional = true }
-hyper = { version = "1.8", features = ["server", "http1"], optional = true }
+opentelemetry-otlp = { version = "0.31.1", features = ["metrics", "http-proto"], optional = true }
+hyper = { version = "1.9", features = ["server", "http1"], optional = true }
 http-body-util = { version = "0.1", optional = true }
 bytes = { version = "1.11", optional = true }
 hyper-util = { version = "0.1", features = ["full"] }
 
 [dev-dependencies]
-capp = { path = ".", features = ["http", "router", "healthcheck", "mongodb", "cache", "urls"] }
+capp = { path = ".", features = ["http", "router", "healthcheck", "cache", "urls"] }
+capp-testkit = { path = "../capp-testkit" }
 pin-project-lite = "0.2"
 dotenvy = "0.15"
-scraper = "0.23"
-rand = "0.9"
-md5 = "0.7"
+scraper = "0.26"
+rand = "0.10"
+md5 = "0.8"
 url = "2.5"
 base64 = "0.22"
 
@@ -75,7 +72,6 @@ router = ["capp-router"]
 healthcheck = ["dep:reqwest"]
 cache = ["capp-cache"]
 urls = ["capp-urls"]
-mongodb = ["capp-queue/mongodb", "dep:mongodb", "dep:chrono", "dep:bson"]
 stats-http = ["dep:hyper", "dep:http-body-util", "dep:bytes"]
 observability = [
     "dep:opentelemetry",
@@ -109,6 +105,11 @@ required-features = ["stats-http"]
 [[example]]
 name = "httpbin_tower"
 path = "../examples/httpbin_tower.rs"
+required-features = ["http"]
+
+[[example]]
+name = "local_blog_crawl"
+path = "../examples/local_blog_crawl.rs"
 required-features = ["http"]
 
 # [[example]]
