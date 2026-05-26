@@ -19,6 +19,13 @@ where
     async fn ack(&self, task_id: &TaskId) -> Result<(), TaskQueueError>;
     async fn nack(&self, task: &Task<Data>) -> Result<(), TaskQueueError>;
     async fn set(&self, task: &Task<Data>) -> Result<(), TaskQueueError>;
+
+    /// Move any tasks left in the in-flight set back to the queue. Called once
+    /// at runtime startup to recover work owned by a previous process that
+    /// crashed before acking. Returns the number of tasks recovered.
+    async fn recover_inflight(&self) -> Result<u64, TaskQueueError> {
+        Ok(0)
+    }
 }
 
 pub type AbstractTaskQueue<D> = Arc<dyn TaskQueue<D> + Send + Sync>;

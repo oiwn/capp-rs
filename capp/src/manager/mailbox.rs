@@ -6,19 +6,16 @@ use std::{
 
 use capp_queue::{
     AbstractTaskQueue, ProducerHandle, ProducerMsg, Task, TaskQueueError,
-    TaskStatus, WorkerResult,
+    WorkerResult,
 };
 #[cfg(feature = "observability")]
 use opentelemetry::{
     KeyValue,
-    metrics::{Counter, Histogram, ObservableGauge},
+    metrics::{Counter, Histogram},
 };
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::sync::{broadcast, mpsc, watch};
-use tower::{
-    BoxError, Service, ServiceBuilder, ServiceExt, limit::ConcurrencyLimitLayer,
-    util::BoxCloneService,
-};
+use tower::{BoxError, Service, ServiceBuilder, ServiceExt, util::BoxCloneService};
 use tracing::{debug, error, info, instrument, trace, warn};
 
 pub type MailboxService<D, Ctx> =
@@ -54,7 +51,6 @@ pub struct Envelope<D: Clone> {
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct StatsSnapshot {
     pub workers: HashMap<usize, WorkerMetrics>,
-    pub queue_depth: Option<usize>,
     pub terminal_failures: u64,
 }
 
@@ -74,7 +70,6 @@ enum StatsEvent {
         latency: Duration,
     },
     TerminalFailure,
-    QueueDepth(usize),
 }
 
 /// Handle returned by [`spawn_mailbox_runtime`] to let callers enqueue tasks,
@@ -96,12 +91,15 @@ impl<D: Clone> MailboxRuntime<D> {
     }
 }
 
-/// Defaults favor tiny bounded inboxes and short backoff when the queue is
+/// Defaults favor a tiny shared channel and short backoff when the queue is
 /// empty. This keeps backpressure predictable for long-running I/O tasks.
 #[derive(Debug, Clone)]
 pub struct MailboxConfig {
     pub worker_count: usize,
-    pub inbox_capacity: usize,
+    /// Per-worker prefetch slots. The dispatcher → workers channel total
+    /// capacity is `prefetch_per_worker * worker_count`. With the default
+    /// of 1, the in-flight buffer equals the worker count.
+    pub prefetch_per_worker: usize,
     pub producer_buffer: usize,
     pub result_buffer: usize,
     pub max_retries: u32,
@@ -112,7 +110,7 @@ impl Default for MailboxConfig {
     fn default() -> Self {
         Self {
             worker_count: 4,
-            inbox_capacity: 1,
+            prefetch_per_worker: 1,
             producer_buffer: 128,
             result_buffer: 128,
             max_retries: 3,
@@ -121,8 +119,11 @@ impl Default for MailboxConfig {
     }
 }
 
-/// Build a boxed, cloneable tower service with common layers for the worker
-/// pipeline (load-shed, buffer, optional timeout, and concurrency limit).
+/// Wrap the user's service in a per-call timeout and box it for the worker
+/// pool. Concurrency is governed by [`MailboxConfig::worker_count`]; this
+/// helper does not add a second concurrency layer. Callers that need
+/// per-resource rate limiting should compose their own `ServiceBuilder`
+/// chain before passing the service in.
 pub fn build_service_stack<D, Ctx, S, E>(
     service: S,
     options: ServiceStackOptions,
@@ -137,33 +138,21 @@ where
     D: Clone + Send + 'static,
     Ctx: Send + Sync + 'static,
 {
-    let concurrency_limit = options.concurrency_limit.unwrap_or(usize::MAX);
     let timeout = options.timeout.unwrap_or_else(|| Duration::from_secs(30));
-
     let service = service.map_err(|err| err.into());
-
-    let builder = ServiceBuilder::new()
-        .layer(ConcurrencyLimitLayer::new(concurrency_limit))
-        .load_shed()
-        .buffer(options.buffer)
-        .timeout(timeout);
-
-    BoxCloneService::new(builder.service(service))
+    let stack = ServiceBuilder::new().timeout(timeout).service(service);
+    BoxCloneService::new(stack)
 }
 
 #[derive(Debug, Clone)]
 pub struct ServiceStackOptions {
     pub timeout: Option<Duration>,
-    pub buffer: usize,
-    pub concurrency_limit: Option<usize>,
 }
 
 impl Default for ServiceStackOptions {
     fn default() -> Self {
         Self {
             timeout: Some(Duration::from_secs(30)),
-            buffer: 1,
-            concurrency_limit: Some(1),
         }
     }
 }
@@ -199,13 +188,12 @@ where
     let (control_tx, control_rx_for_dispatcher) =
         broadcast::channel::<ControlCommand>(16);
 
-    let mut inbox_senders = Vec::with_capacity(worker_count);
-    let mut inbox_receivers = Vec::with_capacity(worker_count);
-    for _ in 0..worker_count {
-        let (tx, rx) = mpsc::channel::<Envelope<Data>>(config.inbox_capacity);
-        inbox_senders.push(tx);
-        inbox_receivers.push(rx);
-    }
+    let channel_capacity = config
+        .prefetch_per_worker
+        .saturating_mul(worker_count)
+        .max(1);
+    let (envelope_tx, envelope_rx) =
+        async_channel::bounded::<Envelope<Data>>(channel_capacity);
 
     let mut handles = Vec::with_capacity(worker_count + 1);
     handles.push(tokio::spawn(dispatcher_loop(DispatcherParams {
@@ -213,17 +201,17 @@ where
         control_rx: control_rx_for_dispatcher,
         producer_rx,
         result_rx,
-        inboxes: inbox_senders,
+        envelope_tx,
         max_retries: config.max_retries,
         dequeue_backoff: config.dequeue_backoff,
         stats_tx: stats_tx.clone(),
     })));
 
-    for (worker_idx, inbox) in inbox_receivers.into_iter().enumerate() {
+    for worker_idx in 0..worker_count {
         handles.push(tokio::spawn(worker_loop(WorkerParams {
             worker_id: worker_idx,
             ctx: ctx.clone(),
-            inbox,
+            envelope_rx: envelope_rx.clone(),
             control_rx: control_tx.subscribe(),
             service: service.clone(),
             result_tx: result_tx.clone(),
@@ -231,6 +219,9 @@ where
             producer: producer.clone(),
         })));
     }
+    // Workers each hold a clone; drop the local copy so the channel can
+    // fully close once the dispatcher drops its sender on Stop.
+    drop(envelope_rx);
     handles.push(stats_handle);
 
     MailboxRuntime {
@@ -246,7 +237,7 @@ struct DispatcherParams<D: Clone> {
     control_rx: broadcast::Receiver<ControlCommand>,
     producer_rx: mpsc::Receiver<ProducerMsg<D>>,
     result_rx: mpsc::Receiver<WorkerResult<D>>,
-    inboxes: Vec<mpsc::Sender<Envelope<D>>>,
+    envelope_tx: async_channel::Sender<Envelope<D>>,
     max_retries: u32,
     dequeue_backoff: Duration,
     stats_tx: mpsc::Sender<StatsEvent>,
@@ -268,17 +259,26 @@ where
         mut control_rx,
         mut producer_rx,
         mut result_rx,
-        mut inboxes,
+        envelope_tx,
         max_retries,
         dequeue_backoff,
         stats_tx,
     } = params;
+
+    // Recover any tasks left in-flight by a previous process before we start
+    // dispatching. Failure is logged but not fatal.
+    match queue.recover_inflight().await {
+        Ok(0) => {}
+        Ok(n) => info!(recovered = n, "recovered in-flight tasks at startup"),
+        Err(err) => warn!(?err, "inflight recovery failed; continuing"),
+    }
+
     let mut paused = false;
     let mut stopping = false;
-    let mut next_worker = 0usize;
 
     loop {
         tokio::select! {
+            biased;
             control = control_rx.recv() => {
                 match control {
                     Ok(ControlCommand::Pause) => {
@@ -294,14 +294,11 @@ where
                         stopping = true;
                         paused = true;
                         producer_rx.close();
-                        inboxes.clear();
+                        envelope_tx.close();
                     }
                 }
             }
-            msg = producer_rx.recv() => {
-                if stopping {
-                    continue;
-                }
+            msg = producer_rx.recv(), if !stopping => {
                 if let Some(msg) = msg {
                     if let Err(err) = handle_producer_msg(&queue, msg).await {
                         warn!("failed to enqueue task from producer: {err:?}");
@@ -339,16 +336,14 @@ where
                             continue;
                         }
 
-                        let worker_idx = next_worker % inboxes.len();
-                        next_worker = (next_worker + 1) % inboxes.len();
                         let envelope = Envelope {
                             attempt: task.retries.saturating_add(1),
                             enqueued_at: task.queued_at,
                             task,
                         };
 
-                        if let Err(err) = inboxes[worker_idx].send(envelope).await {
-                            warn!("failed to send task to inbox {worker_idx}: {err}");
+                        if let Err(err) = envelope_tx.send(envelope).await {
+                            warn!("failed to dispatch envelope: {err}");
                         }
                     }
                     Err(TaskQueueError::QueueEmpty) => {
@@ -367,8 +362,6 @@ where
             break;
         }
     }
-
-    let _ = stats_tx.send(StatsEvent::QueueDepth(0)).await;
 }
 
 async fn handle_producer_msg<D>(
@@ -407,8 +400,8 @@ where
 {
     match result {
         WorkerResult::Ack { mut task } => {
+            // Skip the set-before-ack: ack removes the row anyway.
             task.set_succeed();
-            queue.set(&task).await?;
             queue.ack(&task.task_id).await?;
         }
         WorkerResult::Nack { mut task, error } => {
@@ -421,13 +414,6 @@ where
                 let _ = stats_tx.send(StatsEvent::TerminalFailure).await;
             }
         }
-        WorkerResult::Return { mut task } => {
-            task.set_status(TaskStatus::Queued);
-            task.started_at = None;
-            task.finished_at = None;
-            task.error_msg = None;
-            queue.push(&task).await?;
-        }
     }
 
     Ok(())
@@ -436,7 +422,7 @@ where
 struct WorkerParams<D: Clone, Ctx> {
     worker_id: usize,
     ctx: Arc<Ctx>,
-    inbox: mpsc::Receiver<Envelope<D>>,
+    envelope_rx: async_channel::Receiver<Envelope<D>>,
     control_rx: broadcast::Receiver<ControlCommand>,
     service: MailboxService<D, Ctx>,
     result_tx: mpsc::Sender<WorkerResult<D>>,
@@ -458,7 +444,7 @@ where
     let WorkerParams {
         worker_id,
         ctx,
-        mut inbox,
+        envelope_rx,
         mut control_rx,
         service,
         result_tx,
@@ -466,10 +452,10 @@ where
         producer,
     } = params;
     let mut paused = false;
-    let mut stop_requested = false;
 
     loop {
         tokio::select! {
+            biased;
             control = control_rx.recv() => {
                 match control {
                     Ok(ControlCommand::Pause) => {
@@ -481,16 +467,20 @@ where
                         trace!(worker_id, "worker resumed");
                     }
                     Ok(ControlCommand::Stop) | Err(_) => {
-                        info!(worker_id, "worker stopping after current task");
-                        stop_requested = true;
-                        paused = true;
+                        info!(worker_id, "worker stopping; channel will drain");
+                        // Workers exit when the shared channel reports closed
+                        // (sender dropped AND empty). Don't bail mid-flight.
+                        paused = false;
                     }
                 }
             }
-            envelope = inbox.recv(), if !paused => {
-                let Some(envelope) = envelope else {
-                    debug!(worker_id, "worker inbox closed");
-                    break;
+            envelope = envelope_rx.recv(), if !paused => {
+                let envelope = match envelope {
+                    Ok(envelope) => envelope,
+                    Err(_) => {
+                        debug!(worker_id, "shared channel closed; worker exiting");
+                        break;
+                    }
                 };
 
                 let task = envelope.task;
@@ -540,16 +530,6 @@ where
                 }
             }
         }
-
-        if stop_requested {
-            while let Ok(env) = inbox.try_recv() {
-                let _ = result_tx
-                    .send(WorkerResult::Return { task: env.task })
-                    .await;
-            }
-            debug!(worker_id, "stop requested; exiting loop");
-            break;
-        }
     }
 }
 
@@ -586,11 +566,6 @@ fn spawn_stats_collector(
                     #[cfg(feature = "observability")]
                     otel.terminal_failure.add(1, &[]);
                 }
-                StatsEvent::QueueDepth(depth) => {
-                    snapshot.queue_depth = Some(depth);
-                    #[cfg(feature = "observability")]
-                    otel.update_queue_depth(depth as u64);
-                }
             }
 
             let _ = tx.send(snapshot.clone());
@@ -607,8 +582,6 @@ struct ObservabilityMetrics {
     failed: Counter<u64>,
     terminal_failure: Counter<u64>,
     latency_ms: Histogram<f64>,
-    queue_depth: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    _queue_depth_inst: ObservableGauge<u64>,
 }
 
 #[cfg(feature = "observability")]
@@ -636,18 +609,6 @@ impl ObservabilityMetrics {
             .with_unit("ms")
             .with_description("Task execution latency as seen by workers")
             .build();
-        let queue_depth = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-        let gauge_state = queue_depth.clone();
-        let queue_depth_inst = meter
-            .u64_observable_gauge("capp_queue_depth")
-            .with_description("Last observed queue depth (when backend reports)")
-            .with_callback(move |obs| {
-                obs.observe(
-                    gauge_state.load(std::sync::atomic::Ordering::Relaxed),
-                    &[],
-                );
-            })
-            .build();
 
         Self {
             processed,
@@ -655,8 +616,6 @@ impl ObservabilityMetrics {
             failed,
             terminal_failure,
             latency_ms,
-            queue_depth,
-            _queue_depth_inst: queue_depth_inst,
         }
     }
 
@@ -675,11 +634,6 @@ impl ObservabilityMetrics {
         }
         self.latency_ms
             .record(latency.as_secs_f64() * 1_000.0, worker_attr);
-    }
-
-    fn update_queue_depth(&self, depth: u64) {
-        self.queue_depth
-            .store(depth, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -756,6 +710,148 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn slow_worker_does_not_block_others() {
+        // With the old per-worker round-robin, one slow worker would block
+        // the whole pool. With the shared MPMC channel, idle workers pick up
+        // whatever the dispatcher just pushed.
+        let queue =
+            Arc::new(InMemoryTaskQueue::<TestPayload, JsonSerializer>::new());
+        let ctx = Arc::new(());
+
+        let (observed_tx, mut observed_rx) = mpsc::channel::<u32>(16);
+
+        let base_service =
+            service_fn(move |req: ServiceRequest<TestPayload, ()>| {
+                let tx = observed_tx.clone();
+                async move {
+                    // One slow task; rest are fast.
+                    if req.task.payload.value == 0 {
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                    }
+                    tx.send(req.task.payload.value).await.unwrap();
+                    Ok::<(), BoxError>(())
+                }
+            });
+
+        // With the simplified stack, MailboxConfig.worker_count is the only
+        // concurrency knob — no tower semaphore to override.
+        let service = build_service_stack(
+            base_service,
+            ServiceStackOptions {
+                timeout: Some(Duration::from_secs(5)),
+            },
+        );
+        let runtime = spawn_mailbox_runtime(
+            queue.clone(),
+            ctx,
+            service,
+            MailboxConfig {
+                worker_count: 4,
+                prefetch_per_worker: 1,
+                ..Default::default()
+            },
+        );
+
+        let started = Instant::now();
+        for value in 0..4u32 {
+            runtime
+                .producer
+                .enqueue(Task::new(TestPayload { value }))
+                .await
+                .unwrap();
+        }
+
+        // Fast tasks (values 1..=3) must complete well before the slow one.
+        let mut fast_seen = 0;
+        while fast_seen < 3 {
+            let value = timeout(Duration::from_millis(500), observed_rx.recv())
+                .await
+                .expect("fast tasks were blocked")
+                .expect("observed channel closed");
+            if value != 0 {
+                fast_seen += 1;
+            }
+        }
+        let elapsed_fast = started.elapsed();
+        assert!(
+            elapsed_fast < Duration::from_millis(150),
+            "fast tasks took {elapsed_fast:?}, expected < 150ms"
+        );
+
+        // The slow task eventually completes.
+        let slow_value = timeout(Duration::from_millis(500), observed_rx.recv())
+            .await
+            .expect("slow task missing")
+            .expect("observed channel closed");
+        assert_eq!(slow_value, 0);
+
+        runtime.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn shutdown_does_not_lose_pending_tasks() {
+        // Enqueue more tasks than the workers can drain immediately, then
+        // shut down. Any tasks that did not run should remain in the queue
+        // (queue + inflight); nothing should be silently dropped.
+        let queue =
+            Arc::new(InMemoryTaskQueue::<TestPayload, JsonSerializer>::new());
+        let ctx = Arc::new(());
+
+        let processed = Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let processed_clone = processed.clone();
+        let base_service =
+            service_fn(move |_req: ServiceRequest<TestPayload, ()>| {
+                let counter = processed_clone.clone();
+                async move {
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    Ok::<(), BoxError>(())
+                }
+            });
+        let service =
+            build_service_stack(base_service, ServiceStackOptions::default());
+
+        let runtime = spawn_mailbox_runtime(
+            queue.clone(),
+            ctx,
+            service,
+            MailboxConfig {
+                worker_count: 2,
+                ..Default::default()
+            },
+        );
+
+        let total = 16u32;
+        for value in 0..total {
+            runtime
+                .producer
+                .enqueue(Task::new(TestPayload { value }))
+                .await
+                .unwrap();
+        }
+
+        // Let some — but not all — tasks process before shutdown.
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        runtime.shutdown().await;
+
+        let processed_count = processed.load(std::sync::atomic::Ordering::Relaxed);
+        let queue_len = queue.list.lock().unwrap().len() as u32;
+        let inflight_len = queue.inflight.lock().unwrap().len() as u32;
+
+        // No task is lost: every task is either processed (acked, removed
+        // from tasks/inflight) or still tracked in queue/inflight.
+        assert_eq!(
+            processed_count + queue_len + inflight_len,
+            total,
+            "processed={processed_count} queue={queue_len} inflight={inflight_len}"
+        );
+        assert!(
+            processed_count < total,
+            "expected partial completion at shutdown; processed all {total}"
+        );
+    }
+
+    #[tokio::test]
     async fn build_service_stack_boxes_errors() {
         let base_service =
             service_fn(|_req: ServiceRequest<TestPayload, ()>| async move {
@@ -763,11 +859,7 @@ mod tests {
             });
         let service = build_service_stack(
             base_service,
-            ServiceStackOptions {
-                timeout: None,
-                buffer: 1,
-                concurrency_limit: Some(1),
-            },
+            ServiceStackOptions { timeout: None },
         );
         let (producer, _producer_rx) = ProducerHandle::channel(1);
         let request = ServiceRequest {
@@ -872,33 +964,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handle_worker_result_return_resets_task() {
-        let queue =
-            Arc::new(InMemoryTaskQueue::<TestPayload, JsonSerializer>::new());
-        let abstract_queue: AbstractTaskQueue<TestPayload> = queue.clone();
-        let (stats_tx, _stats_rx) = mpsc::channel(4);
-        let mut task = Task::new(TestPayload { value: 4 });
-        task.set_in_progress();
-
-        queue.push(&task).await.unwrap();
-        handle_worker_result(
-            &abstract_queue,
-            WorkerResult::Return { task: task.clone() },
-            1,
-            &stats_tx,
-        )
-        .await
-        .unwrap();
-
-        let popped = queue.pop().await.unwrap();
-        assert!(matches!(popped.status, TaskStatus::Queued));
-        assert!(popped.started_at.is_none());
-        assert!(popped.finished_at.is_none());
-        assert!(popped.error_msg.is_none());
-    }
-
-    #[tokio::test]
-    async fn stats_collector_tracks_failures_and_depth() {
+    async fn stats_collector_tracks_failures() {
         let (stats_tx, stats_rx) = mpsc::channel(8);
         let (mut stats_watch, handle) = spawn_stats_collector(stats_rx);
 
@@ -911,7 +977,6 @@ mod tests {
             .await
             .unwrap();
         stats_tx.send(StatsEvent::TerminalFailure).await.unwrap();
-        stats_tx.send(StatsEvent::QueueDepth(3)).await.unwrap();
 
         timeout(Duration::from_secs(1), stats_watch.changed())
             .await
@@ -921,7 +986,6 @@ mod tests {
         let worker = snapshot.workers.get(&1).unwrap();
         assert_eq!(worker.failed, 1);
         assert_eq!(snapshot.terminal_failures, 1);
-        assert_eq!(snapshot.queue_depth, Some(3));
 
         drop(stats_tx);
         let _ = handle.await;
@@ -929,7 +993,7 @@ mod tests {
 
     #[tokio::test]
     async fn worker_loop_reports_failure() {
-        let (inbox_tx, inbox_rx) = mpsc::channel(2);
+        let (envelope_tx, envelope_rx) = async_channel::bounded(2);
         let (control_tx, control_rx) = broadcast::channel(4);
         let (result_tx, mut result_rx) = mpsc::channel(4);
         let (stats_tx, mut stats_rx) = mpsc::channel(4);
@@ -943,17 +1007,13 @@ mod tests {
             });
         let service = build_service_stack(
             base_service,
-            ServiceStackOptions {
-                timeout: None,
-                buffer: 1,
-                concurrency_limit: Some(1),
-            },
+            ServiceStackOptions { timeout: None },
         );
 
         let handle = tokio::spawn(worker_loop(WorkerParams {
             worker_id: 0,
             ctx: Arc::new(()),
-            inbox: inbox_rx,
+            envelope_rx,
             control_rx,
             service,
             result_tx,
@@ -961,7 +1021,7 @@ mod tests {
             producer,
         }));
 
-        inbox_tx
+        envelope_tx
             .send(Envelope {
                 task: Task::new(TestPayload { value: 42 }),
                 enqueued_at: std::time::SystemTime::now(),
@@ -983,12 +1043,15 @@ mod tests {
         ));
 
         let _ = control_tx.send(ControlCommand::Stop);
+        envelope_tx.close();
         let _ = handle.await;
     }
 
     #[tokio::test]
-    async fn worker_loop_pause_stop_drains_inbox() {
-        let (inbox_tx, inbox_rx) = mpsc::channel(2);
+    async fn worker_loop_resumes_after_pause_and_exits_on_close() {
+        // Pause halts envelope intake; Resume restores it; closing the shared
+        // channel causes the worker to exit cleanly.
+        let (envelope_tx, envelope_rx) = async_channel::bounded(2);
         let (control_tx, control_rx) = broadcast::channel(4);
         let (result_tx, mut result_rx) = mpsc::channel(4);
         let (stats_tx, _stats_rx) = mpsc::channel(4);
@@ -1004,7 +1067,7 @@ mod tests {
         let handle = tokio::spawn(worker_loop(WorkerParams {
             worker_id: 1,
             ctx: Arc::new(()),
-            inbox: inbox_rx,
+            envelope_rx,
             control_rx,
             service,
             result_tx,
@@ -1014,12 +1077,8 @@ mod tests {
 
         let _ = control_tx.send(ControlCommand::Pause);
         yield_now().await;
-        let _ = control_tx.send(ControlCommand::Resume);
-        yield_now().await;
-        let _ = control_tx.send(ControlCommand::Pause);
-        yield_now().await;
 
-        inbox_tx
+        envelope_tx
             .send(Envelope {
                 task: Task::new(TestPayload { value: 7 }),
                 enqueued_at: std::time::SystemTime::now(),
@@ -1028,24 +1087,34 @@ mod tests {
             .await
             .unwrap();
 
-        let _ = control_tx.send(ControlCommand::Stop);
+        // While paused, no result should arrive.
+        assert!(
+            timeout(Duration::from_millis(50), result_rx.recv())
+                .await
+                .is_err()
+        );
+
+        let _ = control_tx.send(ControlCommand::Resume);
         let result = timeout(Duration::from_secs(1), result_rx.recv())
             .await
             .unwrap();
-        assert!(matches!(result, Some(WorkerResult::Return { .. })));
+        assert!(matches!(result, Some(WorkerResult::Ack { .. })));
 
+        // Closing the shared channel makes the worker exit.
+        envelope_tx.close();
         let _ = handle.await;
     }
 
     #[tokio::test]
-    async fn worker_loop_exits_on_closed_inbox() {
-        let (inbox_tx, inbox_rx) = mpsc::channel(1);
+    async fn worker_loop_exits_on_closed_channel() {
+        let (envelope_tx, envelope_rx) = async_channel::bounded(1);
         let (_control_tx, control_rx) = broadcast::channel(4);
         let (result_tx, _result_rx) = mpsc::channel(1);
         let (stats_tx, _stats_rx) = mpsc::channel(1);
         let (producer, _producer_rx) = ProducerHandle::channel(1);
 
-        drop(inbox_tx);
+        envelope_tx.close();
+        drop(envelope_tx);
 
         let base_service =
             service_fn(|_req: ServiceRequest<TestPayload, ()>| async move {
@@ -1057,7 +1126,7 @@ mod tests {
         let handle = tokio::spawn(worker_loop(WorkerParams {
             worker_id: 2,
             ctx: Arc::new(()),
-            inbox: inbox_rx,
+            envelope_rx,
             control_rx,
             service,
             result_tx,
@@ -1073,6 +1142,5 @@ mod tests {
     async fn observability_metrics_smoke() {
         let metrics = ObservabilityMetrics::new();
         metrics.record_worker_event(1, true, Duration::from_millis(3));
-        metrics.update_queue_depth(5);
     }
 }

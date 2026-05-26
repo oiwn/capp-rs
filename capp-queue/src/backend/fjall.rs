@@ -11,7 +11,8 @@ use crate::{Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer};
 ///
 /// Layout:
 /// - `tasks`: task_id -> serialized task bytes
-/// - `queue`: task_id (uuid v7 bytes) -> empty value
+/// - `queue`: task_id (uuid v7 bytes) -> empty value (work to do)
+/// - `inflight`: task_id -> empty value (leased to a worker, not yet acked)
 /// - `dlq`: task_id -> serialized task bytes
 pub struct FjallTaskQueue<D, S>
 where
@@ -20,6 +21,7 @@ where
     db: Database,
     tasks: Keyspace,
     queue: Keyspace,
+    inflight: Keyspace,
     dlq: Keyspace,
     // Serialize push/pop/ack/nack/set to keep ordering simple.
     lock: Mutex<()>,
@@ -34,12 +36,14 @@ where
         let db = Database::builder(path).open()?;
         let tasks = db.keyspace("tasks", KeyspaceCreateOptions::default)?;
         let queue = db.keyspace("queue", KeyspaceCreateOptions::default)?;
+        let inflight = db.keyspace("inflight", KeyspaceCreateOptions::default)?;
         let dlq = db.keyspace("dlq", KeyspaceCreateOptions::default)?;
 
         Ok(Self {
             db,
             tasks,
             queue,
+            inflight,
             dlq,
             lock: Mutex::new(()),
             _marker: PhantomData,
@@ -78,6 +82,8 @@ where
 
         self.tasks.insert(task_id_bytes, &task_bytes)?;
         self.queue.insert(task_id_bytes, &[] as &[u8])?;
+        // Covers the retry path: a task popped earlier is being requeued.
+        self.inflight.remove(task_id_bytes)?;
 
         // Best-effort sync to disk for durability.
         self.db.persist(PersistMode::SyncAll)?;
@@ -94,6 +100,8 @@ where
         let (task_id_bytes, _) = entry.into_inner()?;
         let task_id_bytes = task_id_bytes.to_vec();
         self.queue.remove(task_id_bytes.clone())?;
+        self.inflight.insert(task_id_bytes.clone(), &[] as &[u8])?;
+        self.db.persist(PersistMode::SyncAll)?;
 
         let task_id = Self::task_id_from_bytes(&task_id_bytes)?;
         let task_bytes = self
@@ -108,6 +116,8 @@ where
         let _guard = self.lock.lock().unwrap();
         let task_id_bytes = Self::task_id_to_bytes(task_id);
         self.tasks.remove(task_id_bytes)?;
+        self.inflight.remove(task_id_bytes)?;
+        self.db.persist(PersistMode::SyncAll)?;
         Ok(())
     }
 
@@ -118,6 +128,8 @@ where
 
         self.dlq.insert(task_id_bytes, &task_bytes)?;
         self.tasks.remove(task_id_bytes)?;
+        self.inflight.remove(task_id_bytes)?;
+        self.db.persist(PersistMode::SyncAll)?;
         Ok(())
     }
 
@@ -127,6 +139,28 @@ where
         let task_bytes = S::serialize_task(task)?;
         self.tasks.insert(task_id_bytes, &task_bytes)?;
         Ok(())
+    }
+
+    async fn recover_inflight(&self) -> Result<u64, TaskQueueError> {
+        let _guard = self.lock.lock().unwrap();
+
+        let mut recovered = 0u64;
+        let mut keys = Vec::new();
+        for item in self.inflight.iter() {
+            let (key, _) = item.into_inner()?;
+            keys.push(key.to_vec());
+        }
+
+        for key in keys {
+            self.queue.insert(key.clone(), &[] as &[u8])?;
+            self.inflight.remove(key)?;
+            recovered += 1;
+        }
+
+        if recovered > 0 {
+            self.db.persist(PersistMode::SyncAll)?;
+        }
+        Ok(recovered)
     }
 }
 
@@ -224,6 +258,97 @@ mod tests {
 
         let popped = queue.pop().await?;
         assert_eq!(popped.payload.value, 5);
+        Ok(())
+    }
+
+    fn inflight_contains<S: TaskSerializer>(
+        queue: &FjallTaskQueue<TestData, S>,
+        task_id: &TaskId,
+    ) -> bool {
+        let key = FjallTaskQueue::<TestData, S>::task_id_to_bytes(task_id);
+        queue
+            .inflight
+            .get(key)
+            .map(|v| v.is_some())
+            .unwrap_or(false)
+    }
+
+    #[tokio::test]
+    async fn pop_moves_to_inflight() -> Result<(), TaskQueueError> {
+        let (_dir, queue) = make_queue();
+        let task = Task::new(TestData { value: 11 });
+
+        queue.push(&task).await?;
+        let popped = queue.pop().await?;
+
+        assert!(inflight_contains(&queue, &popped.task_id));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn ack_clears_inflight() -> Result<(), TaskQueueError> {
+        let (_dir, queue) = make_queue();
+        let task = Task::new(TestData { value: 12 });
+
+        queue.push(&task).await?;
+        let popped = queue.pop().await?;
+        queue.ack(&popped.task_id).await?;
+
+        assert!(!inflight_contains(&queue, &popped.task_id));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn nack_clears_inflight() -> Result<(), TaskQueueError> {
+        let (_dir, queue) = make_queue();
+        let task = Task::new(TestData { value: 13 });
+
+        queue.push(&task).await?;
+        let mut popped = queue.pop().await?;
+        popped.set_retry("fail");
+        queue.nack(&popped).await?;
+
+        assert!(!inflight_contains(&queue, &popped.task_id));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn push_retry_clears_inflight() -> Result<(), TaskQueueError> {
+        let (_dir, queue) = make_queue();
+        let mut task = Task::new(TestData { value: 14 });
+
+        queue.push(&task).await?;
+        let popped = queue.pop().await?;
+        assert!(inflight_contains(&queue, &popped.task_id));
+
+        task.set_retry("transient");
+        queue.push(&task).await?;
+
+        assert!(!inflight_contains(&queue, &task.task_id));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn recover_inflight_moves_back_to_queue() -> Result<(), TaskQueueError> {
+        let dir = tempdir().unwrap();
+        let task_id = {
+            let queue: FjallTaskQueue<TestData, JsonSerializer> =
+                FjallTaskQueue::open(dir.path())?;
+            let task = Task::new(TestData { value: 99 });
+            queue.push(&task).await?;
+            let popped = queue.pop().await?;
+            assert!(inflight_contains(&queue, &popped.task_id));
+            popped.task_id
+        };
+
+        // Reopen — simulates fresh process startup after crash.
+        let queue: FjallTaskQueue<TestData, JsonSerializer> =
+            FjallTaskQueue::open(dir.path())?;
+        let recovered = queue.recover_inflight().await?;
+        assert_eq!(recovered, 1);
+
+        let re_popped = queue.pop().await?;
+        assert_eq!(re_popped.task_id, task_id);
         Ok(())
     }
 }

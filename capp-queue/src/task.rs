@@ -94,9 +94,16 @@ impl TaskId {
         Self(uuid)
     }
 
-    pub fn from_string(uuid_str: &str) -> Self {
-        let uuid = Uuid::from_str(uuid_str).unwrap();
-        Self(uuid)
+    pub fn from_string(uuid_str: &str) -> Result<Self, uuid::Error> {
+        let uuid = Uuid::from_str(uuid_str)?;
+        Ok(Self(uuid))
+    }
+}
+
+impl FromStr for TaskId {
+    type Err = uuid::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::from_string(s)
     }
 }
 
@@ -145,6 +152,22 @@ mod tests {
     #[derive(Clone, Serialize, Deserialize, Default)]
     struct TaskData {
         value: u32,
+    }
+
+    #[test]
+    fn task_id_from_string_roundtrip() {
+        let original = TaskId::new();
+        let parsed = TaskId::from_string(&original.get().to_string()).unwrap();
+        assert_eq!(original, parsed);
+        let parsed_via_fromstr: TaskId =
+            original.get().to_string().parse().unwrap();
+        assert_eq!(original, parsed_via_fromstr);
+    }
+
+    #[test]
+    fn task_id_from_string_rejects_invalid() {
+        assert!(TaskId::from_string("not-a-uuid").is_err());
+        assert!("not-a-uuid".parse::<TaskId>().is_err());
     }
 
     #[test]

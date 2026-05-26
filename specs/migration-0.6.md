@@ -6,8 +6,9 @@
 
 ## Headline changes
 - Config is TOML-only (YAML is no longer supported).
-- New mailbox runtime uses Tower middleware for rate limiting, timeouts, retries,
-  and buffering.
+- New mailbox runtime uses Tower middleware for per-call timeouts. Concurrency
+  is governed by `MailboxConfig.worker_count`; additional rate-limiting
+  middleware can be added by composing your own `ServiceBuilder` chain.
 - Fjall is the default queue backend in `capp-queue` (disable if you only want
   in-memory queues).
 
@@ -25,9 +26,10 @@
 
 3) **Adopt the mailbox runtime (recommended)**
    - Create a Tower `Service` that accepts `ServiceRequest<T, Ctx>`.
-   - Use `ServiceBuilder` (or `build_service_stack`) to add timeout and
-     concurrency controls.
-   - Start workers via `spawn_mailbox_runtime`.
+   - Use `build_service_stack` for the default `timeout + box` setup, or
+     compose your own `ServiceBuilder` chain if you need extra middleware.
+   - Start workers via `spawn_mailbox_runtime`; set `worker_count` to control
+     concurrency.
 
    Minimal skeleton:
    ```rust

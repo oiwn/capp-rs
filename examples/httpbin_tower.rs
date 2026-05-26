@@ -131,7 +131,7 @@ async fn main() -> Result<(), BoxError> {
         service,
         MailboxConfig {
             worker_count: 4,
-            inbox_capacity: 1,
+            prefetch_per_worker: 1,
             producer_buffer: task_count,
             result_buffer: task_count,
             max_retries: 1,

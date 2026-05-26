@@ -84,8 +84,6 @@ async fn main() -> Result<(), BoxError> {
         base_service,
         ServiceStackOptions {
             timeout: Some(Duration::from_secs(5)),
-            buffer: 8,
-            concurrency_limit: Some(4),
         },
     );
 
@@ -95,7 +93,7 @@ async fn main() -> Result<(), BoxError> {
         service,
         MailboxConfig {
             worker_count: 4,
-            inbox_capacity: 1,
+            prefetch_per_worker: 1,
             producer_buffer: task_count as usize,
             result_buffer: task_count as usize,
             max_retries: 2,

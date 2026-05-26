@@ -131,8 +131,6 @@ async fn main() -> Result<()> {
         }),
         ServiceStackOptions {
             timeout: Some(Duration::from_secs(5)),
-            buffer: 32,
-            concurrency_limit: Some(8),
         },
     );
 
@@ -142,7 +140,7 @@ async fn main() -> Result<()> {
         service,
         MailboxConfig {
             worker_count: 8,
-            inbox_capacity: 4,
+            prefetch_per_worker: 4,
             producer_buffer: 512,
             result_buffer: 512,
             max_retries: 0,

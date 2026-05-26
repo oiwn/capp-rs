@@ -25,8 +25,8 @@
   - On success -> `WorkerResult::Ack`; on error -> `WorkerResult::Nack`.
   - On Stop: finish current task, drain remaining inbox items with `WorkerResult::Return` so dispatcher re-queues.
 - **Service stack**:
-  - Built with `build_service_stack` (load-shed + buffer + timeout + concurrency limit); returns `BoxCloneService<ServiceRequest, (), BoxError>`.
-  - Users can layer additional middleware before boxing if needed.
+  - Built with `build_service_stack` (per-call timeout only); returns `BoxCloneService<ServiceRequest, (), BoxError>`.
+  - `MailboxConfig.worker_count` is the concurrency knob. Callers that need a sub-cap for an external resource compose their own `ServiceBuilder` chain before passing the service in.
 
 ## Control & Observability
 - Control channel: `broadcast::Sender<ControlCommand>` with `Pause`, `Resume`, `Stop`.
@@ -46,8 +46,8 @@
 - Graceful ctrl+c supported; run with `cargo run -p capp --example mailbox --quiet`.
 
 ## Default Tunables
-- `MailboxConfig`: `worker_count=4`, `inbox_capacity=1`, `producer_buffer=128`, `result_buffer=128`, `max_retries=3`, `dequeue_backoff=50ms`.
-- Service stack defaults: timeout 30s, buffer 1, concurrency limit 1 (overridable via `ServiceStackOptions`).
+- `MailboxConfig`: `worker_count=4`, `prefetch_per_worker=1`, `producer_buffer=128`, `result_buffer=128`, `max_retries=3`, `dequeue_backoff=50ms`.
+- Service stack defaults: timeout 30s (the only field on `ServiceStackOptions`).
 
 ## Paths
 - Dispatcher/protocol: `capp-queue/src/dispatch.rs`
