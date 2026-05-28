@@ -1,42 +1,28 @@
-use reqwest::{Client, StatusCode};
+use reqwest::Client;
 use serde_json::Value;
 use tokio::time::{Duration, timeout};
 
-// const GOOGLE: &str = "http://www.google.com";
-
-/// Check if internet is available.
-/// There are a few hosts that are commonly used to check it
-/// because they are typically reliable and have high uptime. i
-/// Examples:
-///     - Google's primary domain: <https://www.google.com>
+/// Returns `true` iff any HTTP response is received within 1 second.
+/// Network errors (DNS, refused, TLS) and timeouts return `false`.
+/// Choose a URL your environment can normally reach. Examples:
 ///     - Cloudflare's DNS resolver: <https://1.1.1.1>
 ///     - Quad9's DNS resolver: <https://9.9.9.9>
+///     - Google's primary domain: <https://www.google.com>
 pub async fn internet(http_url: &str) -> bool {
     let client = Client::new();
     let request_future = client.get(http_url).send();
 
-    let response = match timeout(Duration::from_secs(1), request_future).await {
-        Ok(response) => response.unwrap(),
-        Err(_) => {
-            tracing::error!(
-                "Internet healthcheck request timed out: {}",
-                StatusCode::REQUEST_TIMEOUT
-            );
-            return false;
+    match timeout(Duration::from_secs(1), request_future).await {
+        Ok(Ok(_response)) => true,
+        Ok(Err(err)) => {
+            tracing::warn!(%err, url = http_url, "internet healthcheck failed");
+            false
         }
-    };
-
-    if response.status() == StatusCode::NOT_FOUND
-        && response.content_length() == Some(9)
-    {
-        return true;
+        Err(_) => {
+            tracing::warn!(url = http_url, "internet healthcheck timed out");
+            false
+        }
     }
-
-    tracing::error!(
-        "Internet healthcheck unexpected response status or content length: {:?}",
-        response
-    );
-    false
 }
 
 pub async fn test_proxy(proxy_url: &str) -> bool {

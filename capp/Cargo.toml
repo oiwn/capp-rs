@@ -65,6 +65,7 @@ rand = "0.10"
 md5 = "0.8"
 url = "2.5"
 base64 = "0.22"
+fjall.workspace = true
 
 [features]
 http = ["dep:reqwest", "capp-config/http"]
@@ -112,6 +113,7 @@ name = "local_blog_crawl"
 path = "../examples/local_blog_crawl.rs"
 required-features = ["http"]
 
-# [[example]]
-# name = "hackernews"
-# path = "../examples/hackernews/main.rs"
+[[example]]
+name = "hackernews"
+path = "../examples/hackernews/main.rs"
+required-features = ["http"]

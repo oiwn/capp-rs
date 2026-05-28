@@ -9,8 +9,7 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 
-mod support;
-use support::TokioIo;
+use super::support::TokioIo;
 
 pub trait ServiceFactory {
     type ServiceType: Service<
@@ -53,7 +52,7 @@ impl Service<Request<IncomingBody>> for TestService {
         }
 
         let res = match req.uri().path() {
-            "/" => ok_response(format!("here")),
+            "/" => ok_response("here".to_string()),
             // Return the 404 Not Found for other routes.
             _ => return Box::pin(async { fail_response("not found".into()) }),
         };

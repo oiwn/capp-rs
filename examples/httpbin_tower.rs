@@ -7,7 +7,10 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use capp::{
-    manager::{MailboxConfig, ServiceRequest, spawn_mailbox_runtime},
+    manager::{
+        MailboxConfig, ServiceRequest, ServiceStackOptions, build_service_stack,
+        spawn_mailbox_runtime,
+    },
     queue::{InMemoryTaskQueue, JsonSerializer, Task},
     tracing, tracing_subscriber,
 };
@@ -15,10 +18,8 @@ use reqwest::Client;
 use tokio::sync::mpsc;
 use tower::{
     BoxError, ServiceBuilder,
-    buffer::Buffer,
     limit::{ConcurrencyLimitLayer, RateLimitLayer},
     service_fn,
-    util::BoxCloneService,
 };
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -49,7 +50,6 @@ async fn main() -> Result<(), BoxError> {
                 tracing::info!(
                     task_id = req.task.payload.id,
                     attempt = req.attempt,
-                    worker_id = req.worker_id,
                     url = %req.task.payload.url,
                     "fetching"
                 );
@@ -79,19 +79,18 @@ async fn main() -> Result<(), BoxError> {
         })
     };
 
-    let inner = ServiceBuilder::new()
-        .layer(ConcurrencyLimitLayer::new(4))
-        .timeout(Duration::from_secs(2))
-        .service(base_service);
-
-    let rate_limited = ServiceBuilder::new()
+    // Single-service stack: stock tower layers compose without Clone
+    // gymnastics because the dispatcher owns the service.
+    let stack = ServiceBuilder::new()
         .layer(RateLimitLayer::new(2, Duration::from_secs(1)))
-        .service(inner);
-
-    // Buffer provides a cloneable handle around the non-clone rate limiter.
-    let service = Buffer::new(rate_limited, 8);
-
-    let service = BoxCloneService::new(service);
+        .layer(ConcurrencyLimitLayer::new(4))
+        .service(base_service);
+    let service = build_service_stack(
+        stack,
+        ServiceStackOptions {
+            timeout: Some(Duration::from_secs(2)),
+        },
+    );
 
     let tasks = vec![
         FetchTask {
@@ -130,12 +129,11 @@ async fn main() -> Result<(), BoxError> {
         ctx,
         service,
         MailboxConfig {
-            worker_count: 4,
-            inbox_capacity: 1,
             producer_buffer: task_count,
             result_buffer: task_count,
             max_retries: 1,
             dequeue_backoff: Duration::from_millis(50),
+            stop_when_idle: false,
         },
     );
 

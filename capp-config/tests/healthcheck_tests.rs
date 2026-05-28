@@ -24,11 +24,11 @@ mod tests {
         let result =
             rt.block_on(async { internet("http://127.0.0.1:3000/fail").await });
 
-        assert_eq!(result, true);
+        assert!(result);
     }
 
     #[tokio::test]
-    async fn internet_returns_false_for_non_matching_response() {
+    async fn internet_returns_true_for_any_response() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let addr = listener.local_addr().unwrap();
 
@@ -46,8 +46,20 @@ mod tests {
         });
 
         let result = internet(&format!("http://{addr}/")).await;
-        assert!(!result);
+        assert!(result);
         server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn internet_returns_false_on_connection_refused() {
+        // Bind, capture the address, then drop the listener so the port
+        // is closed when the request hits it.
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        drop(listener);
+
+        let result = internet(&format!("http://{addr}/")).await;
+        assert!(!result);
     }
 
     #[tokio::test]

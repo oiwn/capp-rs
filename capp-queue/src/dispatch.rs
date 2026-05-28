@@ -51,7 +51,6 @@ where
 pub enum WorkerResult<D: Clone> {
     Ack { task: Task<D> },
     Nack { task: Task<D>, error: String },
-    Return { task: Task<D> },
 }
 
 #[derive(Debug, Error)]
