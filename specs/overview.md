@@ -1,49 +1,88 @@
-% CAPP Overview
+# CAPP Overview
 
-## Purpose
-CAPP (Comprehensive Asynchronous Parallel Processing) is a Rust workspace for building web crawlers and async task processors. It supplies worker orchestration, configurable queues, routing utilities, and health checks so crawlers can scale across domains and backends.
+CAPP is a Rust workspace for building durable async task processors and
+web crawlers. It pairs a tower-native execution runtime with pluggable
+queue backends and a small set of crawler-shaped helpers (HTTP client
+config, URL routing, caching).
 
-## Core Capabilities
-- Queue backends: in-memory and Fjall (default persistent backend).
-- Workers manager: configurable concurrency, retries, round-robin distribution, dead-letter queue.
-- Config + HTTP helpers: TOML-driven settings, proxy/backoff utilities; routing for URL classification.
-- Mailbox runtime: Tower-native execution pipeline with rate limits, timeouts, and stats.
-- Health monitoring: built-in internet/endpoint checks to keep runtimes healthy.
+## Architecture (0.7)
 
-## Workspace Layout
-- `capp/`: public facade (manager, prelude) re-exporting feature-gated crates.
-- `capp-queue/`: queue traits/backends, serializers, task types.
-- `capp-config/`: config loader, HTTP/proxy/backoff helpers, router glue.
-- `capp-router/`, `capp-cache/`, `capp-urls/`: opt-in routing, caching, and URL helpers.
-- `examples/`: runnable demos (`basic`, `urls`, `mailbox`, `httpbin_tower`); `tests/`: integration flows with shared harness in `tests/common/`.
+The runtime is **one dispatcher task driving one tower service**:
 
-## Quick Start
-Add the crate with optional features:
+```
+external producers ─► producer_rx (mpsc) ─┐
+                                          ▼
+                                    ┌───────────┐
+                                    │dispatcher │ ── service.ready()
+                                    │ (1 task)  │ ── queue.pop()
+                                    │           │ ── tokio::spawn(call)
+                                    └───────────┘
+                                          │
+                          spawned futures │ result_rx (mpsc)
+                                          ▼
+                                    Ack / Nack → queue ack / retry / DLQ
+```
+
+- **Concurrency** lives in the service stack
+  (`ServiceBuilder::concurrency_limit(N)`). The dispatcher only pops
+  when `service.ready()` resolves, so all stock tower layers
+  (`concurrency_limit`, `rate_limit`, `retry`, `timeout`, `buffer`,
+  `load_shed`) compose without `Clone` shims.
+- **Durability** is the queue's responsibility. `FjallTaskQueue` keeps
+  `tasks` / `queue` / `inflight` / `dlq` partitions; the dispatcher
+  calls `recover_inflight()` on startup so crashed-mid-flight tasks
+  return to the queue.
+- **Stats** come out of a `watch::Receiver<StatsSnapshot>` with flat
+  counters (`processed`, `succeeded`, `failed`, `in_flight`,
+  `terminal_failures`, `last_latency`). Optional `stats-http` and
+  `observability` features expose them as JSON and OTLP respectively.
+
+## Workspace layout
+
+| crate | purpose |
+|---|---|
+| `capp` | public facade — manager, prelude, stats HTTP, observability; re-exports the workspace crates |
+| `capp-queue` | `TaskQueue` trait, `Task` type, `InMemoryTaskQueue`, `FjallTaskQueue`, `ProducerHandle` |
+| `capp-config` | TOML config loader, HTTP client builder, healthcheck, backoff helpers |
+| `capp-router` | URL classification (opt-in via `router` feature) |
+| `capp-cache` | HTTP response cache (opt-in via `cache` feature) |
+| `capp-urls` | URL helpers (opt-in via `urls` feature) |
+| `capp-testkit` | in-process HTTP fixtures used by tests and examples |
+| `examples/` | runnable demos — see `examples/hackernews/main.rs` for the canonical full crawler shape |
+
+## Feature flags (the `capp` crate)
+
+- `http` — pulls in `reqwest`.
+- `router`, `cache`, `urls` — opt-in re-exports of the workspace crates.
+- `healthcheck` — internet-reachability probe.
+- `stats-http` — hyper-backed `/stats` JSON endpoint.
+- `observability` — OpenTelemetry metrics (counter + histogram per call).
+
+## Quick start
+
 ```toml
 [dependencies]
-capp = { version = "0.6", features = ["router"] }
+capp = { version = "0.7", features = ["http"] }
 ```
-See `examples/basic.rs` for minimal worker setup; run with `cargo run --example basic`.
 
-## Example: Mailbox Stats HTTP
-Run the mailbox demo with a live stats endpoint:
-```sh
-cargo run -p capp --features stats-http --example mailbox_stats_http
+A complete crawler skeleton lives in `skills/build_crawler.md` §7. To
+see one running:
+
+```bash
+cargo run -p capp --example hackernews       --features http
+cargo run -p capp --example local_blog_crawl --features http
 ```
-Then query the stats endpoint:
-```sh
-curl http://127.0.0.1:8080/stats
-```
-The demo runs indefinitely and enqueues a follow-up task after each success. Stop
-it with Ctrl+C.
 
-## Development Commands
-- `cargo fmt --all` — rustfmt (edition 2024, width 84).
-- `cargo clippy --workspace --all-targets --all-features -D warnings` — lint strictly.
-- `cargo test --workspace --all-features` — run unit + integration tests (tokio-based).
-- `cargo doc --workspace --no-deps --open` — browse API docs.
+## Development commands
 
-## Notes & Expectations
-- Favor typed errors (`thiserror`) over panics; avoid `unwrap` in lib paths.
-- Gate backend/http/router code with features to keep binaries lean.
-- Tests avoid real network calls; use provided fixtures/mocks.
+- `cargo fmt --all`
+- `cargo clippy --workspace --all-targets --all-features -D warnings`
+- `cargo test --workspace --all-features`
+- `cargo doc --workspace --no-deps --open`
+
+## Conventions
+
+- Typed errors (`thiserror`) over panics in library code; reserve
+  panics for config-load-time deploy bugs.
+- Tests don't hit the network — use `capp-testkit` fixtures.
+- Feature-gate every optional backend / dep so binaries stay lean.
