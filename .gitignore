@@ -24,3 +24,4 @@ tags
 tarpaulin-report.html
 .DS_Store
 .pginf/
+.hackernews/

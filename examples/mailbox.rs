@@ -11,7 +11,7 @@ use capp::{
 };
 use rand::{RngExt, rng};
 use tokio::{signal, sync::mpsc};
-use tower::{BoxError, service_fn};
+use tower::{BoxError, ServiceBuilder, service_fn};
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct DemoTask {
@@ -53,7 +53,6 @@ async fn main() -> Result<(), BoxError> {
                 tracing::info!(
                     task_id = req.task.payload.id,
                     attempt = req.attempt,
-                    worker_id = req.worker_id,
                     stubborn,
                     delay_ms = req.task.payload.sleep_ms,
                     "processing task"
@@ -64,7 +63,6 @@ async fn main() -> Result<(), BoxError> {
                     tracing::warn!(
                         task_id = req.task.payload.id,
                         attempt = req.attempt,
-                        worker_id = req.worker_id,
                         "simulated failure, will retry if under threshold"
                     );
                     return Err(anyhow!("simulated failure")).map_err(Into::into);
@@ -76,25 +74,27 @@ async fn main() -> Result<(), BoxError> {
         })
     };
 
+    let inner = ServiceBuilder::new()
+        .concurrency_limit(4)
+        .service(base_service);
     let service = build_service_stack(
-        base_service,
+        inner,
         ServiceStackOptions {
             timeout: Some(Duration::from_secs(15)),
         },
     );
 
-    // Spin up dispatcher + mailbox workers.
+    // Spin up the single-service dispatcher.
     let runtime = spawn_mailbox_runtime(
         queue.clone(),
         ctx,
         service,
         MailboxConfig {
-            worker_count: 4,
-            prefetch_per_worker: 1,
             producer_buffer: task_count as usize,
             result_buffer: task_count as usize,
             max_retries: 2,
             dequeue_backoff: Duration::from_millis(10),
+            stop_when_idle: false,
         },
     );
 
@@ -104,14 +104,16 @@ async fn main() -> Result<(), BoxError> {
     let stats_handle = tokio::spawn(async move {
         while stats_rx.changed().await.is_ok() {
             let snapshot = stats_rx.borrow().clone();
-            if snapshot.workers.is_empty() {
+            if snapshot.processed == 0 && snapshot.in_flight == 0 {
                 continue;
             }
-            let total: u64 = snapshot.workers.values().map(|w| w.processed).sum();
-            let successes: u64 =
-                snapshot.workers.values().map(|w| w.succeeded).sum();
-            let dlq = snapshot.terminal_failures;
-            tracing::info!(processed = total, succeeded = successes, dlq, "stats");
+            tracing::info!(
+                processed = snapshot.processed,
+                succeeded = snapshot.succeeded,
+                in_flight = snapshot.in_flight,
+                dlq = snapshot.terminal_failures,
+                "stats"
+            );
         }
     });
 

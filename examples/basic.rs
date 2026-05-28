@@ -10,7 +10,7 @@ use capp::{
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
-use tower::{BoxError, service_fn};
+use tower::{BoxError, ServiceBuilder, service_fn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskData {
@@ -85,7 +85,7 @@ async fn main() -> Result<(), BoxError> {
     let queue = Arc::new(InMemoryTaskQueue::<TaskData, JsonSerializer>::new());
     let (done_tx, mut done_rx) = mpsc::channel::<TaskData>(32);
 
-    let service = build_service_stack(
+    let inner = ServiceBuilder::new().concurrency_limit(4).service(
         service_fn(move |req: ServiceRequest<TaskData, Context>| {
             let done_tx = done_tx.clone();
             async move {
@@ -93,7 +93,6 @@ async fn main() -> Result<(), BoxError> {
                 let rem = payload.value % 3;
 
                 tracing::info!(
-                    worker_id = req.worker_id,
                     value = payload.value,
                     attempt = req.attempt,
                     "processing division task"
@@ -112,6 +111,9 @@ async fn main() -> Result<(), BoxError> {
                 Ok::<(), BoxError>(())
             }
         }),
+    );
+    let service = build_service_stack(
+        inner,
         ServiceStackOptions {
             timeout: Some(Duration::from_secs(5)),
         },
@@ -122,12 +124,11 @@ async fn main() -> Result<(), BoxError> {
         ctx,
         service,
         MailboxConfig {
-            worker_count: 4,
-            prefetch_per_worker: 1,
             producer_buffer: 32,
             result_buffer: 32,
             max_retries: 2,
             dequeue_backoff: Duration::from_millis(25),
+            stop_when_idle: false,
         },
     );
 

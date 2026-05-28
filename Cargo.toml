@@ -11,7 +11,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.2"
+version = "0.7.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.85"
@@ -24,11 +24,11 @@ homepage = "https://github.com/oiwn/capp-rs"
 
 [workspace.dependencies]
 # Workspace crates
-capp-cache = { path = "capp-cache", version = "0.6.2" }
-capp-config = { path = "capp-config", version = "0.6.2" }
-capp-queue = { path = "capp-queue", version = "0.6.2" }
-capp-router = { path = "capp-router", version = "0.6.2" }
-capp-urls = { path = "capp-urls", version = "0.6.2" }
+capp-cache = { path = "capp-cache", version = "0.7.0" }
+capp-config = { path = "capp-config", version = "0.7.0" }
+capp-queue = { path = "capp-queue", version = "0.7.0" }
+capp-router = { path = "capp-router", version = "0.7.0" }
+capp-urls = { path = "capp-urls", version = "0.7.0" }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

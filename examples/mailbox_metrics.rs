@@ -31,7 +31,7 @@ use capp::{
 };
 use rand::{RngExt, rng};
 use tokio::sync::mpsc;
-use tower::{BoxError, service_fn};
+use tower::{BoxError, ServiceBuilder, service_fn};
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct DemoTask {
@@ -65,7 +65,6 @@ async fn main() -> Result<(), BoxError> {
                 tracing::info!(
                     task_id = req.task.payload.id,
                     attempt = req.attempt,
-                    worker_id = req.worker_id,
                     delay_ms = req.task.payload.delay_ms,
                     should_fail,
                     "processing task"
@@ -80,8 +79,11 @@ async fn main() -> Result<(), BoxError> {
         })
     };
 
+    let inner = ServiceBuilder::new()
+        .concurrency_limit(4)
+        .service(base_service);
     let service = build_service_stack(
-        base_service,
+        inner,
         ServiceStackOptions {
             timeout: Some(Duration::from_secs(5)),
         },
@@ -92,12 +94,11 @@ async fn main() -> Result<(), BoxError> {
         ctx,
         service,
         MailboxConfig {
-            worker_count: 4,
-            prefetch_per_worker: 1,
             producer_buffer: task_count as usize,
             result_buffer: task_count as usize,
             max_retries: 2,
             dequeue_backoff: Duration::from_millis(10),
+            stop_when_idle: false,
         },
     );
 
