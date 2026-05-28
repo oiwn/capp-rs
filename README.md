@@ -23,10 +23,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-capp = "0.6"
+capp = "0.7"
 
 # Optional features
-capp = { version = "0.6", features = ["router"] }
+capp = { version = "0.7", features = ["router"] }
 ```
 
 ## Usage
@@ -40,7 +40,7 @@ use capp::{
     queue::{InMemoryTaskQueue, JsonSerializer, Task},
 };
 use serde::{Deserialize, Serialize};
-use tower::{BoxError, service_fn};
+use tower::{BoxError, ServiceBuilder, service_fn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TaskData {
@@ -52,21 +52,21 @@ async fn main() -> Result<(), BoxError> {
     let queue = Arc::new(InMemoryTaskQueue::<TaskData, JsonSerializer>::new());
     let ctx = Arc::new(());
 
-    let service = build_service_stack(
-        service_fn(|req: ServiceRequest<TaskData, ()>| async move {
+    let inner = ServiceBuilder::new().concurrency_limit(4).service(service_fn(
+        |req: ServiceRequest<TaskData, ()>| async move {
             println!("processing {}", req.task.payload.value);
             Ok::<(), BoxError>(())
-        }),
-        Default::default(),
-    );
+        },
+    ));
+    let service = build_service_stack(inner, Default::default());
 
     let runtime = spawn_mailbox_runtime(
         queue,
         ctx,
         service,
         MailboxConfig {
-            worker_count: 4,
             dequeue_backoff: Duration::from_millis(25),
+            stop_when_idle: true,
             ..Default::default()
         },
     );
@@ -76,7 +76,7 @@ async fn main() -> Result<(), BoxError> {
         .enqueue(Task::new(TaskData { value: 42 }))
         .await?;
 
-    runtime.shutdown().await;
+    runtime.join().await;
     Ok(())
 }
 ```
