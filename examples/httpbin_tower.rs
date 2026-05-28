@@ -8,8 +8,8 @@ use std::{sync::Arc, time::Duration};
 use anyhow::anyhow;
 use capp::{
     manager::{
-        MailboxConfig, ServiceRequest, ServiceStackOptions,
-        build_service_stack, spawn_mailbox_runtime,
+        MailboxConfig, ServiceRequest, ServiceStackOptions, build_service_stack,
+        spawn_mailbox_runtime,
     },
     queue::{InMemoryTaskQueue, JsonSerializer, Task},
     tracing, tracing_subscriber,

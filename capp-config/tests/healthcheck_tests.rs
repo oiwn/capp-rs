@@ -24,7 +24,7 @@ mod tests {
         let result =
             rt.block_on(async { internet("http://127.0.0.1:3000/fail").await });
 
-        assert_eq!(result, true);
+        assert!(result);
     }
 
     #[tokio::test]

@@ -85,8 +85,9 @@ async fn main() -> Result<(), BoxError> {
     let queue = Arc::new(InMemoryTaskQueue::<TaskData, JsonSerializer>::new());
     let (done_tx, mut done_rx) = mpsc::channel::<TaskData>(32);
 
-    let inner = ServiceBuilder::new().concurrency_limit(4).service(
-        service_fn(move |req: ServiceRequest<TaskData, Context>| {
+    let inner = ServiceBuilder::new()
+        .concurrency_limit(4)
+        .service(service_fn(move |req: ServiceRequest<TaskData, Context>| {
             let done_tx = done_tx.clone();
             async move {
                 let mut payload = req.task.payload;
@@ -110,8 +111,7 @@ async fn main() -> Result<(), BoxError> {
                 let _ = done_tx.send(payload).await;
                 Ok::<(), BoxError>(())
             }
-        }),
-    );
+        }));
     let service = build_service_stack(
         inner,
         ServiceStackOptions {

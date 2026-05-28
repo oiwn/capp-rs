@@ -14,13 +14,10 @@ use capp_queue::{
 use opentelemetry::metrics::{Counter, Histogram};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::sync::{broadcast, mpsc, watch};
-use tower::{
-    BoxError, Service, ServiceBuilder, ServiceExt, util::BoxService,
-};
+use tower::{BoxError, Service, ServiceBuilder, ServiceExt, util::BoxService};
 use tracing::{debug, error, info, instrument, trace, warn};
 
-pub type MailboxService<D, Ctx> =
-    BoxService<ServiceRequest<D, Ctx>, (), BoxError>;
+pub type MailboxService<D, Ctx> = BoxService<ServiceRequest<D, Ctx>, (), BoxError>;
 
 /// Request passed into the tower service stack per task.
 #[derive(Clone, Debug)]
@@ -122,9 +119,7 @@ pub fn build_service_stack<D, Ctx, S, E>(
     options: ServiceStackOptions,
 ) -> MailboxService<D, Ctx>
 where
-    S: Service<ServiceRequest<D, Ctx>, Response = (), Error = E>
-        + Send
-        + 'static,
+    S: Service<ServiceRequest<D, Ctx>, Response = (), Error = E> + Send + 'static,
     S::Future: Send + 'static,
     E: Into<BoxError> + Send + Sync + 'static,
     D: Clone + Send + 'static,
@@ -169,8 +164,7 @@ where
         + 'static,
     Ctx: Send + Sync + 'static,
 {
-    let (producer, producer_rx) =
-        ProducerHandle::channel(config.producer_buffer);
+    let (producer, producer_rx) = ProducerHandle::channel(config.producer_buffer);
     let (result_tx, result_rx) =
         mpsc::channel::<WorkerResult<Data>>(config.result_buffer);
     let (stats_tx, stats_rx) = mpsc::channel::<StatsEvent>(64);
@@ -381,9 +375,7 @@ where
             }
         }
 
-        if stopping
-            && in_flight.load(Ordering::SeqCst) == 0
-            && result_rx.is_empty()
+        if stopping && in_flight.load(Ordering::SeqCst) == 0 && result_rx.is_empty()
         {
             trace!("dispatcher drained; exiting");
             break;
@@ -536,8 +528,7 @@ impl ObservabilityMetrics {
         } else {
             self.failed.add(1, &[]);
         }
-        self.latency_ms
-            .record(latency.as_secs_f64() * 1_000.0, &[]);
+        self.latency_ms.record(latency.as_secs_f64() * 1_000.0, &[]);
     }
 }
 
@@ -632,8 +623,7 @@ mod tests {
         let stack = ServiceBuilder::new()
             .concurrency_limit(2)
             .service(base_service);
-        let service =
-            build_service_stack(stack, ServiceStackOptions::default());
+        let service = build_service_stack(stack, ServiceStackOptions::default());
 
         let runtime = spawn_mailbox_runtime(
             queue.clone(),
@@ -690,15 +680,11 @@ mod tests {
         let stack = ServiceBuilder::new()
             .concurrency_limit(4)
             .service(base_service);
-        let service =
-            build_service_stack(stack, ServiceStackOptions::default());
+        let service = build_service_stack(stack, ServiceStackOptions::default());
 
         let total = 6u32;
         for value in 0..total {
-            queue
-                .push(&Task::new(TestPayload { value }))
-                .await
-                .unwrap();
+            queue.push(&Task::new(TestPayload { value })).await.unwrap();
         }
 
         let runtime = spawn_mailbox_runtime(
@@ -733,10 +719,7 @@ mod tests {
             type Response = ();
             type Error = BoxError;
             type Future = std::pin::Pin<
-                Box<
-                    dyn std::future::Future<Output = Result<(), BoxError>>
-                        + Send,
-                >,
+                Box<dyn std::future::Future<Output = Result<(), BoxError>> + Send>,
             >;
 
             fn poll_ready(
@@ -754,10 +737,8 @@ mod tests {
             }
         }
 
-        let _svc: MailboxService<TestPayload, ()> = build_service_stack(
-            NonCloneSvc,
-            ServiceStackOptions { timeout: None },
-        );
+        let _svc: MailboxService<TestPayload, ()> =
+            build_service_stack(NonCloneSvc, ServiceStackOptions { timeout: None });
     }
 
     #[tokio::test]
@@ -780,8 +761,7 @@ mod tests {
         let stack = ServiceBuilder::new()
             .concurrency_limit(2)
             .service(base_service);
-        let service =
-            build_service_stack(stack, ServiceStackOptions::default());
+        let service = build_service_stack(stack, ServiceStackOptions::default());
 
         let runtime = spawn_mailbox_runtime(
             queue.clone(),
@@ -821,7 +801,7 @@ mod tests {
     async fn build_service_stack_boxes_errors() {
         let base_service =
             service_fn(|_req: ServiceRequest<TestPayload, ()>| async move {
-                Err::<(), io::Error>(io::Error::new(io::ErrorKind::Other, "boom"))
+                Err::<(), io::Error>(io::Error::other("boom"))
             });
         let mut service = build_service_stack(
             base_service,

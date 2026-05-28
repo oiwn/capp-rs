@@ -74,62 +74,64 @@ async fn main() -> Result<()> {
 
     ensure!(ctx.mark_seen("/").await, "seed path should be new");
 
-    let inner = ServiceBuilder::new().concurrency_limit(8).service(
-        service_fn(move |req: ServiceRequest<CrawlTask, CrawlContext>| {
-            let done_tx = done_tx.clone();
-            async move {
-                let response =
-                    req.ctx.client.get(&req.task.payload.url).send().await?;
-                let status = response.status();
-                let body = response.text().await?;
+    let inner = ServiceBuilder::new()
+        .concurrency_limit(8)
+        .service(service_fn(
+            move |req: ServiceRequest<CrawlTask, CrawlContext>| {
+                let done_tx = done_tx.clone();
+                async move {
+                    let response =
+                        req.ctx.client.get(&req.task.payload.url).send().await?;
+                    let status = response.status();
+                    let body = response.text().await?;
 
-                if !status.is_success() {
-                    return Err(anyhow::anyhow!(
-                        "non-success response for {}: {}",
-                        req.task.payload.url,
-                        status
-                    ))
-                    .map_err(Into::into);
-                }
+                    if !status.is_success() {
+                        return Err(anyhow::anyhow!(
+                            "non-success response for {}: {}",
+                            req.task.payload.url,
+                            status
+                        ))
+                        .map_err(Into::into);
+                    }
 
-                let discovered = {
-                    let document = Html::parse_document(&body);
-                    let mut discovered = Vec::new();
-                    for node in document.select(&req.ctx.link_selector) {
-                        let Some(href) = node.value().attr("href") else {
-                            continue;
-                        };
-                        let Ok(url) = req.ctx.base_url.join(href) else {
-                            continue;
-                        };
+                    let discovered = {
+                        let document = Html::parse_document(&body);
+                        let mut discovered = Vec::new();
+                        for node in document.select(&req.ctx.link_selector) {
+                            let Some(href) = node.value().attr("href") else {
+                                continue;
+                            };
+                            let Ok(url) = req.ctx.base_url.join(href) else {
+                                continue;
+                            };
 
-                        if url.domain() != req.ctx.base_url.domain() {
-                            continue;
+                            if url.domain() != req.ctx.base_url.domain() {
+                                continue;
+                            }
+
+                            discovered.push(url.to_string());
                         }
+                        discovered
+                    };
 
-                        discovered.push(url.to_string());
+                    for discovered_url in discovered {
+                        let url = Url::parse(&discovered_url)
+                            .context("parse discovered url")?;
+                        let path = url.path().to_string();
+                        if req.ctx.mark_seen(&path).await {
+                            req.producer
+                                .enqueue(Task::new(CrawlTask {
+                                    url: discovered_url,
+                                }))
+                                .await?;
+                        }
                     }
-                    discovered
-                };
 
-                for discovered_url in discovered {
-                    let url = Url::parse(&discovered_url)
-                        .context("parse discovered url")?;
-                    let path = url.path().to_string();
-                    if req.ctx.mark_seen(&path).await {
-                        req.producer
-                            .enqueue(Task::new(CrawlTask {
-                                url: discovered_url,
-                            }))
-                            .await?;
-                    }
+                    let _ = done_tx.send(req.task.payload.url).await;
+                    Ok::<(), BoxError>(())
                 }
-
-                let _ = done_tx.send(req.task.payload.url).await;
-                Ok::<(), BoxError>(())
-            }
-        }),
-    );
+            },
+        ));
     let service = build_service_stack(
         inner,
         ServiceStackOptions {
