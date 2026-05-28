@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use serde::{Serialize, de::DeserializeOwned};
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, hash::Hash, sync::Arc};
 
 use super::TaskQueueError;
 use crate::task::{Task, TaskId};
@@ -32,6 +32,6 @@ pub type AbstractTaskQueue<D> = Arc<dyn TaskQueue<D> + Send + Sync>;
 
 // Trait used for round-robin queues
 pub trait HasTagKey {
-    type TagValue: ToString + PartialEq;
+    type TagValue: Hash + Eq + Clone + ToString + Send + Sync + 'static;
     fn get_tag_value(&self) -> Self::TagValue;
 }

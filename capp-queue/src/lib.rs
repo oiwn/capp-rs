@@ -5,6 +5,8 @@ pub mod serializers;
 pub mod task;
 
 #[cfg(feature = "fjall")]
+pub use crate::backend::FjallRoundRobinTaskQueue;
+#[cfg(feature = "fjall")]
 pub use crate::backend::FjallTaskQueue;
 pub use crate::backend::InMemoryTaskQueue;
 pub use crate::dispatch::{
