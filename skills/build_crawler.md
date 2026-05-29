@@ -71,10 +71,6 @@ Before designing the task model, you must be able to answer:
   adjacency alone — ads/separators break adjacency.
 - **`&nbsp;` in counts.** `"37&nbsp;comments"` — parse the leading
   digits, don't split on whitespace.
-- **Special rows.** Sponsored / job / dead entries often lack the
-  selectors normal rows have. Detect and skip, or tag separately.
-- **Big detail pages.** A listing row may be 1 KB but its detail page
-  500 KB+ — concurrency limits should reflect this.
 
 ### 4. Task model
 
@@ -95,24 +91,27 @@ write parsed records to the data store before returning.
 
 ### 5. Persistence
 
-Two Fjall instances side by side (the queue owns its own keyspaces):
+The **task queue** is durable by design. `FjallTaskQueue` opens a Fjall
+database with four keyspaces (`tasks` / `queue` / `inflight` / `dlq`)
+inside the path you give it:
 
 ```rust
-// Queue — capp-queue manages tasks/queue/inflight/dlq inside this dir.
 let queue = Arc::new(
     FjallTaskQueue::<CrawlTask, JsonSerializer>::open("./<name>-queue.fjall")?
 );
-
-// Data store — your own Fjall DB at a separate path, one keyspace
-// per record kind (stories, comments, …). Keys = stable record id
-// as bytes; values = JSON.
-let db = fjall::Config::new("./<name>-data.fjall").open()?;
-let stories  = db.open_partition("stories",  Default::default())?;
-let comments = db.open_partition("comments", Default::default())?;
 ```
 
-Idempotency: before fetching, check the data partition for the record id.
-Skip if present unless the user asked for a refresh mode.
+The **data store** — where parsed records ultimately live — is the user's
+choice. A file tree, SQLite, Postgres, S3, another Fjall database; the
+crawler treats it as an opaque handle on the per-task context. Pick
+whatever fits the project:
+
+```rust
+let store = your_store();   // file, SQLite, Postgres, Fjall, …
+```
+
+Idempotency: before fetching, check whatever store you chose for the
+record id. Skip if present unless the user asked for a refresh mode.
 
 ### 6. Cargo dependencies
 
@@ -141,13 +140,18 @@ stats endpoint.
 ### 7. Assemble the crawler
 
 Architecture in one line: **one dispatcher task owns one tower service;
-concurrency and rate-limit are layers on that service.** No worker
-pool, no `Clone` requirement, no `Buffer` shim.
+concurrency and rate-limit are layers on that service.**
 
-The canonical reference is `examples/hackernews/main.rs` — read it
-before adapting. The skeleton below is paste-ready and mirrors that
-example's structure with the two handler patterns (listing-that-fans-out
-and detail-that-stores).
+The canonical reference is `examples/hackernews/main.rs`:
+
+- source: <https://github.com/oiwn/capp-rs/blob/main/examples/hackernews/main.rs>
+- raw: <https://github.com/oiwn/capp-rs/raw/refs/heads/main/examples/hackernews/main.rs>
+
+Read it before adapting. The snippets below mirror its structure and are
+the building blocks; concatenated top to bottom they form a working
+`main.rs`.
+
+#### (a) Imports and types
 
 ```rust
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -173,84 +177,95 @@ enum CrawlTask {
 
 struct CrawlContext {
     client: Client,
-    data:   DataStore,        // your own Fjall wrapper; see §5
+    store:  YourStore,   // see §5 — your storage of choice
 }
 
 const BASE: &str       = "https://example.com";
 const MAX_PAGES: u32   = 5;
 const DATA_DIR: &str   = ".crawler";
+```
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
-    std::fs::create_dir_all(DATA_DIR).context("create data dir")?;
+#### (b) Open the Fjall queue
 
-    let queue_path: PathBuf = format!("{DATA_DIR}/queue.fjall").into();
-    let data_path:  PathBuf = format!("{DATA_DIR}/data.fjall").into();
+```rust
+std::fs::create_dir_all(DATA_DIR).context("create data dir")?;
 
-    let queue = Arc::new(
-        FjallTaskQueue::<CrawlTask, JsonSerializer>::open(&queue_path)
-            .context("open queue")?,
-    );
+let queue_path: PathBuf = format!("{DATA_DIR}/queue.fjall").into();
 
-    let ctx = Arc::new(CrawlContext {
-        client: Client::builder()
-            .user_agent("my-crawler/0.1 (+https://github.com/me/proj)")
-            .timeout(Duration::from_secs(15))
-            .build()
-            .context("build reqwest client")?,
-        data: DataStore::open(&data_path)?,
-    });
+let queue = Arc::new(
+    FjallTaskQueue::<CrawlTask, JsonSerializer>::open(&queue_path)
+        .context("open queue")?,
+);
+```
 
-    // Tower stack: politeness lives here, not in MailboxConfig.
-    let inner = ServiceBuilder::new()
-        .concurrency_limit(2)                       // ≤ 2 in-flight requests
-        .rate_limit(2, Duration::from_secs(1))      // ≤ 2 req/sec
-        .service(service_fn(
-            move |req: ServiceRequest<CrawlTask, CrawlContext>| async move {
-                match req.task.payload.clone() {
-                    CrawlTask::Listing { page } => handle_listing(&req, page).await,
-                    CrawlTask::Detail  { id   } => handle_detail(&req, id).await,
-                }
-                .map_err(|e: anyhow::Error| -> BoxError { e.into() })
-            },
-        ));
+#### (c) Build the per-task context
 
-    let service = build_service_stack(
-        inner,
-        ServiceStackOptions { timeout: Some(Duration::from_secs(30)) },
-    );
+```rust
+let ctx = Arc::new(CrawlContext {
+    client: Client::builder()
+        .user_agent("my-crawler/0.1 (+https://github.com/me/proj)")
+        .timeout(Duration::from_secs(15))
+        .build()
+        .context("build reqwest client")?,
+    store: YourStore::open(format!("{DATA_DIR}/data"))?,
+});
+```
 
-    let runtime = spawn_mailbox_runtime(
-        queue,
-        ctx.clone(),
-        service,
-        MailboxConfig {
-            producer_buffer: 256,
-            result_buffer:   256,
-            max_retries:     1,
-            dequeue_backoff: Duration::from_millis(100),
-            stop_when_idle:  true,   // finite crawl; set false for long-running
+#### (d) Compose the tower service
+
+Politeness lives on the service, not in `MailboxConfig`:
+
+```rust
+let inner = ServiceBuilder::new()
+    .concurrency_limit(2)                       // ≤ 2 in-flight requests
+    .rate_limit(2, Duration::from_secs(1))      // ≤ 2 req/sec
+    .service(service_fn(
+        move |req: ServiceRequest<CrawlTask, CrawlContext>| async move {
+            match req.task.payload.clone() {
+                CrawlTask::Listing { page } => handle_listing(&req, page).await,
+                CrawlTask::Detail  { id   } => handle_detail(&req, id).await,
+            }
+            .map_err(|e: anyhow::Error| -> BoxError { e.into() })
         },
-    );
+    ));
 
-    // Seed.
-    runtime
-        .producer
-        .enqueue(Task::new(CrawlTask::Listing { page: 1 }))
-        .await
-        .context("seed enqueue")?;
+let service = build_service_stack(
+    inner,
+    ServiceStackOptions { timeout: Some(Duration::from_secs(30)) },
+);
+```
 
-    runtime.join().await;          // returns once stop_when_idle fires
+#### (e) Spawn the runtime, seed, wait
 
-    tracing::info!(
-        stories  = ctx.data.story_count(),
-        details  = ctx.data.detail_count(),
-        "crawl complete"
-    );
-    Ok(())
-}
+```rust
+let runtime = spawn_mailbox_runtime(
+    queue,
+    ctx.clone(),
+    service,
+    MailboxConfig {
+        producer_buffer: 256,
+        result_buffer:   256,
+        max_retries:     1,
+        dequeue_backoff: Duration::from_millis(100),
+        stop_when_idle:  true,   // finite crawl; set false for long-running
+    },
+);
 
+runtime
+    .producer
+    .enqueue(Task::new(CrawlTask::Listing { page: 1 }))
+    .await
+    .context("seed enqueue")?;
+
+runtime.join().await;          // returns once stop_when_idle fires
+```
+
+#### (f) Handler patterns
+
+A listing handler fans out: it parses the page, enqueues `Detail` tasks
+for each unseen record, and chases pagination.
+
+```rust
 async fn handle_listing(
     req: &ServiceRequest<CrawlTask, CrawlContext>,
     page: u32,
@@ -279,7 +294,7 @@ async fn handle_listing(
 
     let mut new_items = 0u32;
     for id in listing.ids {
-        if req.ctx.data.has_detail(id)? { continue; }       // idempotent
+        if req.ctx.store.has_detail(id)? { continue; }       // idempotent
         req.producer.enqueue(Task::new(CrawlTask::Detail { id })).await?;
         new_items += 1;
     }
@@ -294,7 +309,12 @@ async fn handle_listing(
     tracing::info!(page, new_items, "listing done");
     Ok(())
 }
+```
 
+A detail handler stores: it fetches, parses, and writes to the data
+store.
+
+```rust
 async fn handle_detail(
     req: &ServiceRequest<CrawlTask, CrawlContext>,
     id: u64,
@@ -315,7 +335,7 @@ async fn handle_detail(
         return Ok(());
     };
 
-    req.ctx.data.put_detail(&detail)?;
+    req.ctx.store.put_detail(&detail)?;
     tracing::info!(id, "detail stored");
     Ok(())
 }
@@ -324,11 +344,11 @@ async fn handle_detail(
 Tunables to think about per site:
 
 - `concurrency_limit(N)` — start at 2; raise once you see clean
-  responses. Detail pages are typically much heavier than listings.
+  responses.
 - `rate_limit(N, period)` — most polite-site target is `(2, 1s)` or
   `(1, 1s)`. Stock tower layer; no external dep.
 - `max_retries` — `1` is usually enough for transient HTTP errors.
-  Permanent failures land in the DLQ partition.
+  Permanent failures land in the DLQ keyspace.
 - `stop_when_idle: true` for one-shot crawls (the example above);
   `false` for daemons that should keep listening on `producer`.
 
@@ -354,9 +374,9 @@ if req.attempt > 1 {
 
 ### 7b. Observing progress
 
-`runtime.stats` is a `watch::Receiver<StatsSnapshot>` with flat counters
-(`processed`, `succeeded`, `failed`, `terminal_failures`, `in_flight`,
-`last_latency`). Drive it from another tokio task:
+`runtime.stats` is a `tokio::sync::watch::Receiver<StatsSnapshot>` with
+flat counters (`processed`, `succeeded`, `failed`, `terminal_failures`,
+`in_flight`, `last_latency`). Drive it from another tokio task:
 
 ```rust
 let mut stats_rx = runtime.stats.clone();
@@ -374,6 +394,12 @@ tokio::spawn(async move {
     }
 });
 ```
+
+Watch channels coalesce: the receiver only ever sees the most recent
+published value — older snapshots are overwritten in place. Under high
+event rate the observer wakes less often than the producer ticks, but
+always reads the freshest counters. No backpressure on the dispatcher,
+no buildup.
 
 For an HTTP endpoint serving the snapshot as JSON, enable
 `features = ["stats-http"]` and use `capp::stats_http::serve_stats(addr,
@@ -397,10 +423,10 @@ For OTLP metrics, enable `features = ["observability"]` and call
   dispatch but keeps in-flight tasks running and result handling alive;
   `Resume` continues.
 
-Recovery across process restarts is automatic: the FjallTaskQueue
-persists `tasks` / `queue` / `inflight` / `dlq` partitions, and the
-dispatcher calls `queue.recover_inflight()` on startup, moving any
-tasks that were in-flight at the previous crash back to the queue.
+Recovery across process restarts is automatic: `FjallTaskQueue` persists
+the `tasks` / `queue` / `inflight` / `dlq` keyspaces, and the dispatcher
+calls `queue.recover_inflight()` on startup, moving any tasks that were
+in-flight at the previous crash back to the queue.
 
 ### 8. HTTP client
 
@@ -417,16 +443,14 @@ faster.
 ### 9. Inspection / dump mode
 
 Building a quick `--dump` subcommand is a cheap way for the user to
-verify the data Fjall after a run. Open the data partitions read-only
-and iterate:
+verify the data store after a run. Open it read-only and iterate the
+first few records:
 
 ```rust
-fn dump(data_path: &Path) -> Result<()> {
-    let store = DataStore::open(data_path)?;
-    println!("{}: ~{} records", data_path.display(), store.detail_count());
-    for entry in store.details.iter().take(5).filter_map(|g| g.into_inner().ok()) {
-        let (_, value) = entry;
-        let record: MyDetail = serde_json::from_slice(&value)?;
+fn dump(path: &Path) -> Result<()> {
+    let store = YourStore::open(path)?;
+    println!("{}: ~{} records", path.display(), store.detail_count());
+    for record in store.details().take(5) {
         println!("- {}: {}", record.id, record.title);
     }
     Ok(())
@@ -443,13 +467,11 @@ Before declaring done, report:
 1. Recon notes — entry URLs, page kinds, pagination, selectors,
    structured-data findings, rate-limit observations.
 2. Task model — the `CrawlTask` enum variants and what each does.
-3. Persistence layout — queue path, data path, one row per partition
-   with key shape and value shape.
+3. Persistence layout — queue path, data store choice and layout.
 4. Run command — exactly how the user invokes it (`cargo run …`,
    `cargo run --example …`, etc.; follow whatever their project uses).
-5. Verification — what they should see in the data Fjall after a short
-   run (sample keys, sample value). If you shipped a `--dump` mode,
-   tell them the exact command.
+5. Verification — what they should see in the data store after a short
+   run. If you shipped a `--dump` mode, tell them the exact command.
 
 If any recon step was ambiguous or selectors looked fragile, say so
 explicitly. Do not paper over uncertainty with "it should work."
@@ -471,7 +493,8 @@ External:
 
 - `pageinfo_rs` library — if direct lib usage is needed instead of the
   `pginf` CLI.
-- `fjall` crate — partition API for the data store.
+- `fjall` crate — keyspace API, used by `capp-queue` and optionally by
+  your data store.
 
 ## Quick verification commands (for the user)
 
@@ -481,7 +504,7 @@ After scaffolding, the user should be able to:
 cargo build                                   # compile
 cargo test                                    # if tests exist
 cargo run -- ...                              # the crawl
-cargo run -- --dump                           # inspect the data Fjall
+cargo run -- --dump                           # inspect the data store
 ```
 
 For capp-rs reference runs in this repo:
