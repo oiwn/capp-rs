@@ -89,6 +89,10 @@ name = "mailbox"
 path = "../examples/mailbox.rs"
 
 [[example]]
+name = "round_robin_fairness"
+path = "../examples/round_robin_fairness.rs"
+
+[[example]]
 name = "mailbox_metrics"
 path = "../examples/mailbox_metrics.rs"
 required-features = ["observability"]

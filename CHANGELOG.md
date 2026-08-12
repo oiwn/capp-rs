@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.1
+
+### Fixed
+
+- `FjallRoundRobinTaskQueue::pop()` no longer evicts a tag from the
+  rotation the moment its sub-queue transiently empties. It now scans
+  forward from the cursor, skipping empty tags without removing them, and
+  only advances the cursor past a tag it actually serves. Previously an
+  evicted tag only rejoined at the tail of the rotation on its next
+  `push()`, which starved tags whose backlog repeatedly grazed zero under
+  concurrent consumption (e.g. `concurrency_limit` close to the number of
+  distinct tags) in favor of tags with deeper, steadier backlogs.
+  `QueueEmpty` is now returned only after a full lap of all known tags
+  finds no queued work, matching the other `TaskQueue` backends' contract.
+
 ## 0.7.0
 
 Major architecture change: the mailbox worker pool is gone. The runtime

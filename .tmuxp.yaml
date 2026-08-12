@@ -6,7 +6,7 @@ windows:
     start-directory: ./
     panes:
       - shell_command:
-        - helix
+        - hx
   - window_name: agent
     start-directory: ./
     panes:
@@ -20,7 +20,6 @@ windows:
   - window_name: cmd2
     panes:
       - shell_command:
-        # - emacs -nw notes.org
         - eza -l
   - window_name: yazi
     panes:
