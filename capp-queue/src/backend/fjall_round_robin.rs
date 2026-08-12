@@ -3,14 +3,18 @@ use std::{collections::HashSet, marker::PhantomData, path::Path, sync::Mutex};
 use async_trait::async_trait;
 use fjall::{Database, Keyspace, KeyspaceCreateOptions, PersistMode};
 use serde::{Serialize, de::DeserializeOwned};
-use tracing::warn;
 use uuid::Uuid;
 
 use crate::{HasTagKey, Task, TaskId, TaskQueue, TaskQueueError, TaskSerializer};
 
 /// Round-robin Fjall task queue.
 ///
-/// Pops rotate across tags so one busy tag can't starve the others. FIFO
+/// Pops scan forward from a cursor across all known tags, skipping any tag
+/// whose sub-queue is currently empty, and stop at the first tag with a
+/// queued task. A tag is never dropped from rotation just because it's
+/// momentarily empty — it's checked again on every subsequent pop until it
+/// either has work or the queue is added to. This keeps one busy tag from
+/// starving others, even when tags refill at very different rates. FIFO
 /// within a tag is preserved by sorting on the task's UUID v7 suffix.
 ///
 /// Layout:
@@ -43,18 +47,6 @@ impl RotationState {
     fn ensure(&mut self, tag: &str) {
         if self.present.insert(tag.to_string()) {
             self.active.push(tag.to_string());
-        }
-    }
-
-    fn evict_at(&mut self, idx: usize) {
-        let tag = self.active.remove(idx);
-        self.present.remove(&tag);
-        if self.active.is_empty() {
-            self.cursor = 0;
-        } else if idx < self.cursor {
-            self.cursor -= 1;
-        } else {
-            self.cursor %= self.active.len();
         }
     }
 }
@@ -140,20 +132,18 @@ where
     async fn pop(&self) -> Result<Task<D>, TaskQueueError> {
         let mut state = self.state.lock().unwrap();
 
-        loop {
-            if state.active.is_empty() {
-                return Err(TaskQueueError::QueueEmpty);
-            }
-            let idx = state.cursor;
+        if state.active.is_empty() {
+            return Err(TaskQueueError::QueueEmpty);
+        }
+        let n = state.active.len();
+        for step in 0..n {
+            let idx = (state.cursor + step) % n;
             let tag = state.active[idx].clone();
             let prefix = encode_tag_prefix(&tag);
 
             let Some(guard) = self.queue.prefix(&prefix).next() else {
-                warn!(
-                    tag = %tag,
-                    "active tag has no queued key; evicting from rotation"
-                );
-                state.evict_at(idx);
+                // Transiently empty: this tag stays in rotation and will be
+                // checked again on the next pop, not evicted.
                 continue;
             };
             let (key, _) = guard.into_inner()?;
@@ -171,14 +161,10 @@ where
                 .ok_or(TaskQueueError::TaskNotFound(task_id))?;
             let task = S::deserialize_task::<D>(&task_bytes)?;
 
-            let still_pending = self.queue.prefix(&prefix).next().is_some();
-            if still_pending {
-                state.cursor = (idx + 1) % state.active.len();
-            } else {
-                state.evict_at(idx);
-            }
+            state.cursor = (idx + 1) % n;
             return Ok(task);
         }
+        Err(TaskQueueError::QueueEmpty)
     }
 
     async fn ack(&self, task_id: &TaskId) -> Result<(), TaskQueueError> {
