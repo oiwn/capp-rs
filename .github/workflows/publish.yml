@@ -57,29 +57,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Check publishability
-        env:
-          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-        run: |
-          for crate in \
-            capp-config \
-            capp-queue \
-            capp-cache \
-            capp-router \
-            capp-urls \
-            capp; do
-            cargo publish -p "$crate" --dry-run
-          done
+        run: cargo publish --workspace --dry-run
 
       - name: Publish to crates.io
-        env:
-          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-        run: |
-          for crate in \
-            capp-config \
-            capp-queue \
-            capp-cache \
-            capp-router \
-            capp-urls \
-            capp; do
-            cargo publish -p "$crate" --token "$CRATES_IO_TOKEN"
-          done
+        run: cargo publish --workspace --token "${{ secrets.CRATES_IO_TOKEN }}"

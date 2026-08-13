@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.2
+
+First successful crates.io release of the split workspace crates
+(`capp-config`, `capp-queue`, `capp-cache`, `capp-router`, `capp-urls`)
+alongside `capp`. No functional changes since 0.7.1 — the 0.7.x publishes
+failed because the sub-crates had never been pushed to the registry and
+the publish workflow's dry-run loop couldn't resolve them; the workflow
+now publishes the workspace in dependency order.
+
 ## 0.7.1
 
 ### Fixed

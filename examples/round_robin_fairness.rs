@@ -2,7 +2,8 @@
 //! sources sharing one concurrency-limited worker pool -- the exact shape
 //! of the crawler setup that surfaced the starvation bug fixed in
 //! `capp-queue::backend::fjall_round_robin`: one queue, `N` sources, and
-//! `concurrency_limit == N` (see `specs/ctx.md` for the full writeup).
+//! `concurrency_limit == N` (the fix and its rationale are documented in the
+//! `capp-queue::backend::fjall_round_robin` module docs and CHANGELOG 0.7.1).
 //!
 //! Each "source" simulates a page fetch (random delay drawn from the
 //! source's own range) that always produces exactly one follow-up page
